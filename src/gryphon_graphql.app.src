@@ -1,0 +1,18 @@
+{application, gryphon_graphql,
+ [{description, "An OTP library"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {applications,
+   [kernel,
+    stdlib,
+    
+    jsx
+   ]},
+  {mod, {gql_app, []}},
+  {env,[]},
+  {modules, []},
+
+  {maintainers, []},
+  {licenses, []},
+  {links, []}
+ ]}.
