@@ -1,7 +1,7 @@
--module(gql_introspection).
+-module(graphql_introspection).
 
--include("gql_schema.hrl").
--include_lib("gql/include/graphql.hrl").
+-include("graphql_schema.hrl").
+-include_lib("graphql/include/graphql.hrl").
 
 -export([inject/0, augment_root/1]).
 
@@ -19,7 +19,7 @@
   when QueryObj :: binary().
 
 augment_root(QName) ->
-    #object_type{ fields = Fields } = Obj = gql_schema:get(QName),
+    #object_type{ fields = Fields } = Obj = graphql_schema:get(QName),
     Schema = #schema_field {
     	ty = {non_null, <<"__Schema">>},
     	description = <<"The introspection schema">>,
@@ -36,31 +36,31 @@ augment_root(QName) ->
          <<"__schema">> => Schema,
          <<"__type">> => Type
      }},
-     true = gql_schema:insert(Augmented, #{}),
+     true = graphql_schema:insert(Augmented, #{}),
      ok.
      
 schema_resolver(_Ctx, none, #{}) ->
     {ok, #{ <<"directives">> => [] }}.
     
 type_resolver(_Ctx, none, #{ <<"name">> := N }) ->
-    case gql_schema:lookup(N) of
+    case graphql_schema:lookup(N) of
         not_found -> {ok, null};
         Ty -> {ok, render_type(Ty)}
     end.
 
 query_type(_Ctx, _Obj, _) ->
-    #root_schema{ query = QType } = gql_schema:get('ROOT'),
+    #root_schema{ query = QType } = graphql_schema:get('ROOT'),
     {ok, render_type(QType)}.
 
 mutation_type(_Ctx, _Obj, _) ->
-    #root_schema { mutation = MType } = gql_schema:get('ROOT'),
+    #root_schema { mutation = MType } = graphql_schema:get('ROOT'),
     case MType of
         undefined -> {ok, null};
         MT -> {ok, render_type(MT)}
     end.
 
 subscription_type(_Ctx, _Obj, _) ->
-    #root_schema { subscription = SType } = gql_schema:get('ROOT'),
+    #root_schema { subscription = SType } = graphql_schema:get('ROOT'),
     case SType of
         undefined -> {ok, null};
         ST -> {ok, render_type(ST)}
@@ -71,12 +71,12 @@ schema_types(_Ctx, _Obj, _Args) ->
         (#root_schema{}) -> false;
         (_) -> true
     end,
-    Types = [X || X <- gql_schema:all(), Pass(X)],
+    Types = [X || X <- graphql_schema:all(), Pass(X)],
     {ok, [render_type(Ty) || Ty <- Types]}.
 
 %% Main renderer. Calls out to the subsets needed
 render_type(Name) when is_binary(Name) ->
-    case gql_schema:lookup(Name) of
+    case graphql_schema:lookup(Name) of
         not_found ->
            throw({not_found, Name});
        Ty -> render_type(Ty)
@@ -181,7 +181,7 @@ interface_implementors(ID) ->
         (#object_type { interfaces = IFs }) -> lists:member(ID, IFs);
         (_) -> false
     end,
-    {ok, [render_type(Ty) || Ty <- gql_schema:all(), Pass(Ty)]}.
+    {ok, [render_type(Ty) || Ty <- graphql_schema:all(), Pass(Ty)]}.
 
 render_enum_value({_Value, #enum_value{
 	val = Key,
@@ -386,13 +386,13 @@ inject() ->
                              'FRAGMENT_SPREADS' => #{ value => 5, description => "Fragment spreads" },
                              'INLINE_FRAGMENT' => #{ value => 6, description => "Inline fragments" }
                             }}},
-    true = gql_schema:insert_new(DirectiveLocation),
-    true = gql_schema:insert_new(Directive),
-    true = gql_schema:insert_new(TypeKind),
-    true = gql_schema:insert_new(Enum),
-    true = gql_schema:insert_new(InputValue),
-    true = gql_schema:insert_new(Field),
-    true = gql_schema:insert_new(Type),
-    true = gql_schema:insert_new(Schema),
+    true = graphql_schema:insert_new(DirectiveLocation),
+    true = graphql_schema:insert_new(Directive),
+    true = graphql_schema:insert_new(TypeKind),
+    true = graphql_schema:insert_new(Enum),
+    true = graphql_schema:insert_new(InputValue),
+    true = graphql_schema:insert_new(Field),
+    true = graphql_schema:insert_new(Type),
+    true = graphql_schema:insert_new(Schema),
     ok.
 

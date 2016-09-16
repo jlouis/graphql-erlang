@@ -1,6 +1,6 @@
--module(gql).
+-module(graphql).
 
--include("gql.hrl").
+-include("graphql_internal.hrl").
 
 -export([
     elaborate/1,
@@ -24,38 +24,38 @@
 -spec parse( binary() | string()) -> {ok, ast()} | {error, term()}.
 parse(Input) when is_binary(Input) -> parse(binary_to_list(Input));
 parse(Input) when is_list(Input) ->
-    case gql_scanner:string(Input) of
+    case graphql_scanner:string(Input) of
         {ok, Tokens, _EndLine} ->
-            gql_parser:parse(Tokens);
+            graphql_parser:parse(Tokens);
         ErrorInfo ->
             ErrorInfo
     end.
 
 -spec validate(ast()) -> ok.
 validate(AST) ->
-    gql_validate:x(AST).
+    graphql_validate:x(AST).
     
 -spec type_check(ast()) -> {ok, #{ atom() => term() }}.
 type_check(AST) ->
-    gql_tc:x(AST).
+    graphql_type_check:x(AST).
 
 -spec elaborate(ast()) -> ast().
 elaborate(AST) ->
-   gql_elaborate:x(AST).
+   graphql_elaborate:x(AST).
 
 -spec type_check_params(any(), any(), any()) -> param_context().
 type_check_params(FunEnv, OpName, Vars) ->
-    gql_tc:x_params(FunEnv, OpName, Vars).
+    graphql_type_check:x_params(FunEnv, OpName, Vars).
 
 -spec execute(ast()) -> #{ atom() => json() }.
 execute(AST) -> execute(#{ params => #{} }, AST).
 
 -spec execute(context(), ast()) -> #{ atom() => json() }.
 execute(Ctx, AST) ->
-    gql_execute:x(Ctx, AST).
+    graphql_execute:x(Ctx, AST).
 
 %% STUB for now
 -spec validate_schema() -> ok | {error, any()}.
 validate_schema() ->
-    gql_schema_validate:x().
+    graphql_schema_validate:x().
 

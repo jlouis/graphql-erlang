@@ -1,7 +1,7 @@
--module(gql_elaborate).
+-module(graphql_elaborate).
 
--include("gql_schema.hrl").
--include("gql.hrl").
+-include("graphql_schema.hrl").
+-include("graphql_internal.hrl").
 
 -export([x/1]).
 
@@ -20,9 +20,9 @@ x_ops(Path, [#op{} = O | OPs]) ->
 %% -- FRAGMENTS -----------------------------------
 x_frag(Path, #frag { ty = T } = F) ->
    Ty = name(T),
-   case gql_schema:lookup(Ty) of
+   case graphql_schema:lookup(Ty) of
        not_found ->
-           gql_err:abort([F | Path], {type_not_found, Ty});
+           graphql_err:abort([F | Path], {type_not_found, Ty});
        #object_type{ fields = Fields } = Obj ->
            x_fields([F | Path], F#frag { schema = Obj }, Fields);
        #interface_type{ fields = Fields } = IFace ->
@@ -36,16 +36,16 @@ x_frag(Path, #frag { ty = T } = F) ->
 
 x_op(Path, #op { vardefs = VDefs } = Op) ->
     RootSchema = x_root(Path, Op),
-    case gql_schema:lookup(RootSchema) of
+    case graphql_schema:lookup(RootSchema) of
         not_found ->
-            gql_err:abort([Op | Path], {type_not_found, RootSchema});
+            graphql_err:abort([Op | Path], {type_not_found, RootSchema});
         #object_type{ fields = Fields } = Obj ->
             x_fields(Path, Op#op{ schema = Obj, vardefs = vdefs([Op | Path], VDefs) }, Fields)
     end.
 
 vdef_lookup(Path, N) ->
-    case gql_schema:lookup(N) of
-        not_found -> gql_err:abort(Path, {type_not_found, N});
+    case graphql_schema:lookup(N) of
+        not_found -> graphql_err:abort(Path, {type_not_found, N});
         Obj -> Obj
     end.
 
@@ -70,11 +70,11 @@ unwrap_type({non_null, Ty}) -> unwrap_type(Ty);
 unwrap_type({list, Ty}) -> unwrap_type(Ty).
 
 x_root(Path, #op { ty = T } = Op) ->
-    case gql_schema:lookup('ROOT') of
+    case graphql_schema:lookup('ROOT') of
         #root_schema { query = Q, mutation = M, subscription = S } ->
-            gql_ast:resolve_root_type(T, Q, M, S);
+            graphql_ast:resolve_root_type(T, Q, M, S);
         not_found ->
-            gql_err:abort([Op | Path], no_root_schema)
+            graphql_err:abort([Op | Path], no_root_schema)
     end.
 
 %% -- SELECTION SETS -------------------------------
@@ -96,9 +96,9 @@ x_field(Path, #field { id = ID, args = Args, selection_set = SSet } = F, Fields)
         not_found when Name == <<"__typename">> ->
             F#field { schema = {introspection, typename}, schema_obj = scalar};
         not_found ->
-            gql_err:abort(Path, {unknown_field, Name});
+            graphql_err:abort(Path, {unknown_field, Name});
         #schema_field{ ty = Ty, args = SArgs } = SchemaTy ->
-            case gql_ast:unwrap_type(Ty) of
+            case graphql_ast:unwrap_type(Ty) of
                 {scalar, _} ->
                     F#field {
                           args = x_field_args([F | Path], Args, SArgs),
@@ -122,26 +122,26 @@ x_field_arg(Path, K, V, SArgs) ->
     N = name(K),
     case maps:get(N, SArgs, not_found) of
         not_found ->
-            gql_err:abort(Path, {argument_not_found, N});
+            graphql_err:abort(Path, {argument_not_found, N});
         #schema_arg{ ty = Ty } ->
             {K, {Ty, V}}
     end.
 
 x_field_lookup(Path, Ty, SSet) ->
-    case gql_schema:lookup(Ty) of
+    case graphql_schema:lookup(Ty) of
         not_found ->
-            gql_err:abort(Path, {entity_not_found, Ty});
+            graphql_err:abort(Path, {entity_not_found, Ty});
         #scalar_type{} when SSet /= [] ->
-            gql_err:abort(Path, fields_on_scalar);
+            graphql_err:abort(Path, fields_on_scalar);
         #scalar_type{} = Scalar ->
             %% Written like this for coherence, we could skip it since SSet == []
             {Scalar, x_sset(Path, SSet, #{})};
         #object_type{} when SSet == [] ->
-            gql_err:abort(Path, fieldless_object);
+            graphql_err:abort(Path, fieldless_object);
         #object_type{ fields = Fields } = Obj ->
             {Obj, x_sset(Path, SSet, Fields)};
         #interface_type{} when SSet == [] ->
-            gql_err:abort(Path, fieldless_interface);
+            graphql_err:abort(Path, fieldless_interface);
         #interface_type{ fields = Fields } = IFace ->
             {IFace, x_sset(Path, SSet, Fields)};
         #union_type{} = Union ->
@@ -150,7 +150,7 @@ x_field_lookup(Path, Ty, SSet) ->
         #enum_type{} = Enum when SSet == [] ->
             {Enum, []};
         #enum_type{} ->
-            gql_err:abort(Path, {selection_set_on_enum, Ty})
+            graphql_err:abort(Path, {selection_set_on_enum, Ty})
     end.
     
 %% -- AST MANIPULATION ---------------------------

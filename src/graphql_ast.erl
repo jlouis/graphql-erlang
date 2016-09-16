@@ -1,6 +1,6 @@
--module(gql_ast).
+-module(graphql_ast).
 
--include("gql.hrl").
+-include("graphql_internal.hrl").
 
 -export([resolve_type/1, resolve_root_type/4, unwrap_to_base_type/1]).
 -export([unwrap_type/1]).

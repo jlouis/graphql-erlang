@@ -1,4 +1,4 @@
--module(gql_sup).
+-module(graphql_sup).
 -behaviour(supervisor).
 
 %% API.
@@ -19,5 +19,5 @@ start_link() ->
 
 %% @private
 init([]) ->
-    SchemaMgr = ?CHILD(gql_schema, worker),
+    SchemaMgr = ?CHILD(graphql_schema, worker),
     {ok, {{one_for_all, 5, 3600}, [SchemaMgr]}}.

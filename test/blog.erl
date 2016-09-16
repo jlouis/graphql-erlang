@@ -1,5 +1,5 @@
 -module(blog).
--include_lib("gql/include/graphql.hrl").
+-include_lib("graphql/include/graphql.hrl").
 
 -export([inject/0]).
 
@@ -77,11 +77,11 @@ inject() ->
     	
     Schema = {root, #{ query => 'Query', interfaces => [] }},
     
-    gql_schema:insert_new(BlogImage),
-    gql_schema:insert_new(BlogAuthor),
-    gql_schema:insert_new(BlogArticle),
-    gql_schema:insert_new(BlogQuery),
-    gql_schema:insert_new(Schema),
+    graphql_schema:insert_new(BlogImage),
+    graphql_schema:insert_new(BlogAuthor),
+    graphql_schema:insert_new(BlogArticle),
+    graphql_schema:insert_new(BlogQuery),
+    graphql_schema:insert_new(Schema),
     ok.
     
 query_id_resolve(_Ctx, _, #{ <<"id">> := ID }) ->

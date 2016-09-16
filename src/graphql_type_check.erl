@@ -1,7 +1,7 @@
--module(gql_tc).
+-module(graphql_type_check).
 
--include("gql.hrl").
--include("gql_schema.hrl").
+-include("graphql_internal.hrl").
+-include("graphql_schema.hrl").
 
 -export([x/1, x_params/3]).
 
@@ -39,11 +39,11 @@ tc_funenv([#op { id = OpName, vardefs = VDefs } | Next], FunEnv) ->
 -spec x_params(any(), any(), any()) -> gql:param_context().
 x_params(_FunEnv, undefined, #{}) -> #{};
 x_params(_FunEnv, undefined, _) ->
-    gql_err:abort([], params_on_unnamed);
+    graphql_err:abort([], params_on_unnamed);
 x_params(FunEnv, OpName, Vars) ->
     case maps:get(OpName, FunEnv, not_found) of
         not_found ->
-           gql_err:abort([], {operation_not_found, OpName});
+           graphql_err:abort([], {operation_not_found, OpName});
         VarEnv -> tc_params([OpName], maps:to_list(VarEnv), Vars)
     end.
 
@@ -59,7 +59,7 @@ tc_params(Path, Args, Params) ->
     
 tc_param(Path, {K, {Ty, Default}}, not_found) ->
     case non_null(Ty) of
-        true -> gql_err:abort([K | Path], missing_non_null_param);
+        true -> graphql_err:abort([K | Path], missing_non_null_param);
         false -> {replace, Default}
     end;
 tc_param(Path, {K, {Ty, _}}, Val) ->
@@ -71,10 +71,10 @@ tc_param(Path, {K, {Ty, _}}, Val) ->
 check_param(Path, {non_null, Ty}, V) -> check_param(Path, Ty, V);
 check_param(Path, {scalar, Sc}, V) -> input_coerce_scalar(Path, Sc, V);
 check_param(Path, {enum, Ty}, V) when is_binary(V) ->
-    case gql_schema:lookup_enum_type(V) of
-       not_found -> gql_err:abort(Path, {unknown_enum_value, V});
+    case graphql_schema:lookup_enum_type(V) of
+       not_found -> graphql_err:abort(Path, {unknown_enum_value, V});
        Ty -> {replace, {enum, V}};
-        _OtherTy -> gql_err:abort(Path, {param_mismatch, {enum, Ty}})
+        _OtherTy -> graphql_err:abort(Path, {param_mismatch, {enum, Ty}})
     end;
 check_param(Path, {list, T}, L) when is_list(L) ->
     %% Build a dummy structure to match the recursor. Unwrap this
@@ -98,29 +98,29 @@ check_param(Path, {input_object, T}, Obj) ->
     check_input_object(Path, T, Obj);
 %% The following expands un-elaborated (nested) types
 check_param(Path, Ty, V) when is_binary(Ty) ->
-    case gql_schema:lookup(Ty) of
+    case graphql_schema:lookup(Ty) of
         #scalar_type {} -> input_coerce_scalar(Path, Ty, V);
         #input_object_type {} -> check_input_object(Path, Ty, V);
         #enum_type {} -> check_param(Path, {enum, Ty}, V);
         _ ->
-            gql_err:abort(Path, {param_mismatch, Ty, V})
+            graphql_err:abort(Path, {param_mismatch, Ty, V})
     end;
 %% Everything else are errors
 check_param(Path, Ty, V) ->
-    gql_err:abort(Path, {param_mismatch, Ty, V}).
+    graphql_err:abort(Path, {param_mismatch, Ty, V}).
 
 check_input_object(Path, T, Obj) ->
-    case gql_schema:lookup(T) of
+    case graphql_schema:lookup(T) of
         not_found ->
-            gql_err:abort(Path, {unknown_type, T});
+            graphql_err:abort(Path, {unknown_type, T});
         #input_object_type{ fields = Fields } ->
             {replace, check_object_fields(Path, maps:to_list(Fields), coerce_object(Obj), #{})};
         #interface_type{ id = ID } ->
-            gql_err:abort(Path, {invalid_input_type, ID});
+            graphql_err:abort(Path, {invalid_input_type, ID});
         #object_type{ id = ID } ->
-            gql_err:abort(Path, {invalid_input_type, ID});
+            graphql_err:abort(Path, {invalid_input_type, ID});
         #union_type { id = ID } ->
-            gql_err:abort(Path, {invalid_input_type, ID})
+            graphql_err:abort(Path, {invalid_input_type, ID})
     end.
 
 coerce_object(#{} = Obj) -> Obj;
@@ -129,14 +129,14 @@ coerce_object({object, Obj}) -> input_object_type_scheme(Obj).
 check_object_fields(Path, [], Obj, Result) ->
     case maps:size(Obj) of
         0 -> Result;
-        K when K > 0 -> gql_err:abort(Path, {excess_fields_in_object, Obj})
+        K when K > 0 -> graphql_err:abort(Path, {excess_fields_in_object, Obj})
     end;
 check_object_fields(Path, [{Name, #schema_arg { ty = Ty, default = Def }} | Next], Obj, Result) ->
     Val = case maps:get(Name, Obj, not_found) of
         not_found ->
             case non_null(Ty) of
                 true ->
-                    gql_err:abort([Name | Path], missing_non_null_param);
+                    graphql_err:abort([Name | Path], missing_non_null_param);
                 false ->
                     Def
             end;
@@ -152,7 +152,7 @@ input_coerce_scalar(Path, Ty, V) ->
     case coerce_scalar(Ty, V) of
         ok -> ok;
         {replace, V2} -> {replace, V2};
-        {error, Reason} -> gql_err:abort(Path, Reason)
+        {error, Reason} -> graphql_err:abort(Path, Reason)
     end.
     
 coerce_scalar(id, V) when is_binary(V) -> ok;
@@ -170,7 +170,7 @@ coerce_scalar(Ty, _)
       Ty == bool ->
     {error, {type_mismatch, #{ schema => {scalar, Ty}}}};
 coerce_scalar(Ty, Val) ->
-    case gql_schema:lookup(Ty) of
+    case graphql_schema:lookup(Ty) of
         not_found ->
             {error, scalar_type_not_found};
         #scalar_type { input_coerce = IC } ->
@@ -216,7 +216,7 @@ tc_field(#{ fragenv := FE }, Path, #frag_spread { id = ID } = FSpread) ->
     Name = name(ID),
     case maps:get(Name, FE, not_found) of
         not_found ->
-            gql_err:abort(Path, {unknown_fragment, Name});
+            graphql_err:abort(Path, {unknown_fragment, Name});
         _FragTy ->
             %% You can always include a fragspread, as long as it exists
             %% It may be slightly illegal in a given context but this just
@@ -244,13 +244,13 @@ tc_field(Ctx, Path,
 
 scalar_check(_Path, []) -> ok;
 scalar_check(Path, _) ->
-    gql_err:abort(Path, selection_on_scalar).
+    graphql_err:abort(Path, selection_on_scalar).
             
 %% -- ARGS -------------------------------------
 tc_args(Ctx, Path, Args, Schema) ->
     case uniq(lists:sort(Args)) of
         ok -> tc_args_(Ctx, Path, Args, Schema);
-        {error, Reason} -> gql_err:abort(Path, Reason)
+        {error, Reason} -> graphql_err:abort(Path, Reason)
     end.
 
 tc_args_(_Ctx, _Path, [], _Schema) -> [];
@@ -262,9 +262,9 @@ tc_args_(Ctx, Path, [{ID, {Ty, Val}} = A | Next], Schema) ->
         {replace, RVal } ->
             [{ID, {Ty, RVal}} | tc_args_(Ctx, Path, Next, Schema)];
         {error, Expected} ->
-            gql_err:abort(Path, {type_mismatch, #{ id => Name, schema => Expected }});
+            graphql_err:abort(Path, {type_mismatch, #{ id => Name, schema => Expected }});
         {error, Got, Expected} ->
-            gql_err:abort(Path, {type_mismatch,
+            graphql_err:abort(Path, {type_mismatch,
                  #{ id => Name, document => Got, schema => Expected }})
     end.
 
@@ -284,7 +284,7 @@ schema_type([Tag]) -> {list, schema_type(Tag)};
 %% Strictly, this ought to be unnecessary given enough
 %% elaboration and optimization.
 schema_type(Tag) ->
-    case gql_schema:lookup(Tag) of
+    case graphql_schema:lookup(Tag) of
         #scalar_type{ input_coerce = IC } -> {scalar, Tag, IC};
         #enum_type{} -> {enum, Tag};
         #object_type{} -> {object, Tag};
@@ -298,13 +298,13 @@ ty_of(#{ varenv := VE }, Path, _, {var, ID}) ->
     Name = name(ID),
     case maps:get(Name, VE, not_found) of
         not_found ->
-            gql_err:abort(Path, {unbound_variable, Name});
+            graphql_err:abort(Path, {unbound_variable, Name});
         {Ty, _Default} -> Ty
     end;
 ty_of(_Ctx, Path, _, {enum, E}) ->
     N = name(E),
-    case gql_schema:lookup_enum_type(N) of
-        not_found -> gql_err:abort(Path, {unknown_enum, E});
+    case graphql_schema:lookup_enum_type(N) of
+        not_found -> graphql_err:abort(Path, {unknown_enum, E});
         EnumTy -> {enum, EnumTy}
     end;
 ty_of(_Ctx, _Path, {scalar, Tag}, V) ->
@@ -330,7 +330,7 @@ ty_check(Path, {scalar, Tag, V}, {scalar, Tag, IC}) ->
         {ok, V} -> ok;
         {ok, NV} -> {replace, NV};
         {error, Reason} ->
-            gql_err:abort(Path, {input_coercion, Tag, V, Reason})
+            graphql_err:abort(Path, {input_coercion, Tag, V, Reason})
     end;
 ty_check(_Path, X, X) -> ok; %% Perfect match always wins
 
@@ -366,8 +366,8 @@ varenv_ty_coerce(Path, {list, T}) -> {list, varenv_ty_coerce(Path, T)};
 varenv_ty_coerce(Path, {non_null, T}) -> {non_null, varenv_ty_coerce(Path, T)};
 varenv_ty_coerce(Path, T) ->
     N = name(T),
-    case gql_schema:lookup(N) of
-        not_found -> gql_err:abort(Path, {unknown_type, N});
+    case graphql_schema:lookup(N) of
+        not_found -> graphql_err:abort(Path, {unknown_type, N});
         #enum_type{} -> {enum, N};
         #scalar_type{} -> {scalar, N};
         #input_object_type{} -> {input_object, N};

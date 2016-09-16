@@ -1,4 +1,4 @@
--module(gql_SUITE).
+-module(graphql_SUITE).
 -include_lib("common_test/include/ct.hrl").
 
 -compile(export_all).
@@ -8,50 +8,50 @@ suite() ->
 
 init_per_group(introspection, Config) ->
     ok = is_schema(),
-    ok = gql:validate_schema(),
+    ok = graphql:validate_schema(),
     Config;
 init_per_group(schema_test, Config) ->
     ok = blog:inject(),
-    ok = gql:validate_schema(),
+    ok = graphql:validate_schema(),
     Config;
 init_per_group(enum_type, Config) ->
     ok = colors:inject(),
-    ok = gql:validate_schema(),
+    ok = graphql:validate_schema(),
     Config;
 init_per_group(star_wars, Config) ->
     ok = star_wars:inject(),
-    ok = gql:validate_schema(),
+    ok = graphql:validate_schema(),
     Config;
 init_per_group(basic, Config) ->
     ok = basic:inject(),
-    ok = gql:validate_schema(),
+    ok = graphql:validate_schema(),
     Config;
 init_per_group(dungeon, Config) ->
     ok = dungeon:inject(),
     ok = dungeon:start(),
-    ok = gql:validate_schema(),
+    ok = graphql:validate_schema(),
     Config;
 init_per_group(validation, Config) ->
     ok = pet:inject(),
-    ok = gql:validate_schema(),
+    ok = graphql:validate_schema(),
     Config;
 init_per_group(_Group, Config) ->
     Config.
 
 end_per_group(dungeon, _Config) ->
     dungeon:stop(),
-    gql_schema:reset(),
+    graphql_schema:reset(),
     ok;
 end_per_group(_Group, _Config) ->
-    gql_schema:reset(),
+    graphql_schema:reset(),
     ok.
 
 init_per_suite(Config) ->
-    application:ensure_all_started(gql),
+    application:ensure_all_started(graphql),
     Config.
 
 end_per_suite(_Config) ->
-    application:stop(gql),
+    application:stop(graphql),
     ok.
 
 init_per_testcase(v_5_4_2_3_1, _Config) ->
@@ -901,14 +901,14 @@ no_errors(#{}) -> ok.
 %% v/1 predicates valid queries
 v(Q) ->
     ct:log("Query: ~s", [Q]),
-    case gql:parse(Q) of
+    case graphql:parse(Q) of
         {ok, AST} ->
             try
-               Elab = gql:elaborate(AST),
+               Elab = graphql:elaborate(AST),
                {ok, #{
                    ast := AST2,
-                   fun_env := _FunEnv }} = gql:type_check(Elab),
-               ok = gql:validate(AST),
+                   fun_env := _FunEnv }} = graphql:type_check(Elab),
+               ok = graphql:validate(AST),
                true
             catch
                 Class:Err ->
@@ -927,27 +927,27 @@ x(Config, Input, Params) -> x(Config, Input, undefined, Params).
 x(Config, Input, OpName, Params) ->
     ct:log("Query: ~s", [Input]),
     Track0 = track_new(),
-    case gql:parse(Input) of
+    case graphql:parse(Input) of
         {ok, AST} ->
            Track1 = track(parse, Track0),
            ct:log("AST: ~p", [AST]),
            ct:log("Params: ~p", [Params]),
            try
-               Elaborated = gql:elaborate(AST),
+               Elaborated = graphql:elaborate(AST),
                ct:log("Elaborated: ~p", [Elaborated]),
                Track2 = track(elaborate, Track1),
                {ok, #{
                    ast := AST2,
-                   fun_env := FunEnv }} = gql:type_check(Elaborated),
+                   fun_env := FunEnv }} = graphql:type_check(Elaborated),
                Track3 = track(type_check, Track2),
-               CoercedParams = gql:type_check_params(FunEnv, OpName, Params),
+               CoercedParams = graphql:type_check_params(FunEnv, OpName, Params),
                Track4 = track(type_check_params, Track3),
                Ctx = #{ params => CoercedParams },
-               ok = gql:validate(AST2),
+               ok = graphql:validate(AST2),
                Track5 = track(validate, Track4),
                Res = case OpName of
-                   undefined -> gql:execute(Ctx, AST2);
-                   Op -> gql:execute(Ctx#{ operation_name => Op }, Elaborated)
+                   undefined -> graphql:execute(Ctx, AST2);
+                   Op -> graphql:execute(Ctx#{ operation_name => Op }, Elaborated)
                end,
                
                Track6 = track(execute, Track5),
@@ -972,12 +972,12 @@ is_schema() ->
     Schema = {root, #{
     	query => 'TestType'
     }},
-    gql_schema:insert_new(Test),
-    gql_schema:insert_new(Schema),
+    graphql_schema:insert_new(Test),
+    graphql_schema:insert_new(Schema),
     ok.
 
 track_ets() ->
-    ets:new(gql_SUITE_track, [named_table, public, {keypos, 1}]),
+    ets:new(graphql_SUITE_track, [named_table, public, {keypos, 1}]),
     ok.
 
 track_new() ->

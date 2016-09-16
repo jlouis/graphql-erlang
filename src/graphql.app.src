@@ -1,4 +1,4 @@
-{application, gql,
+{application, graphql,
  [{description, "Application for handling GraphQL queries"},
   {vsn, "0.0.1"},
   {registered, []},
@@ -9,7 +9,7 @@
     jsx,
     lager
    ]},
-  {mod, {gql_app, []}},
+  {mod, {graphql_app, []}},
   {env,[]},
   {modules, []},
 

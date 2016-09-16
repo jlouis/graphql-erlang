@@ -1,7 +1,7 @@
--module(gql_err).
+-module(graphql_err).
 
--include("gql.hrl").
--include("gql_schema.hrl").
+-include("graphql_internal.hrl").
+-include("graphql_schema.hrl").
 
 -export([abort/2]).
 -export([path/1]).

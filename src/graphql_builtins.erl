@@ -1,4 +1,4 @@
--module(gql_builtins).
+-module(graphql_builtins).
 
 -export([standard_types_inject/0]).
 
@@ -19,9 +19,9 @@ standard_types_inject() ->
     ID = {scalar, #{
     	id => 'ID',
     	description => "Representation of an opaque ID in the system. Always returned/given as strings, but clients are not allowed to deconstruct them. The server might change them as it sees fit later on, and the clients must be able to handle this situation." }},
-    true = gql_schema:insert_new(String),
-    true = gql_schema:insert_new(Float),
-    true = gql_schema:insert_new(Int),
-    true = gql_schema:insert_new(Bool),
-    true = gql_schema:insert_new(ID),
+    true = graphql_schema:insert_new(String),
+    true = graphql_schema:insert_new(Float),
+    true = graphql_schema:insert_new(Int),
+    true = graphql_schema:insert_new(Bool),
+    true = graphql_schema:insert_new(ID),
     ok.

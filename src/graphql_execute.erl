@@ -1,7 +1,7 @@
--module(gql_execute).
+-module(graphql_execute).
 
--include("gql.hrl").
--include("gql_schema.hrl").
+-include("graphql_internal.hrl").
+-include("graphql_schema.hrl").
 
 -export([x/1, x/2]).
 -export([default_resolver/3]).
@@ -139,7 +139,7 @@ resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema_obj = FObj } 
                           %% Failure to retrieve a result cuts the computation at this node
                           { {Alias, null}, [] };
                         {ok, Result} ->
-                            {R, Es} = case gql_ast:resolve_type(Ty) of
+                            {R, Es} = case graphql_ast:resolve_type(Ty) of
                                 {scalar, Scalar} ->
                                     [] = SSet,
                                     { {Alias, output_coerce(Scalar, Result)}, []};
@@ -170,7 +170,7 @@ resolver_function(undefined) -> fun ?MODULE:default_resolver/3.
 resolve_type(Path, Ctx, Cur, ID, R, SSet) ->
     try R(Cur) of
         {ok, Ty} ->
-          #object_type{} = Obj = gql_schema:get(canon_ty(Ty)),
+          #object_type{} = Obj = graphql_schema:get(canon_ty(Ty)),
           resolve_obj([Obj | Path], Ctx, Cur, SSet, Obj, #{});
         {error, Reason} ->
             throw(err(Path, {unresolved_type, ID, Reason}))
@@ -230,7 +230,7 @@ output_coerce(float, _) -> null;
 output_coerce(id, B) when is_binary(B) -> B;
 output_coerce(id, _) -> null;
 output_coerce(UserDefined, Data) ->
-    case gql_schema:lookup(UserDefined) of
+    case graphql_schema:lookup(UserDefined) of
         #scalar_type { output_coerce = F } ->
            try F(Data) of
               Result -> Result
@@ -305,7 +305,7 @@ alias(#field { alias = Alias }) -> name(Alias).
 
 value(_Ctx, {Ty, {enum, E}}) ->
     N = name(E),
-    #enum_type { repr = Repr } = gql_schema:get(Ty),
+    #enum_type { repr = Repr } = graphql_schema:get(Ty),
     case Repr of
         binary -> N;
         atom -> binary_to_atom(N, utf8);
@@ -316,13 +316,13 @@ value(Ctx, {[Ty], {list, Vals}}) ->
 value(Ctx, {[Ty], Vals}) when is_list(Vals) ->
     [value(Ctx, {Ty, V}) || V <- Vals];
 value(Ctx, {ObjTy, {object, O}}) ->
-    #input_object_type { fields = FieldEnv } = gql_schema:get(
-        gql_ast:unwrap_type(ObjTy)),
+    #input_object_type { fields = FieldEnv } = graphql_schema:get(
+        graphql_ast:unwrap_type(ObjTy)),
     ObjVals = value_object(Ctx, FieldEnv, O),
     maps:from_list(ObjVals);
 value(Ctx, {ObjTy, O}) when is_map(O) ->
-    #input_object_type { fields = FieldEnv } = gql_schema:get(
-        gql_ast:unwrap_type(ObjTy)),
+    #input_object_type { fields = FieldEnv } = graphql_schema:get(
+        graphql_ast:unwrap_type(ObjTy)),
     ObjVals = value_object(Ctx, FieldEnv, maps:to_list(O)),
     maps:from_list(ObjVals);
 value(Ctx, {_Ty, {var, {name, N, _}}}) -> var_lookup(Ctx, N);
@@ -359,7 +359,7 @@ var_lookup(#{ params := Params }, N) ->
 
 %% -- ERROR FORMATTING --------------------
 format_error(Path, #{ error_formatter := EFMod }, Name, OID, Reason) ->
-    try EFMod:format_error(gql_err:path(Path), Name, OID, Reason) of
+    try EFMod:format_error(graphql_err:path(Path), Name, OID, Reason) of
         {ok, Err} -> [Err];
         {error, Err} ->
             lager:warning("Unable to format error ~p due to ~p", [Reason, {error, Err}]),
@@ -372,7 +372,7 @@ format_error(Path, #{ error_formatter := EFMod }, Name, OID, Reason) ->
     end;
 format_error(Path, #{}, Name, OID, Reason) ->
     lager:warning("Handler crash ~p (~p:~p) with no error_formatter: ~p",
-        [gql_err:path(Path), OID, Name, Reason]),
+        [graphql_err:path(Path), OID, Name, Reason]),
     [].
 
 %% -- ERROR HANDLING --

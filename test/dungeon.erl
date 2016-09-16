@@ -1,5 +1,5 @@
 -module(dungeon).
--include_lib("gql/include/graphql.hrl").
+-include_lib("graphql/include/graphql.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
 -export([inject/0, start/0, stop/0]).
@@ -94,7 +94,7 @@ inject_error() ->
         		description => "The error message"
         	}
        }}},
-    true = gql_schema:insert_new(Error),
+    true = graphql_schema:insert_new(Error),
     ok.
 
 inject_color() ->
@@ -104,7 +104,7 @@ inject_color() ->
     	input_coerce => fun (X) -> {ok, X} end,
     	output_coerce => fun (X) -> {ok, X} end
     }},
-    true = gql_schema:insert_new(Color),
+    true = graphql_schema:insert_new(Color),
     ok.
 
 ok(Data) -> ok(Data, []).
@@ -147,8 +147,8 @@ inject_monster() ->
     			description => "How many hitpoints the monster has",
     			deprecation => "Use `hitpoints` instead" }
     	}}},
-    	true = gql_schema:insert_new(Monster),
-    ok = gql_relay:input('IntroduceMonster',
+    	true = graphql_schema:insert_new(Monster),
+    ok = graphql_relay:input('IntroduceMonster',
             #{
              name => #{
                type => 'string!',
@@ -189,8 +189,8 @@ inject_room() ->
     				  end,
     				description => "Things in the room" }
     	}}},
-    	true = gql_schema:insert_new(Room),
-    ok = gql_relay:input('IntroduceRoom',
+    	true = graphql_schema:insert_new(Room),
+    ok = graphql_relay:input('IntroduceRoom',
         #{
     	    description => #{
     		type => 'string!',
@@ -202,7 +202,7 @@ inject_room() ->
                description => "The introduced room" }
         }),
 
-    ok = gql_relay:input('SpawnMinion',
+    ok = graphql_relay:input('SpawnMinion',
 	#{
     	    monsterId => #{
     		type => 'id!',
@@ -293,8 +293,8 @@ inject_item() ->
     				    ok([load(OID) || OID <- Cts]) end,
     				description => "The Items inside this item, if any" }
     	}}},
-    true = gql_schema:insert_new(Item),
-    ok = gql_relay:input('IntroduceItem',
+    true = graphql_schema:insert_new(Item),
+    ok = graphql_relay:input('IntroduceItem',
       #{
         name => #{
         		type => 'string!',
@@ -326,7 +326,7 @@ inject() ->
     		resolve_type => fun resolve_item/1,
     		types => ['Item', 'Monster']
     }},
-    true = gql_schema:insert_new(Thing),
+    true = graphql_schema:insert_new(Thing),
 
     Node = {interface, #{
     	id => 'Node',
@@ -338,10 +338,10 @@ inject() ->
     			description => "The unique ID of an object" }
     	}
     }},
-    true = gql_schema:insert_new(Node),
+    true = graphql_schema:insert_new(Node),
 
     MutationRoot = mutations(),
-    true = gql_schema:insert_new(MutationRoot),
+    true = graphql_schema:insert_new(MutationRoot),
 
     QueryRoot = {object, #{
     		id => 'QueryRoot',
@@ -386,13 +386,13 @@ inject() ->
     					id => #{ type => 'id!', description => "The Room ID to retrieve" }
     				}}
     	}}},
-    	true = gql_schema:insert_new(QueryRoot),
+    	true = graphql_schema:insert_new(QueryRoot),
     	
     	Schema = {root, #{
     		query => 'QueryRoot',
     		mutation => 'MutationRoot',
     		interfaces => ['Node'] }},
-    	true = gql_schema:insert_new(Schema),
+    	true = graphql_schema:insert_new(Schema),
     	ok.
 
 resolve_node(#monster{}) -> {ok, 'Monster'};

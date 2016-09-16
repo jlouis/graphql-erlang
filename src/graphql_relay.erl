@@ -1,6 +1,6 @@
 %%% Relay-specific conventions
 %%
--module(gql_relay).
+-module(graphql_relay).
 
 -export([input/3, with_client_mutation/2]).
 -export([pagination/1, pagination_fields/0, resolve_paginate/1, paginate/3]).
@@ -32,7 +32,7 @@ input(Ty, InputFields, PayloadFields) ->
                     	type => 'string',
                     	description => "Mutation ID for the client, if any" }})
         }},
-    true = gql_schema:insert_new(Input),
+    true = graphql_schema:insert_new(Input),
     
     Payload =
         {object, #{
@@ -48,15 +48,15 @@ input(Ty, InputFields, PayloadFields) ->
                   	description => "Errors from the mutation" }
                 })
         }},
-    true = gql_schema:insert_new(Payload),
+    true = graphql_schema:insert_new(Payload),
     ok.
 
 paginate(Type, Description, AssocType) ->
     #{
         type => Type,
         description => Description,
-        resolve => gql_relay:resolve_paginate(AssocType),
-        args => gql_relay:pagination_fields()
+        resolve => graphql_relay:resolve_paginate(AssocType),
+        args => graphql_relay:pagination_fields()
      }.
 
 -spec pagination(atom()) -> ok.
@@ -75,7 +75,7 @@ pagination(Type) ->
     			type => 'Cursor',
     			description => "Cursor object" }
     }}},
-    true = gql_schema:insert_new(Edge),
+    true = graphql_schema:insert_new(Edge),
 
     Connection = {object, #{
         id => TyConn,
@@ -88,7 +88,7 @@ pagination(Type) ->
             	type => 'PageInfo',
             	description => "PageInfo for the connection" }
     }}},
-    true = gql_schema:insert_new(Connection),
+    true = graphql_schema:insert_new(Connection),
     ok.
 
 pagination_fields() -> pagination_fields(#{}).

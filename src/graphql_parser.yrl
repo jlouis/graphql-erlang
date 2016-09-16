@@ -262,7 +262,7 @@ TypeExtensionDefinition -> 'extend' ObjectTypeDefinition :
 
 Erlang code.
 
--include("gql.hrl").
+-include("graphql_internal.hrl").
 
 g_query({query, _L} = Q) -> Q.
 g_mutation({mutation, _L} = Mut) -> Mut.

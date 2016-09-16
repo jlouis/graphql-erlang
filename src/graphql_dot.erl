@@ -1,6 +1,6 @@
--module(gql_dot).
+-module(graphql_dot).
 
--include("gql_schema.hrl").
+-include("graphql_schema.hrl").
 
 -export([dump/1]).
 
@@ -31,7 +31,7 @@ header() ->
      "  remincross=true;"]).
 
 body() ->
-    Entries = gql_schema:all(),
+    Entries = graphql_schema:all(),
     Map = maps:from_list([{id(E), E} || E <- Entries]),
     [
       [format(entry(E, Map)) || E <- Entries],

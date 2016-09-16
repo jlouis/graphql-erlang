@@ -1,6 +1,6 @@
--module(gql_validate).
+-module(graphql_validate).
 
--include("gql.hrl").
+-include("graphql_internal.hrl").
 
 -export([x/1]).
 
@@ -11,9 +11,9 @@ x(AST) ->
     ok.
 
 unique_operations({document, Ops}) ->
-    OpIDs = [gql_ast:name(ID) || #op{ id = ID } <- Ops],
+    OpIDs = [graphql_ast:name(ID) || #op{ id = ID } <- Ops],
     ok = uniq(lists:sort(OpIDs)),
-    FragIDs = [gql_ast:name(ID) || #frag { id = ID } <- Ops],
+    FragIDs = [graphql_ast:name(ID) || #frag { id = ID } <- Ops],
     ok = uniq(lists:sort(FragIDs)),
     ok.
 
@@ -31,12 +31,12 @@ no_fragment_cycles({document, Ops}) ->
     ok.
     
 frag_link(#frag { id = ID, selection_set = Fields }) ->
-    {gql_ast:name(ID), frag_link_fields(Fields)}.
+    {graphql_ast:name(ID), frag_link_fields(Fields)}.
 
 frag_link_fields([]) -> [];
 frag_link_fields([#field{ selection_set = Fields } | Next]) ->
     frag_link_fields(Fields) ++ frag_link_fields(Next);
-frag_link_fields([#frag_spread { id = ID } | Next]) -> [gql_ast:name(ID) | frag_link_fields(Next)];
+frag_link_fields([#frag_spread { id = ID } | Next]) -> [graphql_ast:name(ID) | frag_link_fields(Next)];
 frag_link_fields([#frag { id = '...', selection_set = Fields } | Next]) ->
     frag_link_fields(Fields) ++ frag_link_fields(Next).
     

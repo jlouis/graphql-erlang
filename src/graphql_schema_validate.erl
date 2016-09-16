@@ -1,12 +1,12 @@
--module(gql_schema_validate).
+-module(graphql_schema_validate).
 
--include("gql_schema.hrl").
+-include("graphql_schema.hrl").
 
 -export([x/0]).
 
 -spec x() -> ok.
 x() ->
-    Objects = gql_schema:all(),
+    Objects = graphql_schema:all(),
     [x(Obj) || Obj <- Objects],
     ok.
     
@@ -137,7 +137,7 @@ all(F, [E|Es]) ->
     all(F, Es).
 
 lookup(Key) ->
-    case gql_schema:lookup(Key) of
+    case graphql_schema:lookup(Key) of
         not_found -> err({schema_validation, {not_found, Key}});
         X -> X
     end.

@@ -1,6 +1,6 @@
--module(gql_schema_canonicalize).
+-module(graphql_schema_canonicalize).
 
--include("gql_schema.hrl").
+-include("graphql_schema.hrl").
 
 -export([x/1]).
 

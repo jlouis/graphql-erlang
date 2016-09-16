@@ -1,8 +1,8 @@
--module(gql_schema).
+-module(graphql_schema).
 -behaviour(gen_server).
 
--include("gql_schema.hrl").
--include("gql.hrl").
+-include("graphql_schema.hrl").
+-include("graphql_internal.hrl").
 
 -export([start_link/0, reset/0]).
 -export([
@@ -17,8 +17,8 @@
 -export([init/1, handle_call/3, handle_cast/2, terminate/2, handle_info/2,
     code_change/3]).
 
--define(ENUMS, gql_schema_enums).
--define(OBJECTS, gql_schema_objects).
+-define(ENUMS, graphql_schema_enums).
+-define(OBJECTS, graphql_schema_objects).
 
 -record(state, {}).
 
@@ -32,8 +32,8 @@ start_link() ->
 -spec reset() -> ok.
 reset() ->
     ok = gen_server:call(?MODULE, reset),
-    ok = gql_introspection:inject(),
-    ok = gql_builtins:standard_types_inject(),
+    ok = graphql_introspection:inject(),
+    ok = graphql_builtins:standard_types_inject(),
     ok.
 
 -spec insert(any()) -> true.
@@ -41,7 +41,7 @@ insert(S) -> insert(S, #{ canonicalize => true }).
 
 -spec insert(any(), any()) -> true | false.
 insert(S, #{ canonicalize := true }) ->
-    Rec = gql_schema_canonicalize:x(S),
+    Rec = graphql_schema_canonicalize:x(S),
     gen_server:call(?MODULE, {insert, Rec});
 insert(S, #{}) ->
     gen_server:call(?MODULE, {insert, S}).
@@ -49,10 +49,10 @@ insert(S, #{}) ->
 
 -spec insert_new(any()) -> true | false.
 insert_new(S) ->
-    Rec = gql_schema_canonicalize:x(S),
+    Rec = graphql_schema_canonicalize:x(S),
     case Rec of
         #root_schema { query = Q } ->
-            ok = gql_introspection:augment_root(Q);
+            ok = graphql_introspection:augment_root(Q);
         _ ->
             ok
     end,

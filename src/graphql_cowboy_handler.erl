@@ -1,4 +1,4 @@
--module(cowboy_graphql_handler).
+-module(graphql_cowboy_handler).
 
 -export([init/3]).
 -export([
