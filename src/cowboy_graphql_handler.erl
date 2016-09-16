@@ -1,4 +1,4 @@
--module(gryphon_graphql_handler).
+-module(cowboy_graphql_handler).
 
 -export([init/3]).
 -export([
@@ -157,6 +157,5 @@ err(Code, Msg, Req, State) ->
     {halt, Reply, State}.
 
 format_err(Reason) ->
-    ErrString = iolist_to_binary(
-        io_lib:format("~p", [Reason])),
+    ErrString = iolist_to_binary(io_lib:format("~p", [Reason])),
     [ErrString].

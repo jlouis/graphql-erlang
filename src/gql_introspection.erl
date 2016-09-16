@@ -1,7 +1,7 @@
 -module(gql_introspection).
 
 -include("gql_schema.hrl").
--include_lib("gryphon_graphql/include/graphql.hrl").
+-include_lib("gql/include/graphql.hrl").
 
 -export([inject/0, augment_root/1]).
 
@@ -48,18 +48,18 @@ type_resolver(_Ctx, none, #{ <<"name">> := N }) ->
         Ty -> {ok, render_type(Ty)}
     end.
 
-query_type(_Ctx, Obj, _) ->
+query_type(_Ctx, _Obj, _) ->
     #root_schema{ query = QType } = gql_schema:get('ROOT'),
     {ok, render_type(QType)}.
 
-mutation_type(_Ctx, Obj, _) ->
+mutation_type(_Ctx, _Obj, _) ->
     #root_schema { mutation = MType } = gql_schema:get('ROOT'),
     case MType of
         undefined -> {ok, null};
         MT -> {ok, render_type(MT)}
     end.
 
-subscription_type(_Ctx, Obj, _) ->
+subscription_type(_Ctx, _Obj, _) ->
     #root_schema { subscription = SType } = gql_schema:get('ROOT'),
     case SType of
         undefined -> {ok, null};
@@ -183,7 +183,7 @@ interface_implementors(ID) ->
     end,
     {ok, [render_type(Ty) || Ty <- gql_schema:all(), Pass(Ty)]}.
 
-render_enum_value({Value, #enum_value{
+render_enum_value({_Value, #enum_value{
 	val = Key,
 	description = Desc,
 	deprecation = Deprecation }}) ->

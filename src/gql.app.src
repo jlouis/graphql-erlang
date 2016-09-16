@@ -1,12 +1,13 @@
-{application, gryphon_graphql,
- [{description, "An OTP library"},
-  {vsn, "0.1.0"},
+{application, gql,
+ [{description, "Application for handling GraphQL queries"},
+  {vsn, "0.0.1"},
   {registered, []},
   {applications,
    [kernel,
     stdlib,
     
-    jsx
+    jsx,
+    lager
    ]},
   {mod, {gql_app, []}},
   {env,[]},
