@@ -12,7 +12,7 @@ inject() ->
      	    <<"BLUE">> => #{ value => 2, description => "The color blue" }
      	}
      }},
-     true = graphql_schema:insert_new(Color),
+     ok = graphql:load(Color),
 
      Query = {object, #{
      	id => 'Query',
@@ -46,7 +46,7 @@ inject() ->
 		}
 	}
     }},
-    true = graphql_schema:insert_new(Query),
+    ok = graphql:load(Query),
 
     Mutation = {object, #{
         id => 'Mutation',
@@ -64,14 +64,14 @@ inject() ->
         		}
         	}
     }},
-    true = graphql_schema:insert_new(Mutation),
+    ok = graphql:load(Mutation),
     
     Root = {root, #{
        query => 'Query',
        mutation => 'Mutation',
        interfaces => []
     }},
-    true = graphql_schema:insert_new(Root),
+    ok = graphql:load(Root),
     ok.
 
 -define(RED, 0).

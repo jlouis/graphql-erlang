@@ -77,11 +77,11 @@ inject() ->
     	
     Schema = {root, #{ query => 'Query', interfaces => [] }},
     
-    graphql_schema:insert_new(BlogImage),
-    graphql_schema:insert_new(BlogAuthor),
-    graphql_schema:insert_new(BlogArticle),
-    graphql_schema:insert_new(BlogQuery),
-    graphql_schema:insert_new(Schema),
+    ok = graphql:load(BlogImage),
+    ok = graphql:load(BlogAuthor),
+    ok = graphql:load(BlogArticle),
+    ok = graphql:load(BlogQuery),
+    ok = graphql:load(Schema),
     ok.
     
 query_id_resolve(_Ctx, _, #{ <<"id">> := ID }) ->

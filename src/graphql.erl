@@ -10,11 +10,14 @@
     validate/1]).
 
 -export([
+    load/1,
     validate_schema/0
 ]).
 
 -type json() :: number() | binary() | true | false | null | #{ binary() => json() }.
 -type param_context() :: json().
+
+-type schema_definition() :: {atom(), #{ binary() => term() }}.
 
 -export_type([ast/0, json/0, param_context/0]).
 
@@ -53,6 +56,12 @@ execute(AST) -> execute(#{ params => #{} }, AST).
 -spec execute(context(), ast()) -> #{ atom() => json() }.
 execute(Ctx, AST) ->
     graphql_execute:x(Ctx, AST).
+
+%% @doc load/1 loads a schema definition into the Graph Schema
+%% @end
+-spec load(schema_definition()) -> 'ok' | {error, term()}.
+load(Defn) ->
+    graphql_schema:load(Defn).
 
 %% STUB for now
 -spec validate_schema() -> ok | {error, any()}.

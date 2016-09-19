@@ -94,7 +94,7 @@ inject_error() ->
         		description => "The error message"
         	}
        }}},
-    true = graphql_schema:insert_new(Error),
+    ok = graphql:load(Error),
     ok.
 
 inject_color() ->
@@ -104,7 +104,7 @@ inject_color() ->
     	input_coerce => fun (X) -> {ok, X} end,
     	output_coerce => fun (X) -> {ok, X} end
     }},
-    true = graphql_schema:insert_new(Color),
+    ok = graphql:load(Color),
     ok.
 
 ok(Data) -> ok(Data, []).
@@ -147,7 +147,7 @@ inject_monster() ->
     			description => "How many hitpoints the monster has",
     			deprecation => "Use `hitpoints` instead" }
     	}}},
-    	true = graphql_schema:insert_new(Monster),
+    	ok = graphql:load(Monster),
     ok = graphql_relay:input('IntroduceMonster',
             #{
              name => #{
@@ -189,7 +189,7 @@ inject_room() ->
     				  end,
     				description => "Things in the room" }
     	}}},
-    	true = graphql_schema:insert_new(Room),
+    	ok = graphql:load(Room),
     ok = graphql_relay:input('IntroduceRoom',
         #{
     	    description => #{
@@ -293,7 +293,7 @@ inject_item() ->
     				    ok([load(OID) || OID <- Cts]) end,
     				description => "The Items inside this item, if any" }
     	}}},
-    true = graphql_schema:insert_new(Item),
+    ok = graphql:load(Item),
     ok = graphql_relay:input('IntroduceItem',
       #{
         name => #{
@@ -326,7 +326,7 @@ inject() ->
     		resolve_type => fun resolve_item/1,
     		types => ['Item', 'Monster']
     }},
-    true = graphql_schema:insert_new(Thing),
+    ok = graphql:load(Thing),
 
     Node = {interface, #{
     	id => 'Node',
@@ -338,10 +338,10 @@ inject() ->
     			description => "The unique ID of an object" }
     	}
     }},
-    true = graphql_schema:insert_new(Node),
+    ok = graphql:load(Node),
 
     MutationRoot = mutations(),
-    true = graphql_schema:insert_new(MutationRoot),
+    ok = graphql:load(MutationRoot),
 
     QueryRoot = {object, #{
     		id => 'QueryRoot',
@@ -386,13 +386,13 @@ inject() ->
     					id => #{ type => 'id!', description => "The Room ID to retrieve" }
     				}}
     	}}},
-    	true = graphql_schema:insert_new(QueryRoot),
+    	ok = graphql:load(QueryRoot),
     	
     	Schema = {root, #{
     		query => 'QueryRoot',
     		mutation => 'MutationRoot',
     		interfaces => ['Node'] }},
-    	true = graphql_schema:insert_new(Schema),
+    	ok = graphql:load(Schema),
     	ok.
 
 resolve_node(#monster{}) -> {ok, 'Monster'};

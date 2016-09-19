@@ -972,8 +972,8 @@ is_schema() ->
     Schema = {root, #{
     	query => 'TestType'
     }},
-    graphql_schema:insert_new(Test),
-    graphql_schema:insert_new(Schema),
+    ok = graphql:load(Test),
+    ok = graphql:load(Schema),
     ok.
 
 track_ets() ->

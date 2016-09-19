@@ -11,7 +11,7 @@ inject() ->
     		'DOWN' => #{ value => 2, description => "Command your dog 'down'"},
     		'HEEL' => #{ value => 3, description => "Command your dog to heel" }
     }}},
-    graphql_schema:insert_new(DogCommand),
+    ok = graphql:load(DogCommand),
     
     Pet = {interface, #{
     	id => 'Pet',
@@ -19,7 +19,7 @@ inject() ->
     	fields => #{
     		name => #{ type => 'string!', description => "The name of the pet" }}
     }},
-    graphql_schema:insert_new(Pet),
+    ok = graphql:load(Pet),
     
     Sentient = {interface, #{
     	id => 'Sentient',
@@ -27,7 +27,7 @@ inject() ->
     	fields => #{
     		name => #{ type => 'string!', description => "The name of the sentient" }}
     }},
-    graphql_schema:insert_new(Sentient),
+    ok = graphql:load(Sentient),
     
     Dog = {object, #{
     	id => 'Dog',
@@ -58,7 +58,7 @@ inject() ->
     			description => "The owner of the dog"
     		}
     }}},
-    graphql_schema:insert_new(Dog),
+    ok = graphql:load(Dog),
     
     Alien = {object, #{
     	id => 'Alien',
@@ -69,7 +69,7 @@ inject() ->
     		homePlanet => #{ type => 'string', description => "The home planet of the alien, if any" }
     	}
     }},
-    graphql_schema:insert_new(Alien),
+    ok = graphql:load(Alien),
     
     Human = {object, #{
     	id => 'Human',
@@ -80,7 +80,7 @@ inject() ->
     		pets => #{ type => ['Pet'], description => "The pets the human owns" }
     	}
     }},
-    graphql_schema:insert_new(Human),
+    ok = graphql:load(Human),
 
     CatCommand = {enum, #{
     	id => 'CatCommand',
@@ -89,7 +89,7 @@ inject() ->
     		'JUMP' => #{ value => 1, description => "The cat jumps, presumably be means of a laser pointer" }
     	}
     }},
-    graphql_schema:insert_new(CatCommand),
+    ok = graphql:load(CatCommand),
     
     Cat = {object, #{
     	id => 'Cat',
@@ -114,28 +114,28 @@ inject() ->
     		}
     	}
     }},
-    graphql_schema:insert_new(Cat),
+    ok = graphql:load(Cat),
     
     CatOrDog = {union, #{
     	id => 'CatOrDog',
     	description => "Cats or Dogs",
     	types => ['Cat', 'Dog']
     }},
-    graphql_schema:insert_new(CatOrDog),
+    ok = graphql:load(CatOrDog),
     
     DogOrHuman = {union, #{
     	id => 'DogOrHuman',
     	description => "Humans or Dogs",
     	types => ['Human', 'Dog']
     }},
-    graphql_schema:insert_new(DogOrHuman),
+    ok = graphql:load(DogOrHuman),
     
     HumanOrAlien = {union, #{
     	id => 'HumanOrAlien',
     	description => "Humans or Aliens",
     	types => ['Human', 'Alien']
     }},
-    graphql_schema:insert_new(HumanOrAlien),
+    ok = graphql:load(HumanOrAlien),
     
     Arguments = {object, #{
     	id => 'Arguments',
@@ -181,7 +181,7 @@ inject() ->
 				booleanListArg => #{ type => {non_null, [bool]}, description => "The list of bools"}
 			}}
     }}},
-    graphql_schema:insert_new(Arguments),
+    ok = graphql:load(Arguments),
 
     QueryRoot = {object, #{
     	id => 'QueryRoot',
@@ -194,11 +194,11 @@ inject() ->
     		catOrDog => #{ type => 'CatOrDog', description => "Query of cats or dogs" }
     	}
     }},
-    graphql_schema:insert_new(QueryRoot),
+    ok = graphql:load(QueryRoot),
     
     Schema = {root, #{
     	query => 'QueryRoot',
     	interfaces => ['Sentient', 'Pet']
     }},
-    graphql_schema:insert_new(Schema),
+    ok = graphql:load(Schema),
     ok.

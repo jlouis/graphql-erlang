@@ -14,7 +14,7 @@ inject() ->
     			type => string,
     			description => "The name of the user" }
     }}},
-    true = graphql_schema:insert_new(User),
+    ok = graphql:load(User),
      
     Query = {object, #{ id => 'Query',
          description => "Hello World!",
@@ -29,13 +29,13 @@ inject() ->
              hello => #{
          	type => string,
          	resolve => fun(_, _, _) -> {ok, <<"world">>} end } } } },
-    true = graphql_schema:insert_new(Query),
+    ok = graphql:load(Query),
 
     Root = {root, #{
         query => 'Query',
         interfaces => []
     }},
-    true = graphql_schema:insert_new(Root),
+    ok = graphql:load(Root),
     ok.
 
 resolve(_, _, #{ <<"id">> := ID }) ->
