@@ -8,7 +8,7 @@
 -export([
 	all/0,
 	insert/1, insert/2,
-	insert_new/1,
+	load/1,
 	get/1,
 	lookup/1,
 	lookup_enum_type/1]).
@@ -41,22 +41,39 @@ insert(S) -> insert(S, #{ canonicalize => true }).
 
 -spec insert(any(), any()) -> true | false.
 insert(S, #{ canonicalize := true }) ->
-    Rec = graphql_schema_canonicalize:x(S),
-    gen_server:call(?MODULE, {insert, Rec});
+    try graphql_schema_canonicalize:x(S) of
+        Rec ->
+            case gen_server:call(?MODULE, {insert, Rec}) of
+                true -> ok;
+                false ->
+                    {error, already_exists}
+            end
+    catch
+        Class:Reason ->
+            {error, {schema_canonicalize, {Class, Reason}}}
+    end;
 insert(S, #{}) ->
     gen_server:call(?MODULE, {insert, S}).
 
 
--spec insert_new(any()) -> true | false.
-insert_new(S) ->
-    Rec = graphql_schema_canonicalize:x(S),
-    case Rec of
-        #root_schema { query = Q } ->
-            ok = graphql_introspection:augment_root(Q);
-        _ ->
-            ok
-    end,
-    gen_server:call(?MODULE, {insert_new, Rec}).
+-spec load(any()) -> true | false.
+load(S) ->
+    try graphql_schema_canonicalize:x(S) of
+        #root_schema { query = Q } = Rec ->
+            ok = graphql_introspection:augment_root(Q),
+            insert_new_(Rec);
+        Rec ->
+            insert_new_(Rec)
+    catch
+        Class:Reason ->
+            {error, {schema_canonicalize, {Class, Reason}}}
+    end.
+
+insert_new_(Rec) ->
+    case gen_server:call(?MODULE, {insert_new, Rec}) of
+        true -> ok;
+        false -> {error, already_exists}
+    end.
 
 -spec all() -> [any()].
 all() ->

@@ -19,9 +19,9 @@ standard_types_inject() ->
     ID = {scalar, #{
     	id => 'ID',
     	description => "Representation of an opaque ID in the system. Always returned/given as strings, but clients are not allowed to deconstruct them. The server might change them as it sees fit later on, and the clients must be able to handle this situation." }},
-    true = graphql_schema:insert_new(String),
-    true = graphql_schema:insert_new(Float),
-    true = graphql_schema:insert_new(Int),
-    true = graphql_schema:insert_new(Bool),
-    true = graphql_schema:insert_new(ID),
+    ok = graphql:insert_schema_definition(String),
+    ok = graphql:insert_schema_definition(Float),
+    ok = graphql:insert_schema_definition(Int),
+    ok = graphql:insert_schema_definition(Bool),
+    ok = graphql:insert_schema_definition(ID),
     ok.
