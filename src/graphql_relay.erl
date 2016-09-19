@@ -86,7 +86,10 @@ pagination(Type) ->
                 description => "Edges in the connection" },
             pageInfo => #{
                 type => 'PageInfo',
-                description => "PageInfo for the connection" }
+                description => "PageInfo for the connection" },
+            count => #{
+                type => int,
+                description => "Count of edges in the connection" }
     }}},
     ok = graphql:insert_schema_definition(Connection),
     ok.
@@ -133,17 +136,17 @@ resolve_paginate(Type, Source, Input) ->
         {res, Count, []} ->
             Bounds = {0, Count},
             Sliced = cursors_to_edges(Input, Bounds),
-            resolve_paginate_(Source, Type, Input, Sliced)
+            resolve_paginate_(Source, Type, Input, Sliced, Count)
     end.
 
 %% The spec says you can set both first and last, but the results are confusing
 %% when doing so. Hence, we reject such attempts for the simplicity of the
 %% implementation here.
-resolve_paginate_(_Source, _Type, #{ <<"first">> := _, <<"last">> := _}, _Bounds) ->
+resolve_paginate_(_Source, _Type, #{ <<"first">> := _, <<"last">> := _}, _Bounds, _Count) ->
     {error, first_last};
-resolve_paginate_(_Source, _Type, #{ <<"first">> := N }, _Bounds) when N < 0 ->
+resolve_paginate_(_Source, _Type, #{ <<"first">> := N }, _Bounds, _Count) when N < 0 ->
     {error, negative_first};
-resolve_paginate_(Source, Type, #{ <<"first">> := N }, {Lo, Hi}) ->
+resolve_paginate_(Source, Type, #{ <<"first">> := N }, {Lo, Hi}, Count) ->
     Offset = Lo,
     Limit = min(Hi-Lo, N),
     {res, Edges, []} = gryphon_hydra:assoc_range(Source, Type, Offset, Limit),
@@ -153,11 +156,12 @@ resolve_paginate_(Source, Type, #{ <<"first">> := N }, {Lo, Hi}) ->
     },
     {ok, #{
        <<"pageInfo">> => PageInfo,
-       <<"edges">> => edges(Edges, Offset)
+       <<"edges">> => edges(Edges, Offset),
+       <<"count">> => Count
     }};
-resolve_paginate_(_Source, _Type, #{ <<"last">> := N }, _Bounds) when N < 0 ->
+resolve_paginate_(_Source, _Type, #{ <<"last">> := N }, _Bounds, _Count) when N < 0 ->
     {error, negative_last};
-resolve_paginate_(Source, Type, #{ <<"last">> := N }, {Lo, Hi}) ->
+resolve_paginate_(Source, Type, #{ <<"last">> := N }, {Lo, Hi}, Count) ->
     Offset = max(Hi-N, 0),
     Limit = min(Hi-Lo, N),
     {res, Edges, []} = gryphon_hydra:assoc_range(Source, Type, Offset, Limit),
@@ -167,10 +171,11 @@ resolve_paginate_(Source, Type, #{ <<"last">> := N }, {Lo, Hi}) ->
     },
     {ok, #{
         <<"pageInfo">> => PageInfo,
-        <<"edges">> => edges(Edges, Offset)
+        <<"edges">> => edges(Edges, Offset),
+        <<"count">> => Count
       }};
-resolve_paginate_(Source, Type, #{}, Bound) ->
-    resolve_paginate_(Source, Type, #{ <<"first">> => ?DEFAULT_N }, Bound).
+resolve_paginate_(Source, Type, #{}, Bound, Count) ->
+    resolve_paginate_(Source, Type, #{ <<"first">> => ?DEFAULT_N }, Bound, Count).
 
 
 cursors_to_edges(#{ <<"after">> := Cursor } = Input, {Lo, Hi}) ->
