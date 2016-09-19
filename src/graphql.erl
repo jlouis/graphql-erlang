@@ -10,7 +10,7 @@
     validate/1]).
 
 -export([
-    load/1,
+    insert_schema_definition/1,
     validate_schema/0
 ]).
 
@@ -57,10 +57,10 @@ execute(AST) -> execute(#{ params => #{} }, AST).
 execute(Ctx, AST) ->
     graphql_execute:x(Ctx, AST).
 
-%% @doc load/1 loads a schema definition into the Graph Schema
+%% @doc insert_schema_definition/1 loads a schema definition into the Graph Schema
 %% @end
--spec load(schema_definition()) -> 'ok' | {error, term()}.
-load(Defn) ->
+-spec insert_schema_definition(schema_definition()) -> 'ok' | {error, term()}.
+insert_schema_definition(Defn) ->
     graphql_schema:load(Defn).
 
 %% STUB for now

@@ -32,7 +32,7 @@ input(Ty, InputFields, PayloadFields) ->
                     	type => 'string',
                     	description => "Mutation ID for the client, if any" }})
         }},
-    ok = graphql:load(Input),
+    ok = graphql:insert_schema_definition(Input),
     
     Payload =
         {object, #{
@@ -48,7 +48,7 @@ input(Ty, InputFields, PayloadFields) ->
                   	description => "Errors from the mutation" }
                 })
         }},
-    ok = graphql:load(Payload),
+    ok = graphql:insert_schema_definition(Payload),
     ok.
 
 paginate(Type, Description, AssocType) ->
@@ -75,7 +75,7 @@ pagination(Type) ->
     			type => 'Cursor',
     			description => "Cursor object" }
     }}},
-    ok = graphql:load(Edge),
+    ok = graphql:insert_schema_definition(Edge),
 
     Connection = {object, #{
         id => TyConn,
@@ -88,7 +88,7 @@ pagination(Type) ->
             	type => 'PageInfo',
             	description => "PageInfo for the connection" }
     }}},
-    ok = graphql:load(Connection),
+    ok = graphql:insert_schema_definition(Connection),
     ok.
 
 pagination_fields() -> pagination_fields(#{}).

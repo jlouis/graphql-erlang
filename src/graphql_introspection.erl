@@ -386,13 +386,13 @@ inject() ->
                              'FRAGMENT_SPREADS' => #{ value => 5, description => "Fragment spreads" },
                              'INLINE_FRAGMENT' => #{ value => 6, description => "Inline fragments" }
                             }}},
-    ok = graphql:load(DirectiveLocation),
-    ok = graphql:load(Directive),
-    ok = graphql:load(TypeKind),
-    ok = graphql:load(Enum),
-    ok = graphql:load(InputValue),
-    ok = graphql:load(Field),
-    ok = graphql:load(Type),
-    ok = graphql:load(Schema),
+    ok = graphql:insert_schema_definition(DirectiveLocation),
+    ok = graphql:insert_schema_definition(Directive),
+    ok = graphql:insert_schema_definition(TypeKind),
+    ok = graphql:insert_schema_definition(Enum),
+    ok = graphql:insert_schema_definition(InputValue),
+    ok = graphql:insert_schema_definition(Field),
+    ok = graphql:insert_schema_definition(Type),
+    ok = graphql:insert_schema_definition(Schema),
     ok.
 

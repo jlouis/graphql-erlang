@@ -33,13 +33,13 @@ inject() ->
             	resolve => fun(Ctx, _Cur, Args) -> get_droid(Ctx, Args) end }
 
          } } },
-    ok = graphql:load(Query),
+    ok = graphql:insert_schema_definition(Query),
     
     Root = {root, #{
     	query => 'Query',
     	interaces => []
     }},
-    ok = graphql:load(Root),
+    ok = graphql:insert_schema_definition(Root),
     ok.
 
 init_starwars() ->
@@ -120,10 +120,10 @@ init_starwars() ->
     		},
     	interfaces => ['Character']
     }},
-    ok = graphql:load(Episodes),
-    ok = graphql:load(Character),
-    ok = graphql:load(Human),
-    ok = graphql:load(Droid),
+    ok = graphql:insert_schema_definition(Episodes),
+    ok = graphql:insert_schema_definition(Character),
+    ok = graphql:insert_schema_definition(Human),
+    ok = graphql:insert_schema_definition(Droid),
     ok.
 
 %% DATA
