@@ -1,6 +1,4 @@
 _build
-/src/gql_parser.erl
-/src/gql_scanner.erl
 /src/graphql_parser.erl
 /src/graphql_scanner.erl
 log/*

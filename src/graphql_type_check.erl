@@ -5,7 +5,7 @@
 
 -export([x/1, x_params/3]).
 
--spec x(gql:ast()) -> {ok, #{ atom() => any()}}.
+-spec x(graphql:ast()) -> {ok, #{ atom() => any()}}.
 x(Doc) -> x(#{}, Doc).
 
 x(Ctx, {document, Clauses}) ->
@@ -36,7 +36,7 @@ tc_funenv([#op { id = OpName, vardefs = VDefs } | Next], FunEnv) ->
     tc_funenv(Next, FunEnv#{ name(OpName) => VarEnv }).
 
 %% -- TYPE CHECK OF PARAMETER ENVS ------------------
--spec x_params(any(), any(), any()) -> gql:param_context().
+-spec x_params(any(), any(), any()) -> graphql:param_context().
 x_params(_FunEnv, undefined, #{}) -> #{};
 x_params(_FunEnv, undefined, _) ->
     graphql_err:abort([], params_on_unnamed);

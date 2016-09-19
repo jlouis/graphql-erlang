@@ -1,5 +1,5 @@
 REBAR   = rebar3
-PROJECT = gql
+PROJECT = graphql
 VERSION = 0.0.1
 
 all: compile

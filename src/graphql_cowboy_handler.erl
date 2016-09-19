@@ -104,16 +104,16 @@ from_graphql(Req, State) ->
 run(undefined, _, _, Req, State) ->
     err(400, no_query_supplied, Req, State);
 run(Doc, OpName, Vars, Req, #{ viewer := Viewer, req_id := ReqID } = State) ->
-    case gql:parse(Doc) of
+    case graphql:parse(Doc) of
        {ok, AST} ->
           try
-             Elaborated = gql:elaborate(AST),
+             Elaborated = graphql:elaborate(AST),
              {ok, #{
                  fun_env := FunEnv,
-                 ast := AST2 }} = gql:type_check(Elaborated),
-             ok = gql:validate(AST2),
-             Coerced = gql:type_check_params(FunEnv, OpName, Vars),
-             Response = gql:execute(#{
+                 ast := AST2 }} = graphql:type_check(Elaborated),
+             ok = graphql:validate(AST2),
+             Coerced = graphql:type_check_params(FunEnv, OpName, Vars),
+             Response = graphql:execute(#{
                      params => Coerced,
                      operation_name => OpName,
                      req_id => ReqID,
