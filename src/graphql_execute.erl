@@ -6,10 +6,10 @@
 -export([x/1, x/2]).
 -export([default_resolver/3]).
 
--spec x(gql:ast()) -> #{ atom() => gql:json() }.
+-spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
 x(X) -> x(#{ params => #{} }, X).
 
--spec x(term(), gql:ast()) -> #{ atom() => gql:json() }.
+-spec x(term(), graphql:ast()) -> #{ atom() => graphql:json() }.
 x(Ctx, X) ->
     Canon = canon_context(Ctx),
     document(Canon, X).

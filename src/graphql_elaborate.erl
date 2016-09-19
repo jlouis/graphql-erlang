@@ -5,7 +5,7 @@
 
 -export([x/1]).
 
--spec x(gql:ast()) -> gql:ast().
+-spec x(graphql:ast()) -> graphql:ast().
 x(Doc) -> x_document(Doc).
 
 x_document({document, Ops}) ->

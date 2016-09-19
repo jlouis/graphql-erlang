@@ -4,7 +4,7 @@
 
 -export([x/1]).
 
--spec x(gql:ast()) -> ok.
+-spec x(graphql:ast()) -> ok.
 x(AST) -> 
     ok = unique_operations(AST),
     ok = no_fragment_cycles(AST),

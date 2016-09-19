@@ -70,5 +70,5 @@
 -type ast() :: {document, [#op{}]}.
 -type context() :: #{ atom() => any() }.
 
--type gql_type() :: string | int | bool | float | {non_null, gql_type()} | [gql_type()] | binary().
--type gql_type_resolution() :: scalar | {list, gql_type_resolution()} | binary().
+-type graphql_type() :: string | int | bool | float | {non_null, graphql_type()} | [graphql_type()] | binary().
+-type graphql_type_resolution() :: scalar | {list, graphql_type_resolution()} | binary().
