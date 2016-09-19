@@ -22,30 +22,30 @@ with_client_mutation(Input, Fun) ->
 
 input(Ty, InputFields, PayloadFields) ->
     TyBin = atom_to_binary(Ty, utf8),
-    
+
     Input =
         {input_object, #{
             id => <<TyBin/binary, "Input">>,
             description => ["Input object for ", TyBin],
             fields => maps:merge(InputFields,
                 #{ clientMutationId => #{
-                    	type => 'string',
-                    	description => "Mutation ID for the client, if any" }})
+                        type => 'string',
+                        description => "Mutation ID for the client, if any" }})
         }},
     ok = graphql:insert_schema_definition(Input),
-    
+
     Payload =
         {object, #{
             id => <<TyBin/binary, "Payload">>,
             description => ["Payload for ", TyBin],
             fields => maps:merge(PayloadFields,
                 #{
-                	clientMutationId => #{
-                    	type => string,
-                    	description => "Mutation ID for the client, if any" },
+                    clientMutationId => #{
+                        type => string,
+                        description => "Mutation ID for the client, if any" },
                   errors => #{
-                  	type => ['Error'],
-                  	description => "Errors from the mutation" }
+                      type => ['Error'],
+                      description => "Errors from the mutation" }
                 })
         }},
     ok = graphql:insert_schema_definition(Payload),
@@ -65,15 +65,15 @@ pagination(Type) ->
     TyConn = binary_to_atom(<<TyB/binary, "Connection">>, utf8),
     TyEdge =  binary_to_atom(<<TyB/binary, "Edge">>, utf8),
     Edge = {object, #{
-    	id => TyEdge,
-    	description => ["Edges for the object ", TyB],
-    	fields => #{
-    		node => #{
-    			type => Type,
-    			description => "Underlying node for the edge" },
-    		cursor => #{
-    			type => 'Cursor',
-    			description => "Cursor object" }
+        id => TyEdge,
+        description => ["Edges for the object ", TyB],
+        fields => #{
+            node => #{
+                type => Type,
+                description => "Underlying node for the edge" },
+            cursor => #{
+                type => 'Cursor',
+                description => "Cursor object" }
     }}},
     ok = graphql:insert_schema_definition(Edge),
 
@@ -82,11 +82,11 @@ pagination(Type) ->
         description => ["Connection for the type ", TyB],
         fields => #{
             edges => #{
-            	type => [TyEdge],
-            	description => "Edges in the connection" },
+                type => [TyEdge],
+                description => "Edges in the connection" },
             pageInfo => #{
-            	type => 'PageInfo',
-            	description => "PageInfo for the connection" }
+                type => 'PageInfo',
+                description => "PageInfo for the connection" }
     }}},
     ok = graphql:insert_schema_definition(Connection),
     ok.
@@ -94,19 +94,19 @@ pagination(Type) ->
 pagination_fields() -> pagination_fields(#{}).
 
 pagination_fields(Additional) ->
-    Base = #{ 
-    	first => #{
-    		type => int,
-    		description => "Return the first K entries" },
-    	'after' => #{
-    		type => 'string',
-    		description => "Retrieve Edges after this cursor entry" },
-    	last => #{
-    		type => int,
-    		description => "Return the last K entries" },
-    	before => #{
-    		type => 'string',
-    		description => "Retrieve Edges before this cursor entry" }
+    Base = #{
+        first => #{
+            type => int,
+            description => "Return the first K entries" },
+        'after' => #{
+            type => 'string',
+            description => "Retrieve Edges after this cursor entry" },
+        last => #{
+            type => int,
+            description => "Return the last K entries" },
+        before => #{
+            type => 'string',
+            description => "Retrieve Edges before this cursor entry" }
     },
     maps:merge(Base, Additional).
 
@@ -122,7 +122,7 @@ with_mutation(#{ <<"input">> := Input}, Fun, Key) ->
         {ok, Result} -> {ok, Result#{ Key => Mut }};
         {error, Reason} -> {error, Reason}
     end.
-    
+
 take(K, Map) ->
     {maps:get(K, Map), maps:remove(K, Map)}.
 
