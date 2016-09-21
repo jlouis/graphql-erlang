@@ -70,6 +70,8 @@ tc_param(Path, {K, {Ty, _}}, Val) ->
 %% we need to look up underlying types and check them.
 check_param(Path, {non_null, Ty}, V) -> check_param(Path, Ty, V);
 check_param(Path, {scalar, Sc}, V) -> input_coerce_scalar(Path, Sc, V);
+check_param(Path, {enum, Ty}, {enum, V}) when is_binary(V) ->
+    check_param(Path, {enum, Ty}, V);
 check_param(Path, {enum, Ty}, V) when is_binary(V) ->
     case graphql_schema:lookup_enum_type(V) of
        not_found -> graphql_err:abort(Path, {unknown_enum_value, V});
@@ -301,10 +303,9 @@ ty_of(#{ varenv := VE }, Path, _, {var, ID}) ->
             graphql_err:abort(Path, {unbound_variable, Name});
         {Ty, _Default} -> Ty
     end;
-ty_of(_Ctx, Path, _, {enum, E}) ->
-    N = name(E),
+ty_of(_Ctx, Path, _, {enum, N}) ->
     case graphql_schema:lookup_enum_type(N) of
-        not_found -> graphql_err:abort(Path, {unknown_enum, E});
+        not_found -> graphql_err:abort(Path, {unknown_enum, N});
         EnumTy -> {enum, EnumTy}
     end;
 ty_of(_Ctx, _Path, {scalar, Tag}, V) ->

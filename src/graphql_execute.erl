@@ -84,6 +84,8 @@ object(_Path, Ctx, Cur, #enum_type {} = Enum, SSet) ->
 
 resolve_enum(_Ctx, Val, [], #enum_type {}) when is_binary(Val) ->
     {Val, []};
+resolve_enum(Ctx, {enum, Val}, [], EnumType) when is_binary(Val) ->
+    resolve_enum(Ctx, Val, [], EnumType);
 resolve_enum(_Ctx, Val, [], #enum_type { values = Vals }) when is_integer(Val) ->
     #enum_value { val = Res } = maps:get(Val, Vals),
     {Res, []}.
