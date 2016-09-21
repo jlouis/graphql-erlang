@@ -187,7 +187,7 @@ Value -> EnumValue : {enum, '$1'}.
 Value -> ListValue : {list, '$1'}.
 Value -> ObjectValue : {object, '$1'}.
 
-EnumValue -> Name : '$1'.
+EnumValue -> Name : g_enum('$1').
 
 ListValue -> '[' ']' : [].
 ListValue -> '[' Values ']' : '$2'.
@@ -270,6 +270,8 @@ g_subscription({subscription, _L} = Sub) -> Sub.
 
 g_name({name, _ID, _Line} = N) -> N;
 g_name({var, N}) -> g_name(N).
+
+g_enum({name, ID, _Line}) -> ID.
 
 g_ty({name, <<"String">>, _}) -> {scalar, string};
 g_ty({name, <<"string">>, _}) -> {scalar, string};

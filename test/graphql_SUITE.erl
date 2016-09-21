@@ -110,10 +110,11 @@ groups() ->
        is_supports_type
     ]},
 
-    Dungeon = {dungeon, [parallel],
+    Dungeon = {dungeon, [],
                [ unions,
                  union_errors,
                  populate,
+                 direct_input,
                  inline_fragment,
                  fragment_over_union_interface,
                  simple_field_merge ]},
@@ -549,6 +550,7 @@ union_errors(Config) ->
     errors(x(Config, Q1)),
     ok.
 
+
 populate(Config) ->
     ct:log("Create a monster in the dungeon"),
     QM =
@@ -560,12 +562,14 @@ populate(Config) ->
         "     name "
         "     color "
         "     hitpoints "
+        "     mood "
         "    }}}",
     Input = #{
       <<"clientMutationId">> => <<"MUTID">>,
       <<"name">> => <<"orc">>,
       <<"color">> => <<"#593E1A">>,
-      <<"hitpoints">> => 30
+      <<"hitpoints">> => 30,
+      <<"mood">> => <<"AGGRESSIVE">>
      },
     Expected = #{ data => #{
                      <<"introduceMonster">> => #{
@@ -574,7 +578,8 @@ populate(Config) ->
                          <<"id">> => base64:encode(<<"monster:2">>),
                          <<"name">> => <<"orc">>,
                          <<"color">> => <<"#593E1A">>,
-                         <<"hitpoints">> => 30 }
+                         <<"hitpoints">> => 30,
+                         <<"mood">> => <<"AGGRESSIVE">>}
                       }}},
     Expected = x(Config, QM, <<"IMonster">>, #{ <<"input">> => Input }),
 
@@ -605,7 +610,9 @@ populate(Config) ->
                          <<"color">> => <<"#266A2E">>,
                          <<"id">> => base64:encode(<<"monster:3">>),
                          <<"name">> => <<"hobgoblin">>,
-                         <<"hitpoints">> => 15 }
+                         <<"hitpoints">> => 15,
+                         <<"mood">> => <<"DODGY">>
+                       }
          }}},
     HobgoblinExpected = x(Config, QM, <<"IMonster">>, #{ <<"input">> => HobgoblinInput }),
     
@@ -662,6 +669,30 @@ populate(Config) ->
                       }}},
     ExpectedSM = x(Config, QPut, <<"SM">>, #{ <<"input">> => SpawnInput }),
     ok.
+
+direct_input(Config) ->
+    QM =
+        "mutation IMonster { "
+        "  introduceMonster(input: {name: \"Albino Hobgoblin\", color: \"#ffffff\", hitpoints: 5, mood: AGGRESSIVE}) { "
+        "    clientMutationId "
+        "    monster { "
+        "     id "
+        "     name "
+        "     color "
+        "     hitpoints "
+        "     mood "
+        "    }}}",
+    Expected = #{ data => #{
+        <<"introduceMonster">> => #{
+            <<"clientMutationId">> => null,
+            <<"monster">> => #{
+                <<"id">> => base64:encode(<<"monster:4">>),
+                <<"name">> => <<"Albino Hobgoblin">>,
+                <<"color">> => <<"#ffffff">>,
+                <<"hitpoints">> => 5,
+                <<"mood">> => <<"AGGRESSIVE">>}
+        }}},
+    Expected = x(Config, QM).
 
 inline_fragment(Config) ->
     ID = base64:encode(<<"monster:1">>),

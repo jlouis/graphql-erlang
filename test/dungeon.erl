@@ -10,7 +10,8 @@
 	name,
 	color,
 	inventory = ordsets:new(),
-	hitpoints }).
+	hitpoints,
+    mood}).
 -record(item, {
 	id,
 	name,
@@ -81,7 +82,7 @@ populate() ->
                 mnesia:write(#sequence { id = room, count = 0 })
         end,
     {atomic, _} = mnesia:transaction(Fun),
-    {atomic, _} = insert(#monster { name = <<"goblin">>, color = <<"#41924b">>, hitpoints = 10 }),
+    {atomic, _} = insert(#monster { name = <<"goblin">>, color = <<"#41924b">>, hitpoints = 10, mood = <<"DODGY">> }),
    ok.
 
 inject_error() ->
@@ -113,6 +114,17 @@ ok([], Acc) -> {ok, lists:reverse(Acc)};
 ok([{ok, R} | Next], Acc) -> ok(Next, [R | Acc]).
 
 inject_monster() ->
+    Mood = {enum, #{
+        id => 'Mood',
+        description => "The mood of a monster",
+        repr => binary,
+        values => #{
+            'TRANQUIL' => #{value => 0, description => "The monster is tranquil and will not attack, unless attacked"},
+            'DODGY' => #{value => 1, description => "The monter might or might not attack"},
+            'AGGRESSIVE' => #{value => 2, description => "The monster is looking for a fight"}
+        }
+    }},
+    ok = graphql:insert_schema_definition(Mood),
     Monster = {object, #{
     	id => 'Monster',
     	description => "Represents a monster in the dungeon",
@@ -145,9 +157,15 @@ inject_monster() ->
     			type => 'int!',
     			resolve => fun(_, #monster { hitpoints = HP}, _) -> {ok, HP} end,
     			description => "How many hitpoints the monster has",
-    			deprecation => "Use `hitpoints` instead" }
+    			deprecation => "Use `hitpoints` instead" },
+            mood => #{
+                type => 'Mood',
+                resolve => fun(_, #monster { mood = M}, _) -> {ok, M} end,
+                description => "The mood of the monster"
+            }
     	}}},
     	ok = graphql:insert_schema_definition(Monster),
+
     ok = graphql_relay:input('IntroduceMonster',
             #{
              name => #{
@@ -159,7 +177,11 @@ inject_monster() ->
              hitpoints => #{
                type => 'int',
                default => 15,
-               description => "The number of hitpoints of a monster" }
+               description => "The number of hitpoints of a monster" },
+             mood => #{
+                type => 'Mood',
+                default => <<"DODGY">>,
+                description => "The mood of the monster" }
             },
             #{
              monster => #{
@@ -451,8 +473,10 @@ mut_int_monster(_Ctx, none, #{ <<"input">> := Input }) ->
     #{ <<"clientMutationId">> := MID,
        <<"name">> := N,
        <<"color">> := C,
-       <<"hitpoints">> := HP } = Input,
-    {atomic, Monster} = insert(#monster { name = N, color = C, hitpoints = HP }),
+       <<"hitpoints">> := HP,
+        <<"mood">> := M
+    } = Input,
+    {atomic, Monster} = insert(#monster { name = N, color = C, hitpoints = HP, mood = M }),
     {ok, #{
         <<"clientMutationId">> => MID,
         <<"monster">> => Monster } }.
