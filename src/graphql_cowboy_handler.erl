@@ -60,23 +60,24 @@ process_query(Req, State) ->
     {ok, Body, Req2} = cowboy_req:body(Req),
     {Bindings, Req3} = cowboy_req:bindings(Req2),
     Params = maps:from_list(Bindings),
-    case Body of
-        <<>> -> process_query(Req3, State, #{}, Params);
-        _ ->
-            try jsx:decode(Body, [return_maps]) of
-                JSON ->
-                    process_query(Req2, State, JSON, Params)
-            catch
-                error:badarg ->
-                    err(400, invalid_json, Req3, State)
-            end
+    case decode_json_map(Body) of
+        {ok, JSON} ->
+            process_query(Req3, State, JSON, Params);
+
+        {error, _} ->
+            err(400, invalid_json, Req3, State)
     end.
 
 process_query(Req, State, Body, Params) ->
     Doc = query([Params, Body]),
-    Vars = variables([Params, Body]),
-    Operation = operation_name([Params, Body]),
-    run(Doc, Operation, Vars, Req, State).
+    case variables([Params, Body]) of
+        {ok, Variables} ->
+            Operation = operation_name([Params, Body]),
+            run(Doc, Operation, Variables, Req, State);
+
+        {error, invalid_json} ->
+            err(400, invalid_json, Req, State)
+    end.
 
 -spec to_json(any(), any()) -> any().
 to_json(Req, State) ->
@@ -135,14 +136,10 @@ query([ _ | Next]) -> query(Next);
 query([]) -> undefined.
 
 variables([#{ <<"variables">> := Vars} | _]) when is_binary(Vars) ->
-    case Vars of
-        <<"">> -> #{};
-        <<"null">> -> #{};
-        Vs -> jsx:decode(Vs, [return_maps])
-    end;
-variables([#{ <<"variables">> := VMap} | _]) when is_map(VMap) -> VMap;
+    decode_json_map(Vars);
+variables([#{ <<"variables">> := VMap} | _]) when is_map(VMap) -> {ok, VMap};
 variables([_ | Next]) -> variables(Next);
-variables([]) -> #{}.
+variables([]) -> {ok, #{}}.
 
 operation_name([#{ <<"operationName">> := OpName } | _]) -> OpName;
 operation_name([_ | Next]) -> operation_name(Next);
@@ -159,3 +156,20 @@ err(Code, Msg, Req, State) ->
 format_err(Reason) ->
     ErrString = iolist_to_binary(io_lib:format("~p", [Reason])),
     [ErrString].
+
+decode_json_map(<<>>) ->
+    {ok, #{}};
+
+decode_json_map(Data) when is_binary(Data) ->
+    try jsx:decode(Data, [return_maps]) of
+        JSON when is_map(JSON) ->
+            {ok, JSON};
+
+        null ->
+            {ok, #{}};
+
+        _ ->
+            {error, invalid_json}
+    catch error:badarg ->
+        {error, invalid_json}
+    end.
