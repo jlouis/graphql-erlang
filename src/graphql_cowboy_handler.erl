@@ -126,8 +126,8 @@ run(Doc, OpName, Vars, Req, #{ viewer := Viewer, req_id := ReqID } = State) ->
            catch
                throw:Err ->err(400, Err, Req, State)
            end;
-       ErrInfo ->
-           err(400, {invalid_graphql, ErrInfo}, Req, State)
+        {error, Error} ->
+           err(400, {invalid_graphql, Error}, Req, State)
     end.
 
 %% -- DECODING ------------------------------
@@ -153,9 +153,24 @@ err(Code, Msg, Req, State) ->
     {ok, Reply} = cowboy_req:reply(Code, Req2),
     {halt, Reply, State}.
 
+format_err({invalid_graphql, {Line, graphql_scanner, Description}}) ->
+    [#{ type => graphql_scanner_error,
+        line => Line,
+        message => iolist_to_binary(io_lib:format("~s", [Description])) }];
+
+format_err({invalid_graphql, {Line, graphql_parser, Description}}) ->
+    [#{ type => graphql_parser_error,
+        line => Line,
+        message => iolist_to_binary(io_lib:format("~s", [Description])) }];
+
+format_err(invalid_json) ->
+    [#{ type => json_parser_error }];
+
 format_err(Reason) ->
+    lager:warning("Unhandled user-visible error message: ~p", [Reason]),
     ErrString = iolist_to_binary(io_lib:format("~p", [Reason])),
-    [ErrString].
+    [#{ type => internal_error,
+        message => ErrString }].
 
 decode_json_map(<<>>) ->
     {ok, #{}};
