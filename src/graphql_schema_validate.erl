@@ -22,8 +22,8 @@ enum_type(#enum_type {}) ->
     %% TODO: Validate values
     ok.
 
-input_object_type(#input_object_type { fields = FS }) ->
-    all(fun schema_arg/1, maps:to_list(FS)),
+input_object_type(#input_object_type { fields = FS } = X) ->
+    all(fun schema_input_type_arg/1, maps:to_list(FS)),
     ok.
 
 union_type(#union_type { types = Types }) ->
@@ -54,13 +54,13 @@ root_schema(#root_schema {
     ok.
     
 schema_field({_, #schema_field { ty = Ty, args = Args }}) ->
-    all(fun schema_arg/1, maps:to_list(Args)),
+    all(fun schema_input_type_arg/1, maps:to_list(Args)),
     type(Ty),
     ok.
 
-schema_arg({_, #schema_arg { ty = Ty }}) ->
+schema_input_type_arg({_, #schema_arg { ty = Ty }}) ->
     %% TODO: Default check!
-    type(Ty),
+    input_type(Ty),
     ok.
 
 undefined_object(undefined) -> ok;
@@ -121,8 +121,31 @@ type({non_null, T}) -> type(T);
 type([T]) -> type(T);
 type({scalar, S}) -> scalar(S);
 type(X) when is_binary(X) ->
-    _ = lookup(X),
-    ok.
+    case lookup(X) of
+        #input_object_type {} ->
+            err({schema_validation, {invalid_type, X}});
+
+        _ ->
+            ok
+    end.
+
+input_type({non_null, T}) -> input_type(T);
+input_type([T]) -> input_type(T);
+input_type({scalar, S}) -> scalar(S);
+input_type(X) when is_binary(X) ->
+    case lookup(X) of
+        #input_object_type {} ->
+            ok;
+
+        #enum_type {} ->
+            ok;
+
+        #scalar_type {} ->
+            ok;
+
+        V ->
+            err({schema_validation, {invalid_input_type, X}})
+    end.
 
 scalar(string) -> ok;
 scalar(id) -> ok;
