@@ -53,7 +53,7 @@ content_types_provided(Req, State) ->
 
 -spec charsets_provided(any(), any()) -> any().
 charsets_provided(Req, State) ->
-    {{[<<"utf-8">>], Req, State}.
+    {[<<"utf-8">>], Req, State}.
 
 -spec resource_exists(any(), any()) -> any().
 resource_exists(Req, #{ method := <<"GET">> } = State) -> {true, Req, State};
