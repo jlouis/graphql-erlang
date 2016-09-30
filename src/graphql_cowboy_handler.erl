@@ -6,7 +6,8 @@
     allowed_methods/2,
     resource_exists/2,
     content_types_provided/2,
-    content_types_accepted/2
+    content_types_accepted/2,
+    charsets_provided/2
 ]).
 -export([
     from_graphql/2,
@@ -49,7 +50,11 @@ content_types_provided(Req, State) ->
         {{<<"application">>, <<"json">>, []}, to_json},
         {{<<"text">>, <<"html">>, []}, to_html}
     ], Req, State}.
-    
+
+-spec charsets_provided(any(), any()) -> any().
+charsets_provided(Req, State) ->
+    {{[<<"utf-8">>], Req, State}.
+
 -spec resource_exists(any(), any()) -> any().
 resource_exists(Req, #{ method := <<"GET">> } = State) -> {true, Req, State};
 resource_exists(Req, #{ method := <<"POST">> } = State) -> {false, Req, State}.
