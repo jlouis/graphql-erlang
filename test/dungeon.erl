@@ -6,12 +6,12 @@
 
 -record(sequence, {id, count}).
 -record(monster, {
-	id,
-	name,
-	color,
-	inventory = ordsets:new(),
-	hitpoints,
-    mood}).
+          id,
+          name,
+          color,
+          inventory = ordsets:new(),
+          hitpoints,
+          mood}).
 -record(item, {
 	id,
 	name,
@@ -82,7 +82,7 @@ populate() ->
                 mnesia:write(#sequence { id = room, count = 0 })
         end,
     {atomic, _} = mnesia:transaction(Fun),
-    {atomic, _} = insert(#monster { name = <<"goblin">>, color = <<"#41924b">>, hitpoints = 10, mood = <<"DODGY">> }),
+    {atomic, _} = insert(#monster { name = <<"goblin">>, color = {65, 146, 75}, hitpoints = 10, mood = <<"DODGY">> }),
    ok.
 
 inject_error() ->
@@ -102,8 +102,22 @@ inject_color() ->
     Color = {scalar, #{
     	id => 'Color',
     	description => "Represents a color in the system",
-    	input_coerce => fun (X) -> {ok, X} end,
-    	output_coerce => fun (X) -> {ok, X} end
+    	input_coerce => fun (<<"#", R1, R2, G1, G2, B1, B2>> = X) ->
+                                ct:pal("Input coercer called~n"),
+                                Red = binary_to_integer(<<R1, R2>>, 16),
+                                Green = binary_to_integer(<<G1, G2>>, 16),
+                                Blue = binary_to_integer(<<B1, B2>>, 16),
+                                {ok, {Red, Green, Blue}};
+                            (X) ->
+                                {error, {invalid_color, X}}
+                        end,
+    	output_coerce => fun ({R,G,B}) ->
+                                 ct:pal("Output coercer called~n"),
+                                 R1 = integer_to_binary(R, 16),
+                                 G1 = integer_to_binary(G, 16),
+                                 B1 = integer_to_binary(B, 16),
+                                 {ok, <<"#", R1/binary, G1/binary, B1/binary>>}
+                         end
     }},
     ok = graphql:insert_schema_definition(Color),
     ok.
