@@ -154,7 +154,9 @@ inject_monster() ->
     			description => "The name of the monster" },
     		color => #{
     			type => 'Color!',
-    			resolve => fun(_, #monster{ color = C }, _) -> {ok, C} end,
+    			resolve => fun(_, #monster{ color = {_,_,_} = C }, _) ->
+                                           {ok, C}
+                                   end,
     			description => "The color of the monster" },
     		hitpoints => #{
     			type => 'int!',
