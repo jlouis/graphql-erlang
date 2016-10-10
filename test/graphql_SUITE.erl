@@ -58,9 +58,17 @@ init_per_testcase(v_5_4_2_3_1, _Config) ->
     {skip, needs_more_type_checking};
 init_per_testcase(enum_no_incorrect_internal_value, _Config) ->
     {skip, no_output_validation_yet};
+init_per_testcase(disabled, Config) ->
+    {ok, _} = dbg:tracer(),
+    dbg:p(all, c),
+    dbg:tpl(graphql_execute, object, '_', cx),
+    Config;
 init_per_testcase(_Case, Config) ->
     Config.
 
+end_per_testcase(disabled, Config) ->
+    dbg:stop_clear(),
+    ok;
 end_per_testcase(_Case, _Config) ->
     ok.
 
@@ -113,6 +121,7 @@ groups() ->
     Dungeon = {dungeon, [],
                [ unions,
                  union_errors,
+                 scalar_output_coercion,
                  populate,
                  direct_input,
                  inline_fragment,
@@ -550,6 +559,17 @@ union_errors(Config) ->
     errors(x(Config, Q1)),
     ok.
 
+scalar_output_coercion(Config) ->
+    ct:log("Test output coercion"),
+    Goblin = base64:encode(<<"monster:1">>),
+    Q1 = "{ goblin: monster(id: \"" ++ binary_to_list(Goblin) ++ "\") { id name hitpoints color } }",
+    #{ data := #{
+        <<"goblin">> := #{
+            <<"id">> := Goblin,
+            <<"name">> := <<"goblin">>,
+            <<"color">> := <<"#41924B">>,
+            <<"hitpoints">> := 10 }}} = x(Config, Q1),
+    ok.
 
 populate(Config) ->
     ct:log("Create a monster in the dungeon"),
@@ -688,7 +708,7 @@ direct_input(Config) ->
             <<"monster">> => #{
                 <<"id">> => base64:encode(<<"monster:4">>),
                 <<"name">> => <<"Albino Hobgoblin">>,
-                <<"color">> => <<"#ffffff">>,
+                <<"color">> => <<"#FFFFFF">>,
                 <<"hitpoints">> => 5,
                 <<"mood">> => <<"AGGRESSIVE">>}
         }}},
