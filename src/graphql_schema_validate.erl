@@ -69,8 +69,8 @@ undefined_object(Obj) -> is_object(Obj).
 implements(
 	#interface_type { fields = IFFields } = IFace,
 	#object_type { fields = ObjFields } = Obj) ->
-    IL = lists:usort(maps:to_list(IFFields)),
-    OL = lists:usort(maps:to_list(ObjFields)),
+    IL = lists:sort(maps:to_list(IFFields)),
+    OL = lists:sort(maps:to_list(ObjFields)),
     case implements_field_check(IL, OL) of
         ok ->
             ok;
@@ -88,8 +88,8 @@ implements_field_check([{K, IF} | IS], [{K, OF} | OS]) ->
         false ->
             {error, {type, K}}
     end;
-implements_field_check([{IK, _} | IS], [{OK, _} | OS]) when IK > OK ->
-    implements_field_check(IS, OS);
+implements_field_check([{IK, _} | _] = IL, [{OK, _} | OS]) when IK > OK ->
+    implements_field_check(IL, OS);
 implements_field_check([{IK, _} | _], [{OK, _} | _]) when IK < OK ->
     {error, {not_found, IK}}.
     
