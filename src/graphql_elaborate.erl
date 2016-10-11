@@ -101,17 +101,16 @@ x_field(Path, #field { id = ID, args = Args, selection_set = SSet } = F, Fields)
             case graphql_ast:unwrap_type(Ty) of
                 {scalar, _} ->
                     F#field {
-                          args = x_field_args([F | Path], Args, SArgs),
-                          schema = SchemaTy,
-                          schema_obj = scalar };
+                      args = x_field_args([F | Path], Args, SArgs),
+                      schema = SchemaTy,
+                      schema_obj = scalar };
                 T when is_binary(T) ->
                     {Obj, SSet2} = x_field_lookup([F | Path], T, SSet),
                     F#field {
-                          args = x_field_args([F | Path], Args, SArgs),
-                    	schema = SchemaTy,
-                    	schema_obj = Obj,
-                    	selection_set = SSet2
-                    }
+                      args = x_field_args([F | Path], Args, SArgs),
+                      schema = SchemaTy,
+                      schema_obj = Obj,
+                      selection_set = SSet2 }
             end
      end.
 
@@ -124,7 +123,16 @@ x_field_arg(Path, K, V, SArgs) ->
         not_found ->
             graphql_err:abort(Path, {argument_not_found, N});
         #schema_arg{ ty = Ty } ->
-            {K, {Ty, V}}
+            {K, {field_arg_type(Ty), V}}
+    end.
+
+field_arg_type({non_null, Ty}) -> {non_null, field_arg_type(Ty)};
+field_arg_type({scalar, _} = Ty) -> Ty;
+field_arg_type(Ty) when is_binary(Ty) ->
+    case graphql_schema:lookup(Ty) of
+        #scalar_type{} -> {scalar, Ty};
+        #enum_type{} -> Ty;
+        #input_object_type{} -> Ty
     end.
 
 x_field_lookup(Path, Ty, SSet) ->
