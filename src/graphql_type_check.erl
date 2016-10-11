@@ -279,7 +279,11 @@ unwrap_type({non_null, Ty}) -> unwrap_type(Ty);
 unwrap_type([Ty]) -> {list, unwrap_type(Ty)};
 unwrap_type(X) -> X.
 
-schema_type({scalar, X}) -> {scalar, X};
+
+schema_type({scalar, X}) when is_atom(X) -> {scalar, X};
+schema_type({scalar, Tag}) when is_binary(Tag) ->
+    #scalar_type { input_coerce = IC } = graphql_schema:lookup(Tag),
+    {scalar, Tag, IC};
 schema_type({non_null, T}) -> {non_null, schema_type(T)};
 schema_type([Tag]) -> {list, schema_type(Tag)};
 %% Elaborate types which are not elaborated.
