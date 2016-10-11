@@ -22,7 +22,7 @@ enum_type(#enum_type {}) ->
     %% TODO: Validate values
     ok.
 
-input_object_type(#input_object_type { fields = FS } = X) ->
+input_object_type(#input_object_type { fields = FS }) ->
     all(fun schema_input_type_arg/1, maps:to_list(FS)),
     ok.
 
@@ -143,7 +143,7 @@ input_type(X) when is_binary(X) ->
         #scalar_type {} ->
             ok;
 
-        V ->
+        _V ->
             err({schema_validation, {invalid_input_type, X}})
     end.
 
