@@ -116,7 +116,8 @@ format_scalar(string) -> <<"string">>;
 format_scalar(bool) -> <<"bool">>;
 format_scalar(int) -> <<"int">>;
 format_scalar(float) -> <<"float">>;
-format_scalar(id) -> <<"id">>.
+format_scalar(id) -> <<"id">>;
+format_scalar(B) when is_binary(B) -> B.
 
 %% -- AST MANIPULATION -------------------------
 name('ROOT') -> <<"ROOT">>;
