@@ -44,8 +44,28 @@ x({object, #{ id := ID, fields := FieldDefs, description := Desc } = Obj}) ->
 x({input_object, #{ id := ID, fields := FieldDefs, description := Desc }}) ->
     #input_object_type { id = c_id(ID), description = binarize(Desc),
          fields = map_2(fun c_input_value/2, FieldDefs) };
-x({scalar, #{ id := ID, description := Desc}}) ->
-    #scalar_type { id = c_id(ID), description = binarize(Desc) }.
+x({scalar, #{ id := ID,
+              description := Desc,
+              input_coerce := InFun,
+              output_coerce := OutFun }})
+  when
+      is_function(InFun, 1),
+      is_function(OutFun, 1) ->
+    #scalar_type {
+       id = c_id(ID),
+       description = binarize(Desc),
+       input_coerce = InFun,
+       output_coerce = OutFun };
+x({scalar, #{ id := ID, input_coerce := _, output_coerce := _ }}) ->
+    exit({scalar_coercers_wrong_fun_arity, ID});
+x({scalar, #{ id := ID, output_coerce := _ }}) ->
+    exit({missing_input_coerce, ID});
+x({scalar, #{ id := ID, input_coerce := _ }}) ->
+    exit({missing_output_coerce, ID});
+x({scalar, #{ id := ID, description := Desc }}) ->
+    #scalar_type {
+       id = c_id(ID),
+       description = binarize(Desc) }.
 
 
 %% -- ROOT -------------
