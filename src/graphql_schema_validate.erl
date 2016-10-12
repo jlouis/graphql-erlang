@@ -11,17 +11,32 @@ x() ->
         [x(Obj) || Obj <- Objects],
         ok
     catch
-        throw:Error ->
-            exit(Error)
+        throw:Error -> exit(Error)
     end.
 
-x(#scalar_type {}) -> ok;
-x(#root_schema {} = X) -> root_schema(X);
-x(#object_type {} = X) -> object_type(X);
-x(#enum_type {} = X) -> enum_type(X);
-x(#interface_type {} = X) -> interface_type(X);
-x(#union_type {} = X) -> union_type(X);
-x(#input_object_type {} = X) -> input_object_type(X).
+x(Obj) ->
+    try validate(Obj) of
+        ok -> ok
+    catch
+        throw:{invalid, Reason} ->
+            throw({schema_validation, id(Obj), Reason})
+    end.
+
+id(#root_schema{}) -> 'ROOT';
+id(#scalar_type{ id = ID }) -> ID;
+id(#object_type{ id = ID}) -> ID;
+id(#enum_type{ id = ID}) -> ID;
+id(#interface_type{ id = ID}) -> ID;
+id(#union_type{ id = ID}) -> ID;
+id(#input_object_type{ id = ID }) -> ID.
+
+validate(#scalar_type {}) -> ok;
+validate(#root_schema {} = X) -> root_schema(X);
+validate(#object_type {} = X) -> object_type(X);
+validate(#enum_type {} = X) -> enum_type(X);
+validate(#interface_type {} = X) -> interface_type(X);
+validate(#union_type {} = X) -> union_type(X);
+validate(#input_object_type {} = X) -> input_object_type(X).
 
 enum_type(#enum_type {}) ->
     %% TODO: Validate values
@@ -71,16 +86,15 @@ schema_input_type_arg({_, #schema_arg { ty = Ty }}) ->
 undefined_object(undefined) -> ok;
 undefined_object(Obj) -> is_object(Obj).
 
-implements(
-	#interface_type { fields = IFFields } = IFace,
-	#object_type { fields = ObjFields } = Obj) ->
+implements(#interface_type { fields = IFFields } = IFace,
+           #object_type { fields = ObjFields } = Obj) ->
     IL = lists:sort(maps:to_list(IFFields)),
     OL = lists:sort(maps:to_list(ObjFields)),
     case implements_field_check(IL, OL) of
         ok ->
             ok;
         {error, Reason} ->
-            err({implements, IFace, Obj, Reason})
+            err({implements, IFace, Reason})
     end.
     
 implements_field_check([], []) -> ok;
@@ -128,7 +142,7 @@ type({scalar, S}) -> scalar(S);
 type(X) when is_binary(X) ->
     case lookup(X) of
         #input_object_type {} ->
-            err({invalid_type, X});
+            err({invalid_output_type, X});
 
         _ ->
             ok
@@ -170,4 +184,4 @@ lookup(Key) ->
         X -> X
     end.
     
-err(Reason) -> throw({schema_validation, Reason}).
+err(Reason) -> throw({invalid, Reason}).
