@@ -7,9 +7,14 @@
 -spec x() -> ok.
 x() ->
     Objects = graphql_schema:all(),
-    [x(Obj) || Obj <- Objects],
-    ok.
-    
+    try
+        [x(Obj) || Obj <- Objects],
+        ok
+    catch
+        throw:Error ->
+            exit(Error)
+    end.
+
 x(#scalar_type {}) -> ok;
 x(#root_schema {} = X) -> root_schema(X);
 x(#object_type {} = X) -> object_type(X);
@@ -123,7 +128,7 @@ type({scalar, S}) -> scalar(S);
 type(X) when is_binary(X) ->
     case lookup(X) of
         #input_object_type {} ->
-            err({schema_validation, {invalid_type, X}});
+            err({invalid_type, X});
 
         _ ->
             ok
@@ -144,7 +149,7 @@ input_type(X) when is_binary(X) ->
             ok;
 
         _V ->
-            err({schema_validation, {invalid_input_type, X}})
+            err({invalid_input_type, X})
     end.
 
 scalar(string) -> ok;
@@ -161,8 +166,8 @@ all(F, [E|Es]) ->
 
 lookup(Key) ->
     case graphql_schema:lookup(Key) of
-        not_found -> err({schema_validation, {not_found, Key}});
+        not_found -> err({not_found, Key});
         X -> X
     end.
     
-err(Reason) -> exit({schema_validation, Reason}).
+err(Reason) -> throw({schema_validation, Reason}).
