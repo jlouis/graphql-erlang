@@ -87,30 +87,34 @@ undefined_object(undefined) -> ok;
 undefined_object(Obj) -> is_object(Obj).
 
 implements(#interface_type { fields = IFFields } = IFace,
-           #object_type { fields = ObjFields } = Obj) ->
+           #object_type { fields = ObjFields }) ->
     IL = lists:sort(maps:to_list(IFFields)),
     OL = lists:sort(maps:to_list(ObjFields)),
     case implements_field_check(IL, OL) of
         ok ->
             ok;
         {error, Reason} ->
-            err({implements, IFace, Reason})
+            err({implements, id(IFace), Reason})
     end.
     
 implements_field_check([], []) -> ok;
 implements_field_check([], [_|OS]) -> implements_field_check([], OS);
 implements_field_check([{K, IF} | IS], [{K, OF} | OS]) ->
     %% TODO: Arg check!
-    case IF#schema_field.ty == OF#schema_field.ty of
+    IFType = IF#schema_field.ty,
+    OFType = OF#schema_field.ty,
+    case IFType == OFType of
         true ->
             implements_field_check(IS, OS);
         false ->
-            {error, {type, K}}
+            {error, {type_mismatch, #{ key => K,
+                                       interface => IFType,
+                                       object => OFType }}}
     end;
 implements_field_check([{IK, _} | _] = IL, [{OK, _} | OS]) when IK > OK ->
     implements_field_check(IL, OS);
 implements_field_check([{IK, _} | _], [{OK, _} | _]) when IK < OK ->
-    {error, {not_found, IK}}.
+    {error, {field_not_found_in_object, IK}}.
     
 is_interface(IFace) ->
     case lookup(IFace) of
