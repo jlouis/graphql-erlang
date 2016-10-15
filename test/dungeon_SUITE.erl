@@ -168,20 +168,6 @@ populate(Config) ->
     ExpectedR = run(Config, <<"IntroduceRoom">>, #{ <<"input">> => RoomInput }),
     
     ct:log("Put a monster in a room"),
-    QPut =
-        "mutation SM($input : SpawnMinionInput!) { "
-        "  spawnMinion(input: $input) { "
-        "    clientMutationId "
-        "    room { "
-        "      id "
-        "      description "
-        "      contents { ...SimpleMonster }"
-        "    } "
-        "    monster { "
-        "      name "
-        "      id "
-        "    }}} "
-        " fragment SimpleMonster on Monster { name hitpoints }",
     SpawnInput = #{
         <<"clientMutationId">> => <<"MUTID">>,
         <<"monsterId">> => base64:encode(<<"monster:2">>),
@@ -197,7 +183,7 @@ populate(Config) ->
                          <<"id">> => base64:encode(<<"monster:2">>),
                          <<"name">> => <<"orc">> }
                       }}},
-    ExpectedSM = th:x(Config, QPut, <<"SM">>, #{ <<"input">> => SpawnInput }),
+    ExpectedSM = run(Config, <<"SpawnMinion">>, #{ <<"input">> => SpawnInput }),
     ok.
 
 direct_input(Config) ->
