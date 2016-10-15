@@ -15,9 +15,7 @@ end_per_suite(_Config) ->
     ok.
 
 init_per_group(dungeon, Config) ->
-    DocFile = filename:join(
-                [?config(data_dir, Config), "dungeon.graphql"]),
-    {ok, Doc} = file:read_file(DocFile),
+    {ok, Doc} = read_doc(Config, "dungeon.graphql"),
 
     ok = dungeon:inject(),
     ok = dungeon:start(),
@@ -50,9 +48,17 @@ groups() ->
 all() -> [
     {group, dungeon} ].
     
-
+read_doc(Config, File) ->
+    DocFile = filename:join(
+                [?config(data_dir, Config), File]),
+    file:read_file(DocFile).
+    
 run(Config, Q, Params) ->
     Doc = ?config(document, Config),
+    th:x(Config, Doc, Q, Params).
+
+run(Config, File, Q, Params) ->
+    {ok, Doc} = read_doc(Config, File),
     th:x(Config, Doc, Q, Params).
 
 unions(Config) ->
@@ -75,35 +81,24 @@ unions(Config) ->
 
 union_errors(Config) ->
     ct:log("You may not request fields on unions"),
-    Q1 = "{ goblin: thing(id: \"bW9uc3Rlcjox\") { id} }",
+    Q1 = "{ goblin: thing(id: \"bW9uc3Rlcjox\") { id } }",
     th:errors(th:x(Config, Q1)),
     ok.
 
 scalar_output_coercion(Config) ->
     ct:log("Test output coercion"),
     Goblin = base64:encode(<<"monster:1">>),
-    Q1 = "{ goblin: monster(id: \"" ++ binary_to_list(Goblin) ++ "\") { id name hitpoints color } }",
     #{ data := #{
         <<"goblin">> := #{
             <<"id">> := Goblin,
             <<"name">> := <<"goblin">>,
             <<"color">> := <<"#41924B">>,
-            <<"hitpoints">> := 10 }}} = th:x(Config, Q1),
+            <<"hitpoints">> := 10 }}} =
+        run(Config, <<"ScalarOutputCoercion">>, #{ <<"id">> => Goblin }),
     ok.
 
 populate(Config) ->
     ct:log("Create a monster in the dungeon"),
-    QM =
-        "mutation IMonster($input : IntroduceMonsterInput!) { "
-        "  introduceMonster(input: $input) { "
-        "    clientMutationId "
-        "    monster { "
-        "     id "
-        "     name "
-        "     color "
-        "     hitpoints "
-        "     mood "
-        "    }}}",
     Input = #{
       <<"clientMutationId">> => <<"MUTID">>,
       <<"name">> => <<"orc">>,
@@ -121,20 +116,20 @@ populate(Config) ->
                          <<"hitpoints">> => 30,
                          <<"mood">> => <<"AGGRESSIVE">>}
                       }}},
-    Expected = th:x(Config, QM, <<"IMonster">>, #{ <<"input">> => Input }),
+    Expected = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input }),
 
     ct:log("Missing names should lead to failure"),
     MissingNameInput = #{
       <<"clientMutationId">> => <<"MUTID">>,
       <<"hitpoints">> => 30
      },
-    th:errors(th:x(Config, QM, <<"IMonster">>, #{ <<"input">> => MissingNameInput })),
+    th:errors(run(Config, <<"IntroduceMonster">>, #{ <<"input">> => MissingNameInput })),
     
     ct:log("Missing an input field should lead to failure"),
-    th:errors(th:x(Config, QM, <<"IMonster">>, #{ })),
+    th:errors(run(Config, <<"IntroduceMonster">>, #{})),
     
     ct:log("Using the wrong type should lead to failure"),
-    th:errors(th:x(Config, QM, <<"IMonster">>,
+    th:errors(run(Config, <<"IntroduceMonster">>,
         #{ <<"input">> => Input#{ <<"hitpoints">> := <<"hello">> }})),
 
     ct:log("Creating with a default parameter"),
@@ -154,7 +149,10 @@ populate(Config) ->
                          <<"mood">> => <<"DODGY">>
                        }
          }}},
-    HobgoblinExpected = th:x(Config, QM, <<"IMonster">>, #{ <<"input">> => HobgoblinInput }),
+    HobgoblinExpected =
+        run(Config,
+            <<"IntroduceMonster">>,
+            #{ <<"input">> => HobgoblinInput }),
     
     ct:log("Create a room"),
     QR =
