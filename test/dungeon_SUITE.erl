@@ -155,14 +155,6 @@ populate(Config) ->
             #{ <<"input">> => HobgoblinInput }),
     
     ct:log("Create a room"),
-    QR =
-        "mutation IRoom($input : IntroduceRoomInput!) { "
-        "  introduceRoom(input: $input) { "
-        "    clientMutationId "
-        "    room { "
-        "     id "
-        "     description "
-        "    }}}",
     RoomInput = #{
         <<"clientMutationId">> => <<"MUTID">>,
         <<"description">> => <<"This is the dungeon entrance">> },
@@ -173,7 +165,7 @@ populate(Config) ->
                          <<"id">> => base64:encode(<<"room:1">>),
                          <<"description">> => <<"This is the dungeon entrance">> }
                       }}},
-    ExpectedR = th:x(Config, QR, <<"IRoom">>, #{ <<"input">> => RoomInput }),
+    ExpectedR = run(Config, <<"IntroduceRoom">>, #{ <<"input">> => RoomInput }),
     
     ct:log("Put a monster in a room"),
     QPut =
