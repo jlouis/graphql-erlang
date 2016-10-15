@@ -39,6 +39,7 @@ groups() ->
                  scalar_output_coercion,
                  populate,
                  direct_input,
+                 nested_input_object,
                  inline_fragment,
                  fragment_over_union_interface,
                  simple_field_merge ]},
@@ -206,6 +207,31 @@ direct_input(Config) ->
     Expected = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input}),
     ok.
 
+nested_input_object(Config) ->
+    Input = #{
+      <<"name">> => <<"Green Slime">>,
+      <<"color">> => <<"#1be215">>,
+      <<"hitpoints">> => 9001,
+      <<"mood">> => <<"TRANQUIL">>,
+      <<"stats">> => #{
+        <<"attack">> => 7,
+        <<"shellScripting">> => 5,
+        <<"yell">> => <<"...">> }},
+    Expected = #{ data =>
+                      #{<<"introduceMonster">> => #{<<"clientMutationId">> => null,
+                                                    <<"monster">> =>
+                                                        #{ <<"color">> => <<"#1BE215">>,
+                                                           <<"hitpoints">> => 9001,
+                                                           <<"mood">> => <<"TRANQUIL">>,
+                                                           <<"name">> => <<"Green Slime">>,
+                                                           <<"id">> => <<"bW9uc3Rlcjo1">>,
+                                                           <<"stats">> => #{
+                                                            <<"attack">> => 7,
+                                                            <<"shellScripting">> => 5,
+                                                            <<"yell">> => <<"...">> }}}}},
+    Expected = run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
+    ok.
+
 inline_fragment(Config) ->
     ID = base64:encode(<<"monster:1">>),
     Expected = #{ data => #{
@@ -236,3 +262,5 @@ simple_field_merge(Config) ->
     		<<"hitpoints">> => 10 }}},
     Expected = run(Config, <<"TestFieldMerge">>, #{ <<"id">> => ID }),
     ok.
+
+

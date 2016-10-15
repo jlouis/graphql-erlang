@@ -78,6 +78,20 @@ mutation IntroduceMonster($input: IntroduceMonsterInput!) {
   }
 }
 
+mutation IntroduceMonsterFat($input: IntroduceMonsterInput!) {
+  introduceMonster(input: $input) {
+    clientMutationId
+    monster {
+      ...FatMonsterFragment
+      stats {
+        attack,
+        shellScripting
+        yell
+      }
+    }
+  }
+}
+
 mutation IntroduceRoom($input: IntroduceRoomInput!) {
   introduceRoom(input: $input) {
     clientMutationId

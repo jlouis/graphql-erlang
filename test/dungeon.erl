@@ -5,11 +5,18 @@
 -export([inject/0, start/0, stop/0]).
 
 -record(sequence, {id, count}).
+-record(stats, {
+          shell_scripting = 3,
+          attack = 3,
+          yell = <<"HELO">>
+}).
+
 -record(monster, {
           id,
           name,
           color,
           inventory = ordsets:new(),
+          stats = #stats{},
           hitpoints,
           mood}).
 -record(item, {
@@ -128,6 +135,51 @@ ok([], Acc) -> {ok, lists:reverse(Acc)};
 ok([{ok, R} | Next], Acc) -> ok(Next, [R | Acc]).
 
 inject_monster() ->
+    StatsInput = {input_object, #{
+               id => 'StatsInput',
+               description => "The stats of the monster in question",
+               fields => #{
+                 attack => #{
+                   type => 'int!',
+                   description => "The attack value of the monster"
+                  },
+                 yell => #{
+                   type => 'string',
+                   description => "The yell of the monster",
+                   default => <<"YAAAAAAAAAH MAN!</rastafari>">>
+                  },
+                 shellScripting => #{
+                   type => 'int',
+                   description => "The sh(1) scripting capability of the entity",
+                   default => 3
+                  }
+                }
+              }},
+    ok = graphql:insert_schema_definition(StatsInput),
+
+    Stats = {object, #{
+               id => 'Stats',
+               description => "The stats of the monster in question",
+               fields => #{
+                 attack => #{
+                   type => 'int!',
+                   description => "The attack value of the monster",
+                   resolve => fun(_, #stats { attack = A }, _) -> {ok, A} end
+                  },
+                 yell => #{
+                   type => 'string',
+                   description => "The yell of the monster",
+                   resolve => fun(_, #stats { yell = Y }, _) -> {ok, Y} end
+                  },
+                 shellScripting => #{
+                   type => 'int',
+                   description => "The sh(1) scripting capability of the entity",
+                   resolve => fun(_, #stats { shell_scripting = SS }, _) -> {ok, SS} end
+                  }
+                }
+              }},
+    ok = graphql:insert_schema_definition(Stats),
+                 
     Mood = {enum, #{
         id => 'Mood',
         description => "The mood of a monster",
@@ -144,65 +196,73 @@ inject_monster() ->
     	description => "Represents a monster in the dungeon",
     	interfaces => ['Node'],
     	fields => #{
-    		id => #{
-    			type => 'id!',
-    			resolve => fun(Ctx, #monster{ id = ID }, _) -> wrap({monster, ID}) end,
-    			description => "Unique identifiers of monsters" },
-    		name => #{
-    			type => 'string!',
-    			resolve => fun(_, #monster{ name = N}, _) -> {ok, N} end,
-    			description => "The name of the monster" },
-    		color => #{
-    			type => 'Color!',
-    			resolve => fun(_, #monster{ color = {_,_,_} = C }, _) ->
-                                           {ok, C}
-                                   end,
-    			description => "The color of the monster" },
-    		hitpoints => #{
-    			type => 'int!',
-    			resolve => fun(_, #monster { hitpoints = HP}, _) -> {ok, HP} end,
-    			description => "How many hitpoints the monster has" },
-    		inventory => #{
-    			type => ['Thing'],
-    			resolve =>
-    			  fun(_, #monster { inventory = INV }, _) ->
-    			    ok([load(OID) || OID <- INV])
-    			  end,
-    			description => "The monsters inventory" },
-    		hp => #{
-    			type => 'int!',
-    			resolve => fun(_, #monster { hitpoints = HP}, _) -> {ok, HP} end,
-    			description => "How many hitpoints the monster has",
-    			deprecation => "Use `hitpoints` instead" },
-            mood => #{
-                type => 'Mood',
-                resolve => fun(_, #monster { mood = M}, _) -> {ok, M} end,
-                description => "The mood of the monster"
-            }
+          id => #{
+            type => 'id!',
+            resolve => fun(Ctx, #monster{ id = ID }, _) -> wrap({monster, ID}) end,
+            description => "Unique identifiers of monsters" },
+          name => #{
+            type => 'string!',
+            resolve => fun(_, #monster{ name = N}, _) -> {ok, N} end,
+            description => "The name of the monster" },
+          color => #{
+            type => 'Color!',
+            resolve => fun(_, #monster{ color = {_,_,_} = C }, _) ->
+                               {ok, C}
+                       end,
+            description => "The color of the monster" },
+          hitpoints => #{
+            type => 'int!',
+            resolve => fun(_, #monster { hitpoints = HP}, _) -> {ok, HP} end,
+            description => "How many hitpoints the monster has" },
+          inventory => #{
+            type => ['Thing'],
+            resolve =>
+                fun(_, #monster { inventory = INV }, _) ->
+                        ok([load(OID) || OID <- INV])
+                end,
+            description => "The monsters inventory" },
+          hp => #{
+            type => 'int!',
+            resolve => fun(_, #monster { hitpoints = HP}, _) -> {ok, HP} end,
+            description => "How many hitpoints the monster has",
+            deprecation => "Use `hitpoints` instead" },
+          mood => #{
+            type => 'Mood',
+            resolve => fun(_, #monster { mood = M}, _) -> {ok, M} end,
+            description => "The mood of the monster"
+           },
+          stats => #{
+            type => 'Stats',
+            resolve => fun(_, #monster { stats = S}, _) -> {ok, S} end,
+            description => "The stats of the monster"
+           }
     	}}},
-    	ok = graphql:insert_schema_definition(Monster),
+    ok = graphql:insert_schema_definition(Monster),
 
-    ok = graphql_relay:input('IntroduceMonster',
-            #{
-             name => #{
-               type => 'string!',
-               description => "The defining name of the monster" },
-             color => #{
-               type => 'Color!',
-               description => "The color of the monster" },
-             hitpoints => #{
-               type => 'int',
-               default => 15,
-               description => "The number of hitpoints of a monster" },
-             mood => #{
-                type => 'Mood',
-                default => <<"DODGY">>,
-                description => "The mood of the monster" }
-            },
-            #{
-             monster => #{
-               type => 'Monster',
-               description => "The introduced monster" }
+    ok = graphql_relay:input('IntroduceMonster', #{
+                               name => #{
+                                 type => 'string!',
+                                 description => "The defining name of the monster" },
+                               color => #{
+                                 type => 'Color!',
+                                 description => "The color of the monster" },
+                               hitpoints => #{
+                                 type => 'int',
+                                 default => 15,
+                                 description => "The number of hitpoints of a monster" },
+                               mood => #{
+                                 type => 'Mood',
+                                 default => <<"DODGY">>,
+                                 description => "The mood of the monster" },
+                               stats => #{
+                                 type => 'StatsInput',
+                                 description => "The monster stats"
+                                }
+                              },
+                             #{
+                                monster => #{
+                                  type => 'Monster',
+                                  description => "The introduced monster" }
             }).
  
 inject_room() ->
@@ -490,9 +550,21 @@ mut_int_monster(_Ctx, none, #{ <<"input">> := Input }) ->
        <<"name">> := N,
        <<"color">> := C,
        <<"hitpoints">> := HP,
-        <<"mood">> := M
+       <<"stats">> := Stats,
+       <<"mood">> := M
     } = Input,
-    {atomic, Monster} = insert(#monster { name = N, color = C, hitpoints = HP, mood = M }),
+    S = case Stats of
+            null -> #stats{};
+            #{ <<"attack">> := Attack,
+               <<"shellScripting">> := SHScript,
+               <<"yell">> := Yell } ->
+                #stats{
+                   attack = Attack,
+                   shell_scripting = SHScript,
+                   yell = Yell
+                  }
+        end,
+    {atomic, Monster} = insert(#monster { stats = S, name = N, color = C, hitpoints = HP, mood = M }),
     {ok, #{
         <<"clientMutationId">> => MID,
         <<"monster">> => Monster } }.

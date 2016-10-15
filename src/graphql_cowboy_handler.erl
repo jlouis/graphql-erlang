@@ -9,6 +9,7 @@
     content_types_accepted/2,
     charsets_provided/2
 ]).
+
 -export([
     from_graphql/2,
     from_json/2,
