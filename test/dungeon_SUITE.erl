@@ -15,10 +15,14 @@ end_per_suite(_Config) ->
     ok.
 
 init_per_group(dungeon, Config) ->
+    DocFile = filename:join(
+                [?config(data_dir, Config), "dungeon.graphql"]),
+    {ok, Doc} = file:read_file(DocFile),
+
     ok = dungeon:inject(),
     ok = dungeon:start(),
     ok = graphql:validate_schema(),
-    Config;
+    [{document, Doc} | Config];
 init_per_group(_Group, Config) ->
     Config.
 
@@ -47,25 +51,26 @@ all() -> [
     {group, dungeon} ].
     
 
+run(Config, Q, Params) ->
+    Doc = ?config(document, Config),
+    th:x(Config, Doc, Q, Params).
+
 unions(Config) ->
     ct:log("Initial query on the schema"),
     Goblin = base64:encode(<<"monster:1">>),
-    Q1 = "{ goblin: monster(id: \"" ++ binary_to_list(Goblin) ++ "\") { id name hitpoints } }",
-    #{ data := #{
-        <<"goblin">> := #{
-            <<"id">> := Goblin,
-            <<"name">> := <<"goblin">>,
-            <<"hitpoints">> := 10 }}} = th:x(Config, Q1),
-            
+    Expected1 = #{ data => #{
+                     <<"goblin">> => #{
+                         <<"id">> => Goblin,
+                         <<"name">> => <<"goblin">>,
+                         <<"hitpoints">> => 10 }}},
+    Expected1 = run(Config, <<"GoblinQuery">>, #{ <<"id">> => Goblin }),
     ct:log("Same query, but on items"),
-    Q2 =
-        "{ goblin: thing(id: \"" ++ binary_to_list(Goblin) ++ "\") { ...MonsterFragment } } "
-        "fragment MonsterFragment on Monster { id name hitpoints }",
-    #{ data := #{
-        <<"goblin">> := #{
-            <<"id">> := Goblin,
-            <<"name">> := <<"goblin">>,
-            <<"hitpoints">> := 10 }}} = th:x(Config, Q2),
+    Expected2 = #{ data => #{
+                     <<"goblin">> => #{
+                         <<"id">> => Goblin,
+                         <<"name">> => <<"goblin">>,
+                         <<"hitpoints">> => 10 }}},
+    Expected2 = run(Config, <<"GoblinThingQuery">>, #{ <<"id">> => Goblin }),
     ok.
 
 union_errors(Config) ->
