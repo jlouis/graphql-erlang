@@ -1,17 +1,29 @@
 Nonterminals
   Document
+
   Definitions Definition OperationDefinition FragmentDefinition TypeDefinition
   ObjectTypeDefinition InterfaceTypeDefinition UnionTypeDefinition
   ScalarTypeDefinition EnumTypeDefinition InputObjectTypeDefinition TypeExtensionDefinition
-  FieldDefinitionList FieldDefinition ImplementsInterfaces ArgumentsDefinition
-  InputValueDefinitionList InputValueDefinition UnionMembers
+  FieldDefinitionList FieldDefinition ArgumentsDefinition
+  
+  ImplementsInterfaces 
+  UnionMembers
+
+  InputValueDefinitionList InputValueDefinition
   EnumValueDefinitionList EnumValueDefinition
+
   SelectionSet Selections Selection
-  OperationType Name NameWithoutOn VariableDefinitions VariableDefinition Directives Directive
+
+  OperationType
+  VariableDefinitions VariableDefinition
+  Directives Directive
   Field Alias Arguments ArgumentList Argument
   FragmentSpread FragmentName InlineFragment
   VariableDefinitionList Variable DefaultValue
+  
   Type TypeCondition NamedTypeList NamedType ListType NonNullType
+  
+  Name KeywordName
   Value EnumValue ListValue Values ObjectValue ObjectFields ObjectField.
 
 Terminals
@@ -102,8 +114,6 @@ InlineFragment -> '...' 'on' TypeCondition SelectionSet :
 InlineFragment -> '...' 'on' TypeCondition Directives SelectionSet :
     #frag { id = '...', ty = '$3', directives = '$4', selection_set = '$5' }.
 
-FragmentName -> NameWithoutOn : '$1'.
-
 Field -> Name :
     #field { id = g_name('$1') }.
 Field -> Name Arguments :
@@ -161,21 +171,24 @@ Directive -> '@' Name :
 Directive -> '@' Name Arguments :
     #directive { id = g_name('$2'), args = '$3' }.
 
-NameWithoutOn -> name : '$1'.
-NameWithoutOn -> 'query' : '$1'.
-NameWithoutOn -> 'mutation' : '$1'.
-NameWithoutOn -> 'fragment' : '$1'.
-NameWithoutOn -> 'type' : '$1'.
-NameWithoutOn -> 'implements' : '$1'.
-NameWithoutOn -> 'interface' : '$1'.
-NameWithoutOn -> 'union' : '$1'.
-NameWithoutOn -> 'scalar' : '$1'.
-NameWithoutOn -> 'enum' : '$1'.
-NameWithoutOn -> 'input' : '$1'.
-NameWithoutOn -> 'extend' : '$1'.
-NameWithoutOn -> 'null' : '$1'.
+KeywordName -> 'query' : atom_to_binary('$1', utf8).
+KeywordName -> 'mutation' : atom_to_binary('$1', utf8).
+KeywordName -> 'fragment' : atom_to_binary('$1', utf8).
+KeywordName -> 'type' : atom_to_binary('$1', utf8).
+KeywordName -> 'implements' : atom_to_binary('$1', utf8).
+KeywordName -> 'interface' : atom_to_binary('$1', utf8).
+KeywordName -> 'union' : atom_to_binary('$1', utf8).
+KeywordName -> 'scalar' : atom_to_binary('$1', utf8).
+KeywordName -> 'enum' : atom_to_binary('$1', utf8).
+KeywordName -> 'input' : atom_to_binary('$1', utf8).
+KeywordName -> 'extend' : atom_to_binary('$1', utf8).
+KeywordName -> 'null' : atom_to_binary('$1', utf8).
 
-Name -> NameWithoutOn : '$1'.
+FragmentName -> name : '$1'.
+FragmentName -> KeywordName : '$1'.
+
+Name -> name : '$1'.
+Name -> KeywordName : '$1'.
 Name -> 'on' : '$1'.
 
 Value -> Variable : '$1'.
