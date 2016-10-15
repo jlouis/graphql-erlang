@@ -58,18 +58,20 @@ err_msg(missing_non_null_param) ->
     Input :: document | frag() | op() | field() | binary() | [Input].
 path(Path) ->
    F = fun 
-       F(document) -> <<"document">>;
-       F(#frag { id = ID }) -> name(ID);
-       F(#op { id = ID }) -> name(ID);
-       F(#field { id = ID }) -> name(ID);
-       F(#enum_type { id = ID }) -> name(ID);
-       F(#interface_type { id = ID }) -> name(ID);
-       F(#union_type { id = ID }) -> name(ID);
-       F(#object_type { id = ID }) -> name(ID);
-       F(I) when is_integer(I) -> integer_to_binary(I);
-       F(B) when is_binary(B) -> B;
-       F(L) when is_list(L) -> [F(X) || X <- L]
-   end,
+           F(document) -> <<"document">>;
+           F(#frag { id = ID }) -> name(ID);
+           F(#op { id = ID }) -> name(ID);
+           F(#field { id = ID }) -> name(ID);
+           F(#enum_type { id = ID }) -> name(ID);
+           F(#interface_type { id = ID }) -> name(ID);
+           F(#union_type { id = ID }) -> name(ID);
+           F(#object_type { id = ID }) -> name(ID);
+           F({name, N, _} = Name) -> name(Name);
+           F(I) when is_integer(I) -> integer_to_binary(I);
+           F(B) when is_binary(B) -> B;
+           F(L) when is_list(L) ->
+               [F(X) || X <- L]
+       end,
    lists:flatten([F(Elem) || Elem <- Path]).
 
 format_ty({input_object, Ty}) -> Ty;
