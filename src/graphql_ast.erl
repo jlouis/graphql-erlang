@@ -28,6 +28,6 @@ unwrap_to_base_type({list, Ty}) -> unwrap_to_base_type(Ty).
 unwrap_type(Ty) ->
     unwrap_to_base_type(resolve_type(Ty)).
 
--spec name('ROOT' | id()) -> binary().
+-spec name('ROOT' | name()) -> binary().
 name('ROOT') -> 'ROOT';
 name({name, X, _}) -> X.

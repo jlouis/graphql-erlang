@@ -56,7 +56,8 @@ insert(S, #{}) ->
     gen_server:call(?MODULE, {insert, S}).
 
 
--spec load(any()) -> true | false.
+-spec load(any()) -> ok | {error, Reason}
+  when Reason :: term().
 load(S) ->
     try graphql_schema_canonicalize:x(S) of
         #root_schema { query = Q } = Rec ->

@@ -17,7 +17,7 @@
 -type json() :: number() | binary() | true | false | null | #{ binary() => json() }.
 -type param_context() :: json().
 
--type schema_definition() :: {atom(), #{ binary() => term() }}.
+-type schema_definition() :: {atom(), #{ atom() => term() }}.
 
 -export_type([ast/0, json/0, param_context/0]).
 
@@ -59,7 +59,8 @@ execute(Ctx, AST) ->
 
 %% @doc insert_schema_definition/1 loads a schema definition into the Graph Schema
 %% @end
--spec insert_schema_definition(schema_definition()) -> 'ok' | {error, term()}.
+-spec insert_schema_definition(schema_definition()) -> ok | {error, Reason}
+  when Reason :: term().
 insert_schema_definition(Defn) ->
     graphql_schema:load(Defn).
 
