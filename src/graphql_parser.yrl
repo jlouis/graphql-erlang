@@ -79,9 +79,9 @@ Variable -> '$' Name : {var, g_name('$2')}.
 
 DefaultValue -> '=' Value : '$2'.
 
-Type -> NamedType : {ty, '$1'}.
-Type -> ListType : {ty, '$1'}.
-Type -> NonNullType : {ty, '$1'}.
+Type -> NamedType : '$1'.
+Type -> ListType : '$1'.
+Type -> NonNullType : '$1'.
 
 NamedType -> Name : g_ty('$1').
 

@@ -365,7 +365,6 @@ tc_mk_varenv(Path, VDefs) ->
        [{name(Var), {varenv_ty_coerce(Path, Ty), Def}}
            || #vardef { id = Var, ty = Ty, default = Def } <- VDefs]).
 
-varenv_ty_coerce(Path, {ty, Ty}) -> varenv_ty_coerce(Path, Ty);
 varenv_ty_coerce(_Path, {scalar, X}) -> {scalar, X};
 varenv_ty_coerce(Path, {list, T}) -> {list, varenv_ty_coerce(Path, T)};
 varenv_ty_coerce(Path, {non_null, T}) -> {non_null, varenv_ty_coerce(Path, T)};
@@ -382,7 +381,6 @@ varenv_ty_coerce(Path, T) ->
 %% -- AST MANIPULATION -------------------------
 name('ROOT') -> <<"ROOT">>;
 name({name, N, _}) -> N;
-name({ty, Name}) -> name(Name);
 name({var, N}) -> name(N).
 
 %% True if input is a scalar value

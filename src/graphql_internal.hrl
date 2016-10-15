@@ -46,7 +46,7 @@
 
 -record(vardef, {
 	id :: id(),
-	ty :: {ty, typ()},
+	ty :: typ(),
 	default = undefined :: undefined | value(),
 	schema = undefined :: 'undefined' | any()
 }).
