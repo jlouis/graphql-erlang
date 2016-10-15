@@ -39,9 +39,6 @@ EscapedCharacter    = ["\\\/bfnrt]
 StringCharacter     = ([^\"{_LineTerminator}]|\\{EscapedUnicode}|\\{EscapedCharacter})
 StringValue         = "{StringCharacter}*"
 
-% Boolean Value
-BooleanValue        = true|false
-
 Rules.
 
 {Ignored}		: skip_token.
@@ -49,7 +46,6 @@ Rules.
 {IntValue}		: {token, {int, list_to_integer(TokenChars), TokenLine}}.
 {FloatValue}	: {token, {float, list_to_float(TokenChars), TokenLine}}.
 {StringValue}	: {token, {string, iolist_to_binary(unquote(TokenChars)), TokenLine}}.
-{BooleanValue}	: {token, {bool, boolean(TokenChars), TokenLine}}.
 {Name}		: {token, identifier(TokenChars, TokenLine)}.
 
 Erlang code.
@@ -58,12 +54,8 @@ Erlang code.
 %% will never call.
 -dialyzer({nowarn_function, yyrev/2}).
 
-boolean(B) ->
-    boolean_lc(string:to_lower(B)).
-    
-boolean_lc("true") -> true;
-boolean_lc("false") -> false.
-
+identifier("true", TokenLine) -> {bool, true, TokenLine};
+identifier("false", TokenLine) -> {bool, false, TokenLine};
 identifier("query", TokenLine) -> {query, TokenLine};
 identifier("mutation", TokenLine) -> {mutation, TokenLine};
 identifier("subscription", TokenLine) -> {subscription, TokenLine};
