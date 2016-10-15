@@ -187,17 +187,6 @@ populate(Config) ->
     ok.
 
 direct_input(Config) ->
-    QM =
-        "mutation IMonster { "
-        "  introduceMonster(input: {name: \"Albino Hobgoblin\", color: \"#ffffff\", hitpoints: 5, mood: AGGRESSIVE}) { "
-        "    clientMutationId "
-        "    monster { "
-        "     id "
-        "     name "
-        "     color "
-        "     hitpoints "
-        "     mood "
-        "    }}}",
     Expected = #{ data => #{
         <<"introduceMonster">> => #{
             <<"clientMutationId">> => null,
@@ -208,53 +197,42 @@ direct_input(Config) ->
                 <<"hitpoints">> => 5,
                 <<"mood">> => <<"AGGRESSIVE">>}
         }}},
-    Expected = th:x(Config, QM).
+    Input = #{
+      <<"name">> => <<"Albino Hobgoblin">>,
+      <<"color">> => <<"#ffffff">>,
+      <<"hitpoints">> => 5,
+      <<"mood">> => <<"AGGRESSIVE">>
+    },
+    Expected = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input}),
+    ok.
 
 inline_fragment(Config) ->
     ID = base64:encode(<<"monster:1">>),
-    Q =
-      "query TEST { "
-      "  thing(id: \"" ++ binary_to_list(ID) ++ "\") { "
-      "     ... on Monster { "
-      "         id hitpoints "
-      "     } "
-      "  } "
-      "}",
     Expected = #{ data => #{
         <<"thing">> => #{
             <<"id">> => ID,
             <<"hitpoints">> => 10 }
     }},
-    Expected = th:x(Config, Q).
+    Expected = run(Config, <<"InlineFragmentTest">>, #{ <<"id">> => ID }),
+    ok.
 
 fragment_over_union_interface(Config) ->
     ID = base64:encode(<<"monster:1">>),
-    Q = "query TEST { monster(id: \"" ++ binary_to_list(ID) ++ "\") { "
-        " ... on Thing { ... on Monster { id } } } }",
     Expected = #{ data => #{
     	<<"monster">> => #{
     		<<"id">> => ID }}},
-    Expected = th:x(Config, Q),
+    Expected = run(Config, <<"FragmentOverUnion1">>, #{ <<"id">> => ID }),
     ct:log("Same as before, but on a named fragment instead"),
-    Q2 =
-        "query TEST { monster(id: \"" ++ binary_to_list(ID) ++ "\") { "
-        "   ... TFrag } } "
-        " fragment TFrag on Thing { ... on Monster { id } } ",
-    Expected = th:x(Config, Q2),
-    
+    Expected = run(Config, <<"FragmentOverUnion2">>, #{ <<"id">> => ID }),
     ct:log("Same as before, but via an interface type"),
-    Q3 =
-        "query TEST { monster(id: \"" ++ binary_to_list(ID) ++ "\") { "
-        "   ... on Node { id } } } ",
-    Expected = th:x(Config, Q3),
+    Expected = run(Config, <<"FragmentOverUnion3">>, #{ <<"id">> => ID }),
     ok.
 
 simple_field_merge(Config) ->
     ID = base64:encode(<<"monster:1">>),
-    Q = "query TEST { monster(id: \"" ++ binary_to_list(ID) ++ "\") { "
-        " id hitpoints hitpoints } }",
     Expected = #{ data => #{
     	<<"monster">> => #{
     		<<"id">> => ID,
     		<<"hitpoints">> => 10 }}},
-    Expected = th:x(Config, Q).
+    Expected = run(Config, <<"TestFieldMerge">>, #{ <<"id">> => ID }),
+    ok.

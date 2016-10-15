@@ -21,6 +21,53 @@ query ScalarOutputCoercion($id : Id!) {
   }
 }
 
+query InlineFragmentTest($id : Id!) {
+  thing(id: $id) {
+    ... on Monster {
+      id
+      hitpoints
+    }
+  }
+}
+
+query FragmentOverUnion1($id: Id!) {
+  monster(id: $id) {
+    ... on Thing {
+      ... on Monster {
+        id
+      }
+    }
+  }
+}
+
+query FragmentOverUnion2($id: Id!) {
+  monster(id: $id) {
+    ...UnionThingFragment
+  }
+}
+
+fragment UnionThingFragment on Thing {
+  ... on Monster {
+    id
+  }
+}
+
+query FragmentOverUnion3($id: Id!) {
+  monster(id: $id) {
+    ... on Node {
+      id
+    }
+  }
+}
+
+query TestFieldMerge($id: Id!) {
+  monster(id: $id) {
+    id
+    hitpoints
+    hitpoints
+  }
+}
+
 ## MUTATIONS
 mutation IntroduceMonster($input: IntroduceMonsterInput!) {
   introduceMonster(input: $input) {
