@@ -22,11 +22,20 @@ query ScalarOutputCoercion($id : Id!) {
 }
 
 ## MUTATIONS
-mutation IntroduceMonster($input : IntroduceMonsterInput!) {
+mutation IntroduceMonster($input: IntroduceMonsterInput!) {
   introduceMonster(input: $input) {
     clientMutationId
     monster {
       ...FatMonsterFragment
+    }
+  }
+}
+
+mutation IntroduceRoom($input: IntroduceRoomInput!) {
+  introduceRoom(input: $input) {
+    clientMutationId
+    room {
+      ...RoomFragment
     }
   }
 }
@@ -43,4 +52,9 @@ fragment FatMonsterFragment on Monster {
     ...MonsterFragment
     color
     mood
+}
+
+fragment RoomFragment on Room {
+    id
+    description
 }
