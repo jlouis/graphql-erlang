@@ -1,3 +1,5 @@
+## QUERIES
+
 query GoblinQuery($id : Id!) {
     goblin: monster(id: $id) {
         id
@@ -12,10 +14,33 @@ query GoblinThingQuery($id : Id!) {
     }
 }
 
+query ScalarOutputCoercion($id : Id!) {
+      goblin: monster(id: $id) {
+          ...MonsterFragment
+          color
+      }
+}
+
+## MUTATIONS
+mutation IntroduceMonster($input : IntroduceMonsterInput!) {
+  introduceMonster(input: $input) {
+    clientMutationId
+    monster {
+      ...FatMonsterFragment
+    }
+  }
+}
 
 ## FRAGS
+
 fragment MonsterFragment on Monster {
     id
     name
     hitpoints
+}
+
+fragment FatMonsterFragment on Monster {
+    ...MonsterFragment
+    color
+    mood
 }
