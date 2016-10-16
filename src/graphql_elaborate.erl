@@ -41,29 +41,28 @@ op(Path, #op { vardefs = VDefs } = Op) ->
         not_found ->
             graphql_err:abort([Op | Path], {type_not_found, RootSchema});
         #object_type{ fields = Fields } = Obj ->
-            fields([Op | Path], Op#op{ schema = Obj, vardefs = vdefs([Op | Path], VDefs) }, Fields)
+            fields([Op | Path], Op#op{ schema = Obj, vardefs = var_defs([Op | Path], VDefs) }, Fields)
     end.
 
-vdef_lookup(Path, N) ->
-    case graphql_schema:lookup(N) of
-        not_found -> graphql_err:abort(Path, {type_not_found, N});
-        Obj -> Obj
-    end.
-
-vdefs(_Path, []) -> [];
-vdefs(Path, [#vardef { id = ID, ty = Ty } = V | Vs]) ->
-    Obj = case graphql_ast:unwrap_type(Ty) of
+vdef(#vardef { ty = Ty }) ->
+    case graphql_ast:unwrap_type(Ty) of
         {scalar, X} when
             X == int;
             X == string;
             X == bool;
             X == id -> builtin;
-        {scalar, TyName} ->
-            vdef_lookup([ID | Path], TyName);
         TyName ->
-            vdef_lookup([ID | Path], TyName)
-    end,
-    [V#vardef { schema = Obj } | vdefs(Path, Vs)].
+            case graphql_schema:lookup(TyName) of
+                not_found -> not_found;
+                Obj -> Obj
+            end
+    end.
+
+var_defs(Path, VDefs) ->
+    [case vdef(V) of
+        not_found -> graphql_err:abort(Path, {type_not_found, V});
+        Obj -> V#vardef { schema = Obj }
+      end || V <- VDefs].
 
 root(Path, #op { ty = T } = Op) ->
     case graphql_schema:lookup('ROOT') of
