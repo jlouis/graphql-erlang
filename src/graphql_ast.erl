@@ -2,15 +2,9 @@
 
 -include("graphql_internal.hrl").
 
--export([resolve_type/1, resolve_root_type/4, unwrap_to_base_type/1]).
+-export([resolve_type/1, unwrap_to_base_type/1]).
 -export([unwrap_type/1]).
 -export([name/1]).
-
--spec resolve_root_type(undefined | operation_type(), X, X, X) -> X.
-resolve_root_type(undefined, Q, _, _) -> Q;
-resolve_root_type({query, _}, Q, _, _) -> Q;
-resolve_root_type({mutation, _}, _, M, _) -> M;
-resolve_root_type({subscription, _}, _, _, S) -> S.
 
 -spec resolve_type(graphql_type()) -> tycond().
 resolve_type({scalar, Sc}) -> {scalar, Sc};

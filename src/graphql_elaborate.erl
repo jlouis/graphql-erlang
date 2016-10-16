@@ -66,10 +66,8 @@ var_defs(Path, VDefs) ->
 
 root(Path, #op { ty = T } = Op) ->
     case graphql_schema:lookup('ROOT') of
-        #root_schema { query = Q, mutation = M, subscription = S } ->
-            graphql_ast:resolve_root_type(T, Q, M, S);
-        not_found ->
-            graphql_err:abort([Op | Path], no_root_schema)
+        not_found -> graphql_err:abort([Op | Path], no_root_schema);
+        Schema -> graphql_schema:resolve_root_type(T, Schema)
     end.
 
 %% -- SELECTION SETS -------------------------------

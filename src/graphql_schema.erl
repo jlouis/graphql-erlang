@@ -12,6 +12,8 @@
 	get/1,
 	lookup/1,
 	lookup_enum_type/1]).
+-export([resolve_root_type/2]).
+
 
 %% Callbacks
 -export([init/1, handle_call/3, handle_cast/2, terminate/2, handle_info/2,
@@ -102,6 +104,12 @@ lookup(ID) ->
        [S] -> S;
        _ -> not_found
     end.
+
+-spec resolve_root_type(undefined | operation_type(), root_schema()) -> undefined | binary().
+resolve_root_type(undefined, #root_schema { query = Q }) -> Q;
+resolve_root_type({query, _}, #root_schema { query = Q }) -> Q;
+resolve_root_type({mutation, _}, #root_schema { mutation = M }) -> M;
+resolve_root_type({subscription, _}, #root_schema { subscription = S }) -> S.
 
 %% -- CALLBACKS
 
