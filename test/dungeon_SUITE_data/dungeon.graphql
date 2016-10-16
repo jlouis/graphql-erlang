@@ -92,6 +92,31 @@ mutation IntroduceMonsterFat($input: IntroduceMonsterInput!) {
   }
 }
 
+mutation IntroduceMonsterFatExpr {
+  introduceMonster(input:
+    { clientMutationId: "123",
+      name: "Green Slime", 
+      color: "#1be215",
+      hitpoints: 9001,
+      mood: TRANQUIL,
+      stats: {
+        attack: 7,
+        shellScripting: 5,
+        yell: "..."
+      }
+    }) {
+      clientMutationId,
+      monster {
+        ...FatMonsterFragment
+        stats {
+          attack
+          shellScripting
+          yell
+        }
+      }
+    }
+}
+
 mutation IntroduceRoom($input: IntroduceRoomInput!) {
   introduceRoom(input: $input) {
     clientMutationId

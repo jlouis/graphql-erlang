@@ -209,6 +209,7 @@ direct_input(Config) ->
 
 nested_input_object(Config) ->
     Input = #{
+      <<"clientMutationId">> => <<"123">>,
       <<"name">> => <<"Green Slime">>,
       <<"color">> => <<"#1be215">>,
       <<"hitpoints">> => 9001,
@@ -218,7 +219,7 @@ nested_input_object(Config) ->
         <<"shellScripting">> => 5,
         <<"yell">> => <<"...">> }},
     Expected = #{ data =>
-                      #{<<"introduceMonster">> => #{<<"clientMutationId">> => null,
+                      #{<<"introduceMonster">> => #{<<"clientMutationId">> => <<"123">>,
                                                     <<"monster">> =>
                                                         #{ <<"color">> => <<"#1BE215">>,
                                                            <<"hitpoints">> => 9001,
@@ -230,6 +231,7 @@ nested_input_object(Config) ->
                                                             <<"shellScripting">> => 5,
                                                             <<"yell">> => <<"...">> }}}}},
     Expected = run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
+    %% Expected = run(Config, <<"IntroduceMonsterFatExpr">>, #{ <<"input">> => Input}),
     ok.
 
 inline_fragment(Config) ->
