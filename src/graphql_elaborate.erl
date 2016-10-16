@@ -9,17 +9,18 @@
 x(Doc) -> document(Doc).
 
 document({document, Ops}) ->
-    {document, ops([document], Ops)}.
+    {document, operations([document], Ops)}.
 
-ops(_Path, []) -> [];
-ops(Path, [#frag {} = F | OPs]) ->
-    [frag([F | Path], F) | ops(Path, OPs)];
-ops(Path, [#op{} = O | OPs]) ->
-    [op([O | Path], O) | ops(Path, OPs)].
+operations(Path, Operations) ->
+    [operation_(Path, Op) || Op <- Operations].
+
+operation_(Path, #frag{} = F) -> frag(Path, F);
+operation_(Path, #op{} = O) -> op(Path, O).
+
 
 %% -- FRAGMENTS -----------------------------------
 frag(Path, #frag { ty = T } = F) ->
-   Ty = graphql_ast:name(T),
+   Ty = graphql_ast:resolve_type(T),
    case graphql_schema:lookup(Ty) of
        not_found ->
            graphql_err:abort([F | Path], {type_not_found, Ty});
@@ -40,7 +41,7 @@ op(Path, #op { vardefs = VDefs } = Op) ->
         not_found ->
             graphql_err:abort([Op | Path], {type_not_found, RootSchema});
         #object_type{ fields = Fields } = Obj ->
-            fields(Path, Op#op{ schema = Obj, vardefs = vdefs([Op | Path], VDefs) }, Fields)
+            fields([Op | Path], Op#op{ schema = Obj, vardefs = vdefs([Op | Path], VDefs) }, Fields)
     end.
 
 vdef_lookup(Path, N) ->
@@ -51,7 +52,7 @@ vdef_lookup(Path, N) ->
 
 vdefs(_Path, []) -> [];
 vdefs(Path, [#vardef { id = ID, ty = Ty } = V | Vs]) ->
-    Obj = case unwrap_type(Ty) of
+    Obj = case graphql_ast:unwrap_type(Ty) of
         {scalar, X} when
             X == int;
             X == string;
@@ -63,11 +64,6 @@ vdefs(Path, [#vardef { id = ID, ty = Ty } = V | Vs]) ->
             vdef_lookup([ID | Path], TyName)
     end,
     [V#vardef { schema = Obj } | vdefs(Path, Vs)].
-
-unwrap_type({scalar, Ty}) -> {scalar, Ty};
-unwrap_type({name, N, _}) -> N;
-unwrap_type({non_null, Ty}) -> unwrap_type(Ty);
-unwrap_type({list, Ty}) -> unwrap_type(Ty).
 
 root(Path, #op { ty = T } = Op) ->
     case graphql_schema:lookup('ROOT') of
