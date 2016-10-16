@@ -20,7 +20,7 @@ operation_(Path, #op{} = O) -> op(Path, O).
 
 %% -- FRAGMENTS -----------------------------------
 frag(Path, #frag { ty = T } = F) ->
-   Ty = graphql_ast:resolve_type(T),
+   Ty = graphql_ast:name(T), %% This will always be a name
    case graphql_schema:lookup(Ty) of
        not_found ->
            graphql_err:abort([F | Path], {type_not_found, Ty});
@@ -51,7 +51,7 @@ vdef(#vardef { ty = Ty }) ->
             X == string;
             X == bool;
             X == id -> builtin;
-        TyName ->
+        TyName when is_binary(TyName) ->
             case graphql_schema:lookup(TyName) of
                 not_found -> not_found;
                 Obj -> Obj
@@ -79,10 +79,12 @@ fields(Path, #op{ selection_set = SSet} = O, Fields) ->
 
 sset(Path, SSet, Fields) ->
     [field(Path, S, Fields) || S <- SSet].
-    
-field(_Path, #frag_spread {} = FragSpread, _Fields) -> FragSpread;
+
+field(_Path, #frag_spread {} = FragSpread, _Fields) ->
+    FragSpread;
 %% Inline fragments are elaborated the same way as fragments
-field(Path, #frag { id = '...' } = Frag, _Fields) -> frag(Path, Frag);
+field(Path, #frag { id = '...' } = Frag, _Fields) ->
+    frag(Path, Frag);
 field(Path, #field { id = ID, args = Args, selection_set = SSet } = F, Fields) ->
     Name = graphql_ast:name(ID),
     case maps:get(Name, Fields, not_found) of

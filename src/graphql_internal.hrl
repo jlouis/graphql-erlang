@@ -2,7 +2,7 @@
 
 %% All identifiers in the AST are given like this
 -type name() :: {name, binary(), pos_integer()}.
--type tycond() :: name() | {scalar, string | int | float | id | bool}.
+-type tycond() :: name() | binary() | {scalar, string | int | float | id | bool}.
 -type graphql_type() ::
           {non_null, {list, tycond()}}
         | {non_null, tycond()}
