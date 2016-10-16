@@ -59,9 +59,9 @@ OperationDefinition -> OperationType Name VariableDefinitions Directives Selecti
     #op { ty = '$1', id = '$2', vardefs = '$3', directives = '$4', selection_set = '$5' }.
 
 FragmentDefinition -> 'fragment' FragmentName 'on' TypeCondition SelectionSet :
-    #frag { id = '$2', ty = g_ty('$4'), selection_set = '$5' }.
+    #frag { id = '$2', ty = '$4', selection_set = '$5' }.
 FragmentDefinition -> 'fragment' FragmentName 'on' TypeCondition Directives SelectionSet :
-    #frag { id = '$2', ty = g_ty('$4'), directives = '$5', selection_set = '$6' }.
+    #frag { id = '$2', ty = '$4', directives = '$5', selection_set = '$6' }.
 
 TypeCondition -> NamedType : '$1'.
 
@@ -290,7 +290,6 @@ g_ty({name, <<"Float">>, _}) -> {scalar, float};
 g_ty({name, <<"id">>, _}) -> {scalar, id};
 g_ty({name, <<"Id">>, _}) -> {scalar, id};
 g_ty({name, <<"ID">>, _}) -> {scalar, id};
-g_ty({scalar, Ty}) -> {scalar, Ty};
 g_ty({name, _, _} = N) -> N.
 
 g_enum({name, ID, _Line}) -> ID.
