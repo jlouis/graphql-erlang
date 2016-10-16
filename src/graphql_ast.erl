@@ -29,5 +29,7 @@ unwrap_type(Ty) ->
     unwrap_to_base_type(resolve_type(Ty)).
 
 -spec name('ROOT' | name()) -> binary().
-name('ROOT') -> 'ROOT';
-name({name, X, _}) -> X.
+name('ROOT') -> <<"ROOT">>;
+name({name, X, _}) -> X;
+name({var, N}) -> name(N).
+

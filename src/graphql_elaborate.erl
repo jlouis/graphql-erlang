@@ -19,7 +19,7 @@ ops(Path, [#op{} = O | OPs]) ->
 
 %% -- FRAGMENTS -----------------------------------
 frag(Path, #frag { ty = T } = F) ->
-   Ty = name(T),
+   Ty = graphql_ast:name(T),
    case graphql_schema:lookup(Ty) of
        not_found ->
            graphql_err:abort([F | Path], {type_not_found, Ty});
@@ -91,7 +91,7 @@ field(_Path, #frag_spread {} = FragSpread, _Fields) -> FragSpread;
 %% Inline fragments are elaborated the same way as fragments
 field(Path, #frag { id = '...' } = Frag, _Fields) -> frag(Path, Frag);
 field(Path, #field { id = ID, args = Args, selection_set = SSet } = F, Fields) ->
-    Name = name(ID),
+    Name = graphql_ast:name(ID),
     case maps:get(Name, Fields, not_found) of
         not_found when Name == <<"__typename">> ->
             F#field { schema = {introspection, typename}, schema_obj = scalar};
@@ -118,7 +118,7 @@ field_args(Path, Args, SArgs) ->
     [field_arg(Path, K, V, SArgs) || {K,V} <- Args].
 
 field_arg(Path, K, V, SArgs) ->
-    N = name(K),
+    N = graphql_ast:name(K),
     case maps:get(N, SArgs, not_found) of
         not_found ->
             graphql_err:abort(Path, {argument_not_found, N});
@@ -160,8 +160,3 @@ field_lookup(Path, Ty, SSet) ->
         #enum_type{} ->
             graphql_err:abort(Path, {selection_set_on_enum, Ty})
     end.
-    
-%% -- AST MANIPULATION ---------------------------
-name('ROOT') -> <<"ROOT">>;
-name({name, N, _}) -> N;
-name({var, N}) -> name(N).
