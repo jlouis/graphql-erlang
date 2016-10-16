@@ -12,21 +12,21 @@ resolve_root_type({query, _}, Q, _, _) -> Q;
 resolve_root_type({mutation, _}, _, M, _) -> M;
 resolve_root_type({subscription, _}, _, _, S) -> S.
 
--spec resolve_type(graphql_type()) -> graphql_type_resolution().
+-spec resolve_type(graphql_type()) -> tycond().
 resolve_type({scalar, Sc}) -> {scalar, Sc};
 resolve_type({non_null, Ty}) -> resolve_type(Ty);
 resolve_type([Ty]) -> {list, resolve_type(Ty)};
 resolve_type(B) when is_binary(B) -> B;
 resolve_type({name, N, _}) -> N.
 
--spec unwrap_to_base_type(graphql_type_resolution()) -> graphql_type_resolution().
+-spec unwrap_to_base_type(graphql_type()) -> tycond().
 unwrap_to_base_type({scalar, X}) -> {scalar, X};
 unwrap_to_base_type({name, N, _}) -> N;
 unwrap_to_base_type(Ty) when is_binary(Ty) -> Ty;
 unwrap_to_base_type({non_null, Ty}) -> unwrap_to_base_type(Ty);
 unwrap_to_base_type({list, Ty}) -> unwrap_to_base_type(Ty).
 
--spec unwrap_type(graphql_type()) -> graphql_type_resolution().
+-spec unwrap_type(graphql_type()) -> tycond().
 unwrap_type(Ty) ->
     unwrap_to_base_type(resolve_type(Ty)).
 
