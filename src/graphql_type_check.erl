@@ -283,7 +283,7 @@ schema_type([Tag]) -> {list, schema_type(Tag)};
 %% elaboration and optimization.
 schema_type(Tag) ->
     case graphql_schema:lookup(Tag) of
-        #scalar_type{ input_coerce = IC } -> {scalar, Tag, IC};
+        #scalar_type{} = SType -> SType;
         #enum_type{} -> {enum, Tag};
         #object_type{} -> {object, Tag};
         #input_object_type{} = IOType -> {input_object, IOType};
@@ -320,7 +320,7 @@ ty_of(Ctx, Path, {list, Ty}, {list, Ts}) when is_list(Ts) ->
     {list, [ty_of(Ctx, Path, Ty, T) || T <- Ts]}.
 
 ty_check(_Path, {scalar, Tag, V}, {scalar, Tag}) -> {replace, V};
-ty_check(Path, {scalar, Tag, V}, {scalar, Tag, IC}) ->
+ty_check(Path, {scalar, Tag, V}, #scalar_type { id = Tag, input_coerce = IC }) ->
     case IC(V) of
         {ok, V} -> ok;
         {ok, NV} -> {replace, NV};
