@@ -328,9 +328,7 @@ ty_of(_Ctx, _Path, _, {object, Fields}) -> {object, Fields};
 ty_of(Ctx, Path, {list, Ty}, {list, Ts}) when is_list(Ts) ->
     {list, [ty_of(Ctx, Path, Ty, T) || T <- Ts]}.
 
-ty_check(_Path, {scalar, Tag, V}, {scalar, Tag}) ->
-    ok = builtin(Tag),
-    {replace, V};
+ty_check(_Path, {scalar, Tag, V}, {scalar, Tag}) -> {replace, V};
 ty_check(Path, {scalar, Tag, V}, {scalar, Tag, IC}) ->
     case IC(V) of
         {ok, V} -> ok;
@@ -393,9 +391,3 @@ scalar(_) -> false.
 non_null({non_null, _Ty}) -> true;
 non_null(_) -> false.
 
-%% Builtin types
-builtin(string) -> ok;
-builtin(id) -> ok;
-builtin(float) -> ok;
-builtin(int) -> ok;
-builtin(bool) -> ok.
