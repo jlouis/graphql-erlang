@@ -16,7 +16,7 @@ tc(Ctx, Path, Clauses) ->
    FragCtx = Ctx#{ fragenv => tc_mk_fragenv(Fragments) },
    NewClauses = tc_clauses(FragCtx, Path, Clauses),
    {ok, #{
-       fun_env => tc_funenv(NewClauses),
+       fun_env => mk_funenv(NewClauses),
        ast => {document, NewClauses}
    }}.
 
@@ -28,12 +28,13 @@ tc_clause(Ctx, Path, #op{} = Op) -> tc_op(Ctx, Path, Op).
 
 %% -- MK OF FUNENV ------------------------------
 
-tc_funenv(Ops) -> tc_funenv(Ops, #{}).
-tc_funenv([], FunEnv) -> FunEnv;
-tc_funenv([#frag{} | Next], FunEnv) -> tc_funenv(Next, FunEnv);
-tc_funenv([#op { id = OpName, vardefs = VDefs } | Next], FunEnv) ->
-    VarEnv = tc_mk_varenv([], VDefs),
-    tc_funenv(Next, FunEnv#{ name(OpName) => VarEnv }).
+mk_funenv(Ops) -> mk_funenv(Ops, #{}).
+
+mk_funenv([], FunEnv) -> FunEnv;
+mk_funenv([#frag{} | Next], FunEnv) -> mk_funenv(Next, FunEnv);
+mk_funenv([#op { id = OpName, vardefs = VDefs } | Next], FunEnv) ->
+    VarEnv = mk_varenv([], VDefs),
+    mk_funenv(Next, FunEnv#{ graphql_ast:name(OpName) => VarEnv }).
 
 %% -- TYPE CHECK OF PARAMETER ENVS ------------------
 -spec x_params(any(), any(), any()) -> graphql:param_context().
@@ -198,7 +199,7 @@ fragments(Clauses) ->
       Clauses).
 
 tc_mk_fragenv(Frags) ->
-    F = fun(#frag { id = ID, ty = Ty }) -> {name(ID), Ty} end,
+    F = fun(#frag { id = ID, ty = Ty }) -> {graphql_ast:name(ID), Ty} end,
     maps:from_list(
        [F(Frg) || Frg <- Frags]).
 
@@ -208,14 +209,14 @@ tc_frag(Ctx, Path, #frag {selection_set = SSet} = Frag) ->
 %% -- OPERATIONS -------------------------------
 
 tc_op(Ctx, Path, #op { vardefs = VDefs, selection_set = SSet} = Op) ->
-    VarEnv = tc_mk_varenv([Op | Path], VDefs),
+    VarEnv = mk_varenv([Op | Path], VDefs),
     Op#op { selection_set = tc_sset(Ctx#{ varenv => VarEnv }, [Op | Path], SSet) }.
 
 %% -- SELECTION SETS ------------------------------------
 tc_sset(Ctx, Path, SSet) -> [tc_field(Ctx, Path, S) || S <- SSet].
 
 tc_field(#{ fragenv := FE }, Path, #frag_spread { id = ID } = FSpread) ->
-    Name = name(ID),
+    Name = graphql_ast:name(ID),
     case maps:get(Name, FE, not_found) of
         not_found ->
             graphql_err:abort(Path, {unknown_fragment, Name});
@@ -257,7 +258,7 @@ tc_args(Ctx, Path, Args, Schema) ->
 
 tc_args_(_Ctx, _Path, [], _Schema) -> [];
 tc_args_(Ctx, Path, [{ID, {Ty, Val}} = A | Next], Schema) ->
-    Name = name(ID),
+    Name = graphql_ast:name(ID),
     case ty_check(Path, ty_of(Ctx, Path, unwrap_type(Ty), Val), schema_type(Ty)) of
         ok ->
             [A | tc_args_(Ctx, Path, Next, Schema)];
@@ -301,7 +302,7 @@ schema_type(Tag) ->
     end.
 
 ty_of(#{ varenv := VE }, Path, _, {var, ID}) ->
-    Name = name(ID),
+    Name = graphql_ast:name(ID),
     case maps:get(Name, VE, not_found) of
         not_found ->
             graphql_err:abort(Path, {unbound_variable, Name});
@@ -356,20 +357,20 @@ input_object_type_scheme(Obj) when is_list(Obj) ->
 
 in_obj_ty_scheme([]) -> [];
 in_obj_ty_scheme([ {Key, Val} | Fields ]) ->
-    N = name(Key),
+    N = graphql_ast:name(Key),
     [{N, Val} | in_obj_ty_scheme(Fields) ].
 
 %% -- VARENV -------------------------------------
-tc_mk_varenv(Path, VDefs) ->
+mk_varenv(Path, VDefs) ->
     maps:from_list(
-       [{name(Var), {varenv_ty_coerce(Path, Ty), Def}}
+       [{graphql_ast:name(Var), {varenv_ty_coerce(Path, Ty), Def}}
            || #vardef { id = Var, ty = Ty, default = Def } <- VDefs]).
 
 varenv_ty_coerce(_Path, {scalar, X}) -> {scalar, X};
 varenv_ty_coerce(Path, {list, T}) -> {list, varenv_ty_coerce(Path, T)};
 varenv_ty_coerce(Path, {non_null, T}) -> {non_null, varenv_ty_coerce(Path, T)};
 varenv_ty_coerce(Path, T) ->
-    N = name(T),
+    N = graphql_ast:name(T),
     case graphql_schema:lookup(N) of
         not_found -> graphql_err:abort(Path, {unknown_type, N});
         #enum_type{} -> {enum, N};
@@ -379,9 +380,6 @@ varenv_ty_coerce(Path, T) ->
     end.
 
 %% -- AST MANIPULATION -------------------------
-name('ROOT') -> <<"ROOT">>;
-name({name, N, _}) -> N;
-name({var, N}) -> name(N).
 
 %% True if input is a scalar value
 scalar(S) when is_binary(S) -> true;
