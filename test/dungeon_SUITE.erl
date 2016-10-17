@@ -15,10 +15,12 @@ end_per_suite(_Config) ->
     ok.
 
 init_per_group(dungeon, Config) ->
+    {ok, Doc} = read_doc(Config, "dungeon.graphql"),
+
     ok = dungeon:inject(),
     ok = dungeon:start(),
     ok = graphql:validate_schema(),
-    Config;
+    [{document, Doc} | Config];
 init_per_group(_Group, Config) ->
     Config.
 
@@ -46,59 +48,57 @@ groups() ->
 all() -> [
     {group, dungeon} ].
     
+read_doc(Config, File) ->
+    DocFile = filename:join(
+                [?config(data_dir, Config), File]),
+    file:read_file(DocFile).
+    
+run(Config, Q, Params) ->
+    Doc = ?config(document, Config),
+    th:x(Config, Doc, Q, Params).
+
+run(Config, File, Q, Params) ->
+    {ok, Doc} = read_doc(Config, File),
+    th:x(Config, Doc, Q, Params).
 
 unions(Config) ->
     ct:log("Initial query on the schema"),
     Goblin = base64:encode(<<"monster:1">>),
-    Q1 = "{ goblin: monster(id: \"" ++ binary_to_list(Goblin) ++ "\") { id name hitpoints } }",
-    #{ data := #{
-        <<"goblin">> := #{
-            <<"id">> := Goblin,
-            <<"name">> := <<"goblin">>,
-            <<"hitpoints">> := 10 }}} = th:x(Config, Q1),
-            
+    Expected1 = #{ data => #{
+                     <<"goblin">> => #{
+                         <<"id">> => Goblin,
+                         <<"name">> => <<"goblin">>,
+                         <<"hitpoints">> => 10 }}},
+    Expected1 = run(Config, <<"GoblinQuery">>, #{ <<"id">> => Goblin }),
     ct:log("Same query, but on items"),
-    Q2 =
-        "{ goblin: thing(id: \"" ++ binary_to_list(Goblin) ++ "\") { ...MonsterFragment } } "
-        "fragment MonsterFragment on Monster { id name hitpoints }",
-    #{ data := #{
-        <<"goblin">> := #{
-            <<"id">> := Goblin,
-            <<"name">> := <<"goblin">>,
-            <<"hitpoints">> := 10 }}} = th:x(Config, Q2),
+    Expected2 = #{ data => #{
+                     <<"goblin">> => #{
+                         <<"id">> => Goblin,
+                         <<"name">> => <<"goblin">>,
+                         <<"hitpoints">> => 10 }}},
+    Expected2 = run(Config, <<"GoblinThingQuery">>, #{ <<"id">> => Goblin }),
     ok.
 
 union_errors(Config) ->
     ct:log("You may not request fields on unions"),
-    Q1 = "{ goblin: thing(id: \"bW9uc3Rlcjox\") { id} }",
+    Q1 = "{ goblin: thing(id: \"bW9uc3Rlcjox\") { id } }",
     th:errors(th:x(Config, Q1)),
     ok.
 
 scalar_output_coercion(Config) ->
     ct:log("Test output coercion"),
     Goblin = base64:encode(<<"monster:1">>),
-    Q1 = "{ goblin: monster(id: \"" ++ binary_to_list(Goblin) ++ "\") { id name hitpoints color } }",
     #{ data := #{
         <<"goblin">> := #{
             <<"id">> := Goblin,
             <<"name">> := <<"goblin">>,
             <<"color">> := <<"#41924B">>,
-            <<"hitpoints">> := 10 }}} = th:x(Config, Q1),
+            <<"hitpoints">> := 10 }}} =
+        run(Config, <<"ScalarOutputCoercion">>, #{ <<"id">> => Goblin }),
     ok.
 
 populate(Config) ->
     ct:log("Create a monster in the dungeon"),
-    QM =
-        "mutation IMonster($input : IntroduceMonsterInput!) { "
-        "  introduceMonster(input: $input) { "
-        "    clientMutationId "
-        "    monster { "
-        "     id "
-        "     name "
-        "     color "
-        "     hitpoints "
-        "     mood "
-        "    }}}",
     Input = #{
       <<"clientMutationId">> => <<"MUTID">>,
       <<"name">> => <<"orc">>,
@@ -116,20 +116,20 @@ populate(Config) ->
                          <<"hitpoints">> => 30,
                          <<"mood">> => <<"AGGRESSIVE">>}
                       }}},
-    Expected = th:x(Config, QM, <<"IMonster">>, #{ <<"input">> => Input }),
+    Expected = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input }),
 
     ct:log("Missing names should lead to failure"),
     MissingNameInput = #{
       <<"clientMutationId">> => <<"MUTID">>,
       <<"hitpoints">> => 30
      },
-    th:errors(th:x(Config, QM, <<"IMonster">>, #{ <<"input">> => MissingNameInput })),
+    th:errors(run(Config, <<"IntroduceMonster">>, #{ <<"input">> => MissingNameInput })),
     
     ct:log("Missing an input field should lead to failure"),
-    th:errors(th:x(Config, QM, <<"IMonster">>, #{ })),
+    th:errors(run(Config, <<"IntroduceMonster">>, #{})),
     
     ct:log("Using the wrong type should lead to failure"),
-    th:errors(th:x(Config, QM, <<"IMonster">>,
+    th:errors(run(Config, <<"IntroduceMonster">>,
         #{ <<"input">> => Input#{ <<"hitpoints">> := <<"hello">> }})),
 
     ct:log("Creating with a default parameter"),
@@ -149,17 +149,12 @@ populate(Config) ->
                          <<"mood">> => <<"DODGY">>
                        }
          }}},
-    HobgoblinExpected = th:x(Config, QM, <<"IMonster">>, #{ <<"input">> => HobgoblinInput }),
+    HobgoblinExpected =
+        run(Config,
+            <<"IntroduceMonster">>,
+            #{ <<"input">> => HobgoblinInput }),
     
     ct:log("Create a room"),
-    QR =
-        "mutation IRoom($input : IntroduceRoomInput!) { "
-        "  introduceRoom(input: $input) { "
-        "    clientMutationId "
-        "    room { "
-        "     id "
-        "     description "
-        "    }}}",
     RoomInput = #{
         <<"clientMutationId">> => <<"MUTID">>,
         <<"description">> => <<"This is the dungeon entrance">> },
@@ -170,23 +165,9 @@ populate(Config) ->
                          <<"id">> => base64:encode(<<"room:1">>),
                          <<"description">> => <<"This is the dungeon entrance">> }
                       }}},
-    ExpectedR = th:x(Config, QR, <<"IRoom">>, #{ <<"input">> => RoomInput }),
+    ExpectedR = run(Config, <<"IntroduceRoom">>, #{ <<"input">> => RoomInput }),
     
     ct:log("Put a monster in a room"),
-    QPut =
-        "mutation SM($input : SpawnMinionInput!) { "
-        "  spawnMinion(input: $input) { "
-        "    clientMutationId "
-        "    room { "
-        "      id "
-        "      description "
-        "      contents { ...SimpleMonster }"
-        "    } "
-        "    monster { "
-        "      name "
-        "      id "
-        "    }}} "
-        " fragment SimpleMonster on Monster { name hitpoints }",
     SpawnInput = #{
         <<"clientMutationId">> => <<"MUTID">>,
         <<"monsterId">> => base64:encode(<<"monster:2">>),
@@ -202,21 +183,10 @@ populate(Config) ->
                          <<"id">> => base64:encode(<<"monster:2">>),
                          <<"name">> => <<"orc">> }
                       }}},
-    ExpectedSM = th:x(Config, QPut, <<"SM">>, #{ <<"input">> => SpawnInput }),
+    ExpectedSM = run(Config, <<"SpawnMinion">>, #{ <<"input">> => SpawnInput }),
     ok.
 
 direct_input(Config) ->
-    QM =
-        "mutation IMonster { "
-        "  introduceMonster(input: {name: \"Albino Hobgoblin\", color: \"#ffffff\", hitpoints: 5, mood: AGGRESSIVE}) { "
-        "    clientMutationId "
-        "    monster { "
-        "     id "
-        "     name "
-        "     color "
-        "     hitpoints "
-        "     mood "
-        "    }}}",
     Expected = #{ data => #{
         <<"introduceMonster">> => #{
             <<"clientMutationId">> => null,
@@ -227,53 +197,42 @@ direct_input(Config) ->
                 <<"hitpoints">> => 5,
                 <<"mood">> => <<"AGGRESSIVE">>}
         }}},
-    Expected = th:x(Config, QM).
+    Input = #{
+      <<"name">> => <<"Albino Hobgoblin">>,
+      <<"color">> => <<"#ffffff">>,
+      <<"hitpoints">> => 5,
+      <<"mood">> => <<"AGGRESSIVE">>
+    },
+    Expected = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input}),
+    ok.
 
 inline_fragment(Config) ->
     ID = base64:encode(<<"monster:1">>),
-    Q =
-      "query TEST { "
-      "  thing(id: \"" ++ binary_to_list(ID) ++ "\") { "
-      "     ... on Monster { "
-      "         id hitpoints "
-      "     } "
-      "  } "
-      "}",
     Expected = #{ data => #{
         <<"thing">> => #{
             <<"id">> => ID,
             <<"hitpoints">> => 10 }
     }},
-    Expected = th:x(Config, Q).
+    Expected = run(Config, <<"InlineFragmentTest">>, #{ <<"id">> => ID }),
+    ok.
 
 fragment_over_union_interface(Config) ->
     ID = base64:encode(<<"monster:1">>),
-    Q = "query TEST { monster(id: \"" ++ binary_to_list(ID) ++ "\") { "
-        " ... on Thing { ... on Monster { id } } } }",
     Expected = #{ data => #{
     	<<"monster">> => #{
     		<<"id">> => ID }}},
-    Expected = th:x(Config, Q),
+    Expected = run(Config, <<"FragmentOverUnion1">>, #{ <<"id">> => ID }),
     ct:log("Same as before, but on a named fragment instead"),
-    Q2 =
-        "query TEST { monster(id: \"" ++ binary_to_list(ID) ++ "\") { "
-        "   ... TFrag } } "
-        " fragment TFrag on Thing { ... on Monster { id } } ",
-    Expected = th:x(Config, Q2),
-    
+    Expected = run(Config, <<"FragmentOverUnion2">>, #{ <<"id">> => ID }),
     ct:log("Same as before, but via an interface type"),
-    Q3 =
-        "query TEST { monster(id: \"" ++ binary_to_list(ID) ++ "\") { "
-        "   ... on Node { id } } } ",
-    Expected = th:x(Config, Q3),
+    Expected = run(Config, <<"FragmentOverUnion3">>, #{ <<"id">> => ID }),
     ok.
 
 simple_field_merge(Config) ->
     ID = base64:encode(<<"monster:1">>),
-    Q = "query TEST { monster(id: \"" ++ binary_to_list(ID) ++ "\") { "
-        " id hitpoints hitpoints } }",
     Expected = #{ data => #{
     	<<"monster">> => #{
     		<<"id">> => ID,
     		<<"hitpoints">> => 10 }}},
-    Expected = th:x(Config, Q).
+    Expected = run(Config, <<"TestFieldMerge">>, #{ <<"id">> => ID }),
+    ok.

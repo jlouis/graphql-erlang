@@ -1,0 +1,126 @@
+## QUERIES
+
+query GoblinQuery($id : Id!) {
+  goblin: monster(id: $id) {
+    id
+    name
+    hitpoints
+  }
+}
+
+query GoblinThingQuery($id : Id!) {
+  goblin: thing(id: $id) {
+    ...MonsterFragment
+  }
+}
+
+query ScalarOutputCoercion($id : Id!) {
+  goblin: monster(id: $id) {
+    ...MonsterFragment
+    color
+  }
+}
+
+query InlineFragmentTest($id : Id!) {
+  thing(id: $id) {
+    ... on Monster {
+      id
+      hitpoints
+    }
+  }
+}
+
+query FragmentOverUnion1($id: Id!) {
+  monster(id: $id) {
+    ... on Thing {
+      ... on Monster {
+        id
+      }
+    }
+  }
+}
+
+query FragmentOverUnion2($id: Id!) {
+  monster(id: $id) {
+    ...UnionThingFragment
+  }
+}
+
+fragment UnionThingFragment on Thing {
+  ... on Monster {
+    id
+  }
+}
+
+query FragmentOverUnion3($id: Id!) {
+  monster(id: $id) {
+    ... on Node {
+      id
+    }
+  }
+}
+
+query TestFieldMerge($id: Id!) {
+  monster(id: $id) {
+    id
+    hitpoints
+    hitpoints
+  }
+}
+
+## MUTATIONS
+mutation IntroduceMonster($input: IntroduceMonsterInput!) {
+  introduceMonster(input: $input) {
+    clientMutationId
+    monster {
+      ...FatMonsterFragment
+    }
+  }
+}
+
+mutation IntroduceRoom($input: IntroduceRoomInput!) {
+  introduceRoom(input: $input) {
+    clientMutationId
+    room {
+      ...RoomFragment
+    }
+  }
+}
+
+mutation SpawnMinion($input: SpawnMinionInput!) {
+  spawnMinion(input: $input) {
+    clientMutationId
+    room {
+      ...RoomFragment
+      contents { ...SimpleMonster }
+    }
+    monster {
+      name
+      id
+    }
+  }
+}
+
+## FRAGS
+
+fragment MonsterFragment on Monster {
+  id
+  name
+  hitpoints
+}
+
+fragment SimpleMonster on Monster {
+  name
+  hitpoints
+}
+
+fragment FatMonsterFragment on Monster {
+  ...MonsterFragment
+  color
+  mood
+}
+
+fragment RoomFragment on Room {
+  id
+  description
+}
