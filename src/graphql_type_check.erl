@@ -315,7 +315,7 @@ ty_of(_Ctx, _Path, _, I) when is_integer(I) -> {scalar, int, I};
 ty_of(_Ctx, _Path, _, F) when is_float(F) -> {scalar, float, F};
 ty_of(_Ctx, _Path, _, true) -> {scalar, bool, true};
 ty_of(_Ctx, _Path, _, false) -> {scalar, bool, false};
-ty_of(_Ctx, _Path, _, Obj) when is_map(Obj) -> {object, coerce_object(Obj)};
+ty_of(_Ctx, _Path, _, Obj) when is_map(Obj) -> coerce_object(Obj);
 ty_of(Ctx, Path, {list, Ty}, {list, Ts}) when is_list(Ts) ->
     {list, [ty_of(Ctx, Path, Ty, T) || T <- Ts]}.
 
@@ -338,7 +338,7 @@ ty_check(Path, {scalar, Tag, V}, #scalar_type { id = Tag, input_coerce = IC }) -
         {error, Reason} ->
             graphql_err:abort(Path, {input_coercion, Tag, V, Reason})
     end;
-ty_check(Path, {object, Obj}, {input_object, #input_object_type{} = Ty}) when is_map(Obj) ->
+ty_check(Path, Obj, {input_object, #input_object_type{} = Ty}) when is_map(Obj) ->
     check_input_object(Path, Ty, Obj);
 %% Failure:
 ty_check(_Path, A, T) -> {error, A, T}.
