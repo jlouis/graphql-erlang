@@ -1,3 +1,6 @@
+%%% @doc Type checking of GraphQL query documents
+%%%
+%%% @end
 -module(graphql_type_check).
 
 -include("graphql_internal.hrl").
@@ -5,15 +8,26 @@
 
 -export([x/1, x_params/3]).
 
+
+%% -- TOP LEVEL TYPE CHECK CODE -------------------------------
+
+%% Type checking proceeds by the ordinary way of writing a type
+%% checker. First we split the input query document definitions, which
+%% we call "Clauses", into its fragments and the remaining operations.
+%% Next, we create an environment of fragments, so we can refer to
+%% their types as we type check other things.
+%%
+%% Type checking then proceeds one Clause at a time.
 -spec x(graphql:ast()) -> {ok, #{ atom() => any()}}.
-x(Doc) -> x(#{}, Doc).
+x(Doc) ->
+    x(#{}, Doc).
 
 x(Ctx, {document, Clauses}) ->
    tc(Ctx, [document], Clauses).
 
 tc(Ctx, Path, Clauses) ->
    {Fragments, _Rest} = fragments(Clauses),
-   FragCtx = Ctx#{ fragenv => tc_mk_fragenv(Fragments) },
+   FragCtx = Ctx#{ fragenv => mk_fragenv(Fragments) },
    NewClauses = tc_clauses(FragCtx, Path, Clauses),
    {ok, #{
        fun_env => mk_funenv(NewClauses),
@@ -28,6 +42,12 @@ tc_clause(Ctx, Path, #op{} = Op) -> tc_op(Ctx, Path, Op).
 
 %% -- MK OF FUNENV ------------------------------
 
+%% The function environment encodes a mapping from the name of a query
+%% or mutation into the vars/params it accepts and their corresponding
+%% type scheme. This allows us to look up a function call via the
+%% variable environment later when we execute a given function in the
+%% GraphQL Schema.
+
 mk_funenv(Ops) -> mk_funenv(Ops, #{}).
 
 mk_funenv([], FunEnv) -> FunEnv;
@@ -37,32 +57,44 @@ mk_funenv([#op { id = OpName, vardefs = VDefs } | Next], FunEnv) ->
     mk_funenv(Next, FunEnv#{ graphql_ast:name(OpName) => VarEnv }).
 
 %% -- TYPE CHECK OF PARAMETER ENVS ------------------
+
+%% GraphQL queries are really given in two stages. One stage is the
+%% query document containing (static) queries which take parameters.
+%% These queries can be seen as functions (stored procedures) you can
+%% call.
+%%
+%% If called, we get a function name, and a set of parameters for that
+%% function. So we have to go through the concrete parameters and type
+%% check them against the function environment type schema. If the
+%% input parameters can not be coerced into the parameters expected by
+%% the function scheme, and error occurs.
+
 -spec x_params(any(), any(), any()) -> graphql:param_context().
 x_params(_FunEnv, undefined, #{}) -> #{};
-x_params(_FunEnv, undefined, _) ->
-    graphql_err:abort([], params_on_unnamed);
-x_params(FunEnv, OpName, Vars) ->
+x_params(_FunEnv, undefined, _) -> graphql_err:abort([], params_on_unnamed);
+x_params(FunEnv, OpName, Params) ->
     case maps:get(OpName, FunEnv, not_found) of
         not_found ->
            graphql_err:abort([], {operation_not_found, OpName});
-        VarEnv -> tc_params([OpName], maps:to_list(VarEnv), Vars)
+        TyVarEnv ->
+            tc_params([OpName], TyVarEnv, Params)
     end.
 
-tc_params(Path, Args, Params) ->
+tc_params(Path, TyVarEnv, InitialParams) ->
     F = 
-      fun({K, _} = P, St) ->
-        case tc_param(Path, P, maps:get(K, St, not_found)) of
-            ok -> St;
-            {replace, V} -> St#{ K => V }
+      fun(K, V0, PS) ->
+        case tc_param(Path, K, V0, maps:get(K, PS, not_found)) of
+            ok -> PS;
+            {replace, V1} -> PS#{ K => V1 }
         end
       end,
-    lists:foldl(F, Params, Args).
+    maps:fold(F, InitialParams, (TyVarEnv)).
     
-tc_param(Path, {K, {{non_null, _}, _Default}}, not_found) ->
+tc_param(Path, K, {{non_null, _}, _Default}, not_found) ->
     graphql_err:abort([K | Path], missing_non_null_param);
-tc_param(_Path, {_K, {_Ty, Default}}, not_found) ->
+tc_param(_Path, _K, {_Ty, Default}, not_found) ->
     {replace, Default};
-tc_param(Path, {K, {Ty, _}}, Val) ->
+tc_param(Path, K, {Ty, _}, Val) ->
     check_param([K | Path], Ty, Val).
     
 %% When checking params, the top level has been elaborated by the
@@ -197,7 +229,7 @@ fragments(Clauses) ->
       end,
       Clauses).
 
-tc_mk_fragenv(Frags) ->
+mk_fragenv(Frags) ->
     F = fun(#frag { id = ID, ty = Ty }) -> {graphql_ast:name(ID), Ty} end,
     maps:from_list(
        [F(Frg) || Frg <- Frags]).
