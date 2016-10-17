@@ -100,6 +100,7 @@ tc_param(Path, K, {Ty, _}, Val) ->
 %% When checking params, the top level has been elaborated by the
 %% elaborator, but the levels under it has not. So we have a case where
 %% we need to look up underlying types and check them.
+
 check_param(Path, {non_null, Ty}, V) -> check_param(Path, Ty, V);
 check_param(Path, {scalar, Sc}, V) -> input_coerce_scalar(Path, Sc, V);
 check_param(Path, {enum, Ty}, {enum, V}) when is_binary(V) ->
@@ -134,7 +135,7 @@ check_param(Path, {input_object, T}, Obj) ->
 %% The following expands un-elaborated (nested) types
 check_param(Path, Ty, V) when is_binary(Ty) ->
     case graphql_schema:lookup(Ty) of
-        #scalar_type {} -> input_coerce_scalar(Path, Ty, V);
+        #scalar_type {} = ScalarTy -> input_coerce_scalar(Path, ScalarTy, V);
         #input_object_type {} -> check_input_object(Path, Ty, V);
         #enum_type {} -> check_param(Path, {enum, Ty}, V);
         _ ->
@@ -204,20 +205,13 @@ coerce_scalar(Ty, _)
       Ty == float;
       Ty == bool ->
     {error, {type_mismatch, #{ schema => {scalar, Ty}}}};
-coerce_scalar(Ty, Val) ->
-    case graphql_schema:lookup(Ty) of
-        not_found ->
-            {error, scalar_type_not_found};
-        #scalar_type { input_coerce = IC } ->
-            try IC(Val) of
-                {ok, NewVal} -> {replace, NewVal};
-                {error, Reason} -> {error, Reason}
-            catch
-                Cl:Err ->
-                    {error, {input_coerce_abort, {Cl, Err}}}
-            end;
-        _ ->
-            {error, {not_scalar_type, Ty}}
+coerce_scalar(#scalar_type { input_coerce = IC }, Val) ->
+    try IC(Val) of
+        {ok, NewVal} -> {replace, NewVal};
+        {error, Reason} -> {error, Reason}
+    catch
+        Cl:Err ->
+            {error, {input_coerce_abort, {Cl, Err}}}
     end.
 
 %% -- FRAGMENTS --------------------------------
