@@ -258,7 +258,7 @@ tc_args(Ctx, Path, Args, Schema) ->
 tc_args_(_Ctx, _Path, [], _Schema) -> [];
 tc_args_(Ctx, Path, [{ID, {Ty, Val}} = A | Next], Schema) ->
     Name = graphql_ast:name(ID),
-    case ty_check(Path, ty_of(Ctx, Path, unwrap_type(Ty), Val), schema_type(Ty)) of
+    case ty_check(Path, ty_of(Ctx, Path, graphql_ast:unwrap_type(Ty), Val), schema_type(Ty)) of
         ok ->
             [A | tc_args_(Ctx, Path, Next, Schema)];
         {replace, RVal } ->
@@ -274,11 +274,6 @@ uniq([]) -> ok;
 uniq([_]) -> ok;
 uniq([{X, _}, {X, _} | _]) -> {error, {unique, X}};
 uniq([_ | Next]) -> uniq(Next).
-
-unwrap_type({non_null, Ty}) -> unwrap_type(Ty);
-unwrap_type([Ty]) -> {list, unwrap_type(Ty)};
-unwrap_type(X) -> X.
-
 
 schema_type({scalar, X}) when is_atom(X) -> {scalar, X};
 schema_type({scalar, Tag}) when is_binary(Tag) ->
