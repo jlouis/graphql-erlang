@@ -160,36 +160,23 @@ check_object_fields(Path, [{Name, #schema_arg { ty = Ty, default = Def }} | Next
             end
     end,
     check_object_fields(Path, Next, maps:remove(Name, Obj), Result#{ Name => Val }).
-                
-input_coerce_scalar(Path, Ty, V) ->
-    case coerce_scalar(Ty, V) of
-        ok -> ok;
-        {replace, V2} -> {replace, V2};
-        {error, Reason} -> graphql_err:abort(Path, Reason)
-    end.
-    
-coerce_scalar(id, V) when is_binary(V) -> ok;
-coerce_scalar(string, V) when is_binary(V) -> ok;
-coerce_scalar(int, V) when is_integer(V) -> ok;
-coerce_scalar(float, V) when is_float(V) -> ok;
-coerce_scalar(bool, true) -> ok;
-coerce_scalar(bool, false) -> ok;
-coerce_scalar(Ty, _)
-  when
-      Ty == id;
-      Ty == string;
-      Ty == int;
-      Ty == float;
-      Ty == bool ->
-    {error, {type_mismatch, #{ schema => {scalar, Ty}}}};
-coerce_scalar(#scalar_type { input_coerce = IC }, Val) ->
+
+input_coerce_scalar(_Path, id, V) when is_binary(V) -> ok;
+input_coerce_scalar(_Path, string, V) when is_binary(V) -> ok;
+input_coerce_scalar(_Path, int, V) when is_integer(V) -> ok;
+input_coerce_scalar(_Path, float, V) when is_float(V) -> ok;
+input_coerce_scalar(_Path, bool, true) -> ok;
+input_coerce_scalar(_Path, bool, false) -> ok;
+input_coerce_scalar(Path, #scalar_type { input_coerce = IC }, Val) ->
     try IC(Val) of
         {ok, NewVal} -> {replace, NewVal};
-        {error, Reason} -> {error, Reason}
+        {error, Reason} -> graphql_err:abort(Path, Reason)
     catch
         Cl:Err ->
-            {error, {input_coerce_abort, {Cl, Err}}}
-    end.
+            graphql_err:abort(Path, {input_coerce_abort, {Cl, Err}})
+    end;
+input_coerce_scalar(Path, Ty, _V) ->
+    graphql_err:abort(Path, {type_mismatch, #{ schema => {scalar, Ty}}}).
 
 %% -- FRAGMENTS --------------------------------
 
