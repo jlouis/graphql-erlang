@@ -66,7 +66,7 @@ path(Path) ->
            F(#interface_type { id = ID }) -> name(ID);
            F(#union_type { id = ID }) -> name(ID);
            F(#object_type { id = ID }) -> name(ID);
-           F({name, N, _} = Name) -> name(Name);
+           F({name, _, _} = Name) -> name(Name);
            F(I) when is_integer(I) -> integer_to_binary(I);
            F(B) when is_binary(B) -> B;
            F(L) when is_list(L) ->
