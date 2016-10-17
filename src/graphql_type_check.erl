@@ -137,10 +137,7 @@ check_param(Path, Ty, V) ->
     graphql_err:abort(Path, {param_mismatch, Ty, V}).
 
 check_input_object(Path, #input_object_type{ fields = Fields }, Obj) ->
-    {replace, check_object_fields(Path, maps:to_list(Fields), coerce_object(Obj), #{})}.
-
-coerce_object(#{} = Obj) -> Obj;
-coerce_object({object, Obj}) -> input_object_type_scheme(Obj).
+    {replace, check_object_fields(Path, maps:to_list(Fields), Obj, #{})}.
 
 check_object_fields(Path, [], Obj, Result) ->
     case maps:size(Obj) of
@@ -330,7 +327,7 @@ ty_of(_Ctx, _Path, _, I) when is_integer(I) -> {scalar, int, I};
 ty_of(_Ctx, _Path, _, F) when is_float(F) -> {scalar, float, F};
 ty_of(_Ctx, _Path, _, true) -> {scalar, bool, true};
 ty_of(_Ctx, _Path, _, false) -> {scalar, bool, false};
-ty_of(_Ctx, _Path, _, {object, Fields}) -> {object, Fields};
+ty_of(_Ctx, _Path, _, Obj) when is_map(Obj) -> {object, coerce_object(Obj)};
 ty_of(Ctx, Path, {list, Ty}, {list, Ts}) when is_list(Ts) ->
     {list, [ty_of(Ctx, Path, Ty, T) || T <- Ts]}.
 
@@ -351,18 +348,17 @@ ty_check(Path, {list, As}, {list, T}) ->
         true -> ok;
         false -> {error, {list, T}}
     end;
-ty_check(Path, {object, Obj}, {input_object, #input_object_type{} = Ty}) ->
-    check_input_object(Path, Ty, input_object_type_scheme(Obj));
+ty_check(Path, {object, Obj}, {input_object, #input_object_type{} = Ty}) when is_map(Obj) ->
+    check_input_object(Path, Ty, Obj);
 ty_check(_Path, A, T) -> {error, A, T}.
 
-input_object_type_scheme(Obj) when is_list(Obj) ->
-    TypSchema = in_obj_ty_scheme(Obj),
-    maps:from_list(TypSchema).
-
-in_obj_ty_scheme([]) -> [];
-in_obj_ty_scheme([ {Key, Val} | Fields ]) ->
-    N = graphql_ast:name(Key),
-    [{N, Val} | in_obj_ty_scheme(Fields) ].
+coerce_object(Obj) when is_map(Obj) ->
+    coerce_object_(Obj).
+    
+coerce_object_(Obj) when is_map(Obj) ->
+    Elems = maps:to_list(Obj),
+    maps:from_list([{graphql_ast:name(K), coerce_object_(V)} || {K, V} <- Elems]);
+coerce_object_(Other) -> Other.
 
 %% -- VARENV -------------------------------------
 mk_varenv(Path, VDefs) ->

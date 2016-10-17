@@ -24,7 +24,8 @@ Nonterminals
   Type TypeCondition NamedTypeList NamedType ListType NonNullType
   
   Name KeywordName
-  Value EnumValue ListValue Values ObjectValue ObjectFields ObjectField.
+  Value EnumValue ListValue Values
+  InputObjectValue InputObjectFields InputObjectField.
 
 Terminals
   '{' '}' '(' ')' '[' ']' '!' ':' '@' '$' '=' '|' '...'
@@ -198,7 +199,7 @@ Value -> string : g_string('$1').
 Value -> bool : g_bool('$1').
 Value -> EnumValue : {enum, '$1'}.
 Value -> ListValue : {list, '$1'}.
-Value -> ObjectValue : {object, '$1'}.
+Value -> InputObjectValue : g_input_object('$1').
 
 EnumValue -> Name : g_enum('$1').
 
@@ -208,13 +209,13 @@ ListValue -> '[' Values ']' : '$2'.
 Values -> Value : ['$1'].
 Values -> Value Values : ['$1'|'$2'].
 
-ObjectValue -> '{' '}' : [].
-ObjectValue -> '{' ObjectFields '}' : '$2'.
+InputObjectValue -> '{' '}' : [].
+InputObjectValue -> '{' InputObjectFields '}' : '$2'.
 
-ObjectFields -> ObjectField : ['$1'].
-ObjectFields -> ObjectField ObjectFields : ['$1'|'$2'].
+InputObjectFields -> InputObjectField : ['$1'].
+InputObjectFields -> InputObjectField InputObjectFields : ['$1'|'$2'].
 
-ObjectField -> Name ':' Value : {'$1', '$3'}.
+InputObjectField -> Name ':' Value : {'$1', '$3'}.
 
 TypeDefinition -> ObjectTypeDefinition : '$1'.
 TypeDefinition -> InterfaceTypeDefinition : '$1'.
@@ -299,3 +300,5 @@ g_integer({int, I, _}) -> I.
 g_float({float, F, _}) -> F.
 g_string({string, S, _}) -> S.
 g_bool({bool, B, _}) -> B.
+
+g_input_object(KVPairs) -> maps:from_list(KVPairs).
