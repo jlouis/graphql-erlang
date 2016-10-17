@@ -319,6 +319,17 @@ ty_of(_Ctx, _Path, _, Obj) when is_map(Obj) -> {object, coerce_object(Obj)};
 ty_of(Ctx, Path, {list, Ty}, {list, Ts}) when is_list(Ts) ->
     {list, [ty_of(Ctx, Path, Ty, T) || T <- Ts]}.
 
+%% EQ Match:
+ty_check(_Path, X, X) -> ok;
+%% Compound:
+ty_check(Path, {non_null, A}, T) -> ty_check(Path, A, T);
+ty_check(Path, A, {non_null, T}) -> ty_check(Path, A, T);
+ty_check(Path, {list, As}, {list, T}) ->
+    case lists:all(fun(X) -> ty_check(Path, X, T) == ok end, As) of
+        true -> ok;
+        false -> {error, {list, T}}
+    end;
+%% Ground:
 ty_check(_Path, {scalar, Tag, V}, {scalar, Tag}) -> {replace, V};
 ty_check(Path, {scalar, Tag, V}, #scalar_type { id = Tag, input_coerce = IC }) ->
     case IC(V) of
@@ -327,17 +338,9 @@ ty_check(Path, {scalar, Tag, V}, #scalar_type { id = Tag, input_coerce = IC }) -
         {error, Reason} ->
             graphql_err:abort(Path, {input_coercion, Tag, V, Reason})
     end;
-ty_check(_Path, X, X) -> ok; %% Perfect match always wins
-
-ty_check(Path, {non_null, A}, T) -> ty_check(Path, A, T);
-ty_check(Path, A, {non_null, T}) -> ty_check(Path, A, T);
-ty_check(Path, {list, As}, {list, T}) ->
-    case lists:all(fun(X) -> ty_check(Path, X, T) == ok end, As) of
-        true -> ok;
-        false -> {error, {list, T}}
-    end;
 ty_check(Path, {object, Obj}, {input_object, #input_object_type{} = Ty}) when is_map(Obj) ->
     check_input_object(Path, Ty, Obj);
+%% Failure:
 ty_check(_Path, A, T) -> {error, A, T}.
 
 coerce_object(Obj) when is_map(Obj) ->

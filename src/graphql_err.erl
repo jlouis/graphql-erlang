@@ -74,6 +74,7 @@ path(Path) ->
        end,
    lists:flatten([F(Elem) || Elem <- Path]).
 
+format_ty(#input_object_type { id = Ty }) -> Ty;
 format_ty({input_object, Ty}) -> Ty;
 format_ty({object, Fields}) ->
     FEs = format_fields(Fields),
