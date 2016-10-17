@@ -121,22 +121,13 @@ check_param(Path, {list, T}, L) when is_list(L) ->
             {replace, X2} -> X2
         end || X <- L],
     {replace, NewList};
-check_param(Path, [T], {list, L}) when is_list(L) ->
-    %% Build a dummy structure to match the recursor. Unwrap this
-    %% structure before replacing the list parameter.
-    NewList = [
-        case check_param(Path, T, X) of
-            ok -> X;
-            {replace, X2} -> X2
-        end || X <- L],
-    {replace, NewList};
-check_param(Path, {input_object, T}, Obj) ->
-    check_input_object(Path, T, Obj);
+check_param(Path, {input_object, Ty}, Obj) ->
+    check_input_object(Path, Ty, Obj);
 %% The following expands un-elaborated (nested) types
 check_param(Path, Ty, V) when is_binary(Ty) ->
     case graphql_schema:lookup(Ty) of
         #scalar_type {} = ScalarTy -> input_coerce_scalar(Path, ScalarTy, V);
-        #input_object_type {} -> check_input_object(Path, Ty, V);
+        #input_object_type {} = IOType -> check_input_object(Path, IOType, V);
         #enum_type {} -> check_param(Path, {enum, Ty}, V);
         _ ->
             graphql_err:abort(Path, {param_mismatch, Ty, V})
@@ -145,19 +136,14 @@ check_param(Path, Ty, V) when is_binary(Ty) ->
 check_param(Path, Ty, V) ->
     graphql_err:abort(Path, {param_mismatch, Ty, V}).
 
-check_input_object(Path, T, Obj) ->
-    case graphql_schema:lookup(T) of
-        not_found ->
-            graphql_err:abort(Path, {unknown_type, T});
-        #input_object_type{ fields = Fields } ->
-            {replace, check_object_fields(Path, maps:to_list(Fields), coerce_object(Obj), #{})};
-        #interface_type{ id = ID } ->
-            graphql_err:abort(Path, {invalid_input_type, ID});
-        #object_type{ id = ID } ->
-            graphql_err:abort(Path, {invalid_input_type, ID});
-        #union_type { id = ID } ->
-            graphql_err:abort(Path, {invalid_input_type, ID})
-    end.
+check_input_object(Path, #input_object_type{ fields = Fields }, Obj) ->
+    {replace, check_object_fields(Path, maps:to_list(Fields), coerce_object(Obj), #{})};
+check_input_object(Path, #interface_type{ id = ID }, _Obj) ->
+    graphql_err:abort(Path, {invalid_input_type, ID});
+check_input_object(Path, #object_type{ id = ID }, _Obj) ->
+    graphql_err:abort(Path, {invalid_input_type, ID});
+check_input_object(Path, #union_type { id = ID }, _Obj) ->
+    graphql_err:abort(Path, {invalid_input_type, ID}).
 
 coerce_object(#{} = Obj) -> Obj;
 coerce_object({object, Obj}) -> input_object_type_scheme(Obj).
@@ -321,7 +307,7 @@ schema_type(Tag) ->
         #scalar_type{ input_coerce = IC } -> {scalar, Tag, IC};
         #enum_type{} -> {enum, Tag};
         #object_type{} -> {object, Tag};
-        #input_object_type{} -> {input_object, Tag};
+        #input_object_type{} = IOType -> {input_object, IOType};
         #interface_type{} -> {interface, Tag};
         not_found ->
             exit({schema_not_found, Tag})
@@ -371,7 +357,7 @@ ty_check(Path, {list, As}, {list, T}) ->
         true -> ok;
         false -> {error, {list, T}}
     end;
-ty_check(Path, {object, Obj}, {input_object, Ty}) ->
+ty_check(Path, {object, Obj}, {input_object, #input_object_type{} = Ty}) ->
     check_input_object(Path, Ty, input_object_type_scheme(Obj));
 ty_check(_Path, A, T) -> {error, A, T}.
 
@@ -399,7 +385,7 @@ varenv_ty_coerce(Path, T) ->
         not_found -> graphql_err:abort(Path, {unknown_type, N});
         #enum_type{} -> {enum, N};
         #scalar_type{} -> {scalar, N};
-        #input_object_type{} -> {input_object, N};
+        #input_object_type{} = IOType -> {input_object, IOType};
         #interface_type{} -> {interface, N}
     end.
 
