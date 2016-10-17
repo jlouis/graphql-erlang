@@ -313,7 +313,7 @@ ty_of(_Ctx, Path, _, {enum, N}) ->
         EnumTy -> {enum, EnumTy}
     end;
 ty_of(_Ctx, _Path, {scalar, Tag}, V) ->
-    case scalar(V) of
+    case valid_scalar_value(V) of
         true -> {scalar, Tag, V};
         false -> ty_of(_Ctx, _Path, undefined, V)
     end;
@@ -379,10 +379,10 @@ varenv_ty_coerce(Path, T) ->
 %% -- AST MANIPULATION -------------------------
 
 %% True if input is a scalar value
-scalar(S) when is_binary(S) -> true;
-scalar(F) when is_float(F) -> true;
-scalar(I) when is_integer(I) -> true;
-scalar(true) -> true;
-scalar(false) -> true;
-scalar(_) -> false.
+valid_scalar_value(S) when is_binary(S) -> true;
+valid_scalar_value(F) when is_float(F) -> true;
+valid_scalar_value(I) when is_integer(I) -> true;
+valid_scalar_value(true) -> true;
+valid_scalar_value(false) -> true;
+valid_scalar_value(_) -> false.
 
