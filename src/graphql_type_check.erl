@@ -58,11 +58,10 @@ tc_params(Path, Args, Params) ->
       end,
     lists:foldl(F, Params, Args).
     
-tc_param(Path, {K, {Ty, Default}}, not_found) ->
-    case non_null(Ty) of
-        true -> graphql_err:abort([K | Path], missing_non_null_param);
-        false -> {replace, Default}
-    end;
+tc_param(Path, {K, {{non_null, _}, _Default}}, not_found) ->
+    graphql_err:abort([K | Path], missing_non_null_param);
+tc_param(_Path, {_K, {_Ty, Default}}, not_found) ->
+    {replace, Default};
 tc_param(Path, {K, {Ty, _}}, Val) ->
     check_param([K | Path], Ty, Val).
     
@@ -137,10 +136,10 @@ check_object_fields(Path, [], Obj, Result) ->
 check_object_fields(Path, [{Name, #schema_arg { ty = Ty, default = Def }} | Next], Obj, Result) ->
     Val = case maps:get(Name, Obj, not_found) of
         not_found ->
-            case non_null(Ty) of
-                true ->
+            case Ty of
+                {non_null, _} ->
                     graphql_err:abort([Name | Path], missing_non_null_param);
-                false ->
+                _ ->
                     Def
             end;
         V ->
@@ -386,8 +385,4 @@ scalar(I) when is_integer(I) -> true;
 scalar(true) -> true;
 scalar(false) -> true;
 scalar(_) -> false.
-
-%% True for non-null inputs
-non_null({non_null, _Ty}) -> true;
-non_null(_) -> false.
 
