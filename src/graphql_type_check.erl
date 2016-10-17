@@ -181,12 +181,7 @@ input_coerce_scalar(Path, Ty, _V) ->
 %% -- FRAGMENTS --------------------------------
 
 fragments(Clauses) ->
-    lists:partition(
-      fun
-         (#frag{}) -> true;
-         (_) -> false
-      end,
-      Clauses).
+    lists:partition(fun (#frag{}) -> true; (_) -> false end, Clauses).
 
 mk_fragenv(Frags) ->
     F = fun(#frag { id = ID, ty = Ty }) -> {graphql_ast:name(ID), Ty} end,
@@ -203,7 +198,8 @@ tc_op(Ctx, Path, #op { vardefs = VDefs, selection_set = SSet} = Op) ->
     Op#op { selection_set = tc_sset(Ctx#{ varenv => VarEnv }, [Op | Path], SSet) }.
 
 %% -- SELECTION SETS ------------------------------------
-tc_sset(Ctx, Path, SSet) -> [tc_field(Ctx, Path, S) || S <- SSet].
+tc_sset(Ctx, Path, SSet) ->
+    [tc_field(Ctx, Path, S) || S <- SSet].
 
 tc_field(#{ fragenv := FE }, Path, #frag_spread { id = ID } = FSpread) ->
     Name = graphql_ast:name(ID),
@@ -220,20 +216,21 @@ tc_field(Ctx, Path, #frag { id = '...', selection_set = SSet} = InlineFrag) ->
     InlineFrag#frag {
         selection_set = tc_sset(Ctx, [InlineFrag | Path], SSet)
     };
-tc_field(Ctx, Path, 
-	#field { args = Args, selection_set = SSet, schema = Schema, schema_obj = Obj } = F) ->
-    case {Schema, Obj} of
-        {_, scalar} when SSet /= [] ->
-            graphql_err:abort(Path, selection_on_scalar);
-        {{introspection, typename}, scalar} ->
-            F;
-        {#schema_field { args = SArgs }, scalar } ->
-           F#field { args = tc_args(Ctx, [F | Path], Args, SArgs)};
-        {#schema_field { args = SArgs }, Obj} ->
-           F#field {
-               args = tc_args(Ctx, [F | Path], Args, SArgs),
-               selection_set = tc_sset(Ctx, [F | Path], SSet) }
-    end.
+tc_field(_Ctx, Path, #field { selection_set = [_|_],
+                              schema_obj = scalar }) ->
+    graphql_err:abort(Path, selection_on_scalar);
+tc_field(_Ctx, _Path, #field { schema = {introspection, typename},
+                               schema_obj = scalar } = F) ->
+    F;
+tc_field(Ctx, Path, #field { args = Args,
+                             schema = #schema_field { args = SArgs },
+                             schema_obj = scalar } = F) ->
+    F#field { args = tc_args(Ctx, [F | Path], Args, SArgs)};
+tc_field(Ctx, Path, #field { args = Args,
+                             selection_set = SSet,
+                             schema = #schema_field { args = SArgs }} = F) ->
+    F#field { args = tc_args(Ctx, [F | Path], Args, SArgs),
+              selection_set = tc_sset(Ctx, [F | Path], SSet) }.
             
 %% -- ARGS -------------------------------------
 tc_args(Ctx, Path, Args, Schema) ->
