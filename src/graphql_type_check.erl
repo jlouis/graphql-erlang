@@ -236,21 +236,17 @@ tc_field(Ctx, Path, #frag { id = '...', selection_set = SSet} = InlineFrag) ->
 tc_field(Ctx, Path, 
 	#field { args = Args, selection_set = SSet, schema = Schema, schema_obj = Obj } = F) ->
     case {Schema, Obj} of
+        {_, scalar} when SSet /= [] ->
+            graphql_err:abort(Path, selection_on_scalar);
         {{introspection, typename}, scalar} ->
-            ok = scalar_check([F | Path], SSet),
             F;
         {#schema_field { args = SArgs }, scalar } ->
-           ok = scalar_check([F | Path], SSet),
            F#field { args = tc_args(Ctx, [F | Path], Args, SArgs)};
         {#schema_field { args = SArgs }, Obj} ->
            F#field {
                args = tc_args(Ctx, [F | Path], Args, SArgs),
                selection_set = tc_sset(Ctx, [F | Path], SSet) }
     end.
-
-scalar_check(_Path, []) -> ok;
-scalar_check(Path, _) ->
-    graphql_err:abort(Path, selection_on_scalar).
             
 %% -- ARGS -------------------------------------
 tc_args(Ctx, Path, Args, Schema) ->
