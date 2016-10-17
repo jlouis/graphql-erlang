@@ -106,8 +106,9 @@ check_param(Path, {enum, Ty}, {enum, V}) when is_binary(V) ->
     check_param(Path, {enum, Ty}, V);
 check_param(Path, {enum, Ty}, V) when is_binary(V) ->
     case graphql_schema:lookup_enum_type(V) of
-       not_found -> graphql_err:abort(Path, {unknown_enum_value, V});
-       Ty -> {replace, {enum, V}};
+        not_found -> graphql_err:abort(Path, {unknown_enum_value, V});
+        #enum_type { id = Ty, repr = Repr } ->
+            {replace, enum_representation(Repr, V)};
         _OtherTy -> graphql_err:abort(Path, {param_mismatch, {enum, Ty}})
     end;
 check_param(Path, {list, T}, L) when is_list(L) ->
@@ -342,7 +343,7 @@ ty_of(#{ varenv := VE }, Path, _, {var, ID}) ->
 ty_of(_Ctx, Path, _, {enum, N}) ->
     case graphql_schema:lookup_enum_type(N) of
         not_found -> graphql_err:abort(Path, {unknown_enum, N});
-        EnumTy -> {enum, EnumTy}
+        #enum_type { id = EnumTy } -> {enum, EnumTy}
     end;
 ty_of(_Ctx, _Path, {scalar, Tag}, V) ->
     case valid_scalar_value(V) of
@@ -417,4 +418,8 @@ valid_scalar_value(I) when is_integer(I) -> true;
 valid_scalar_value(true) -> true;
 valid_scalar_value(false) -> true;
 valid_scalar_value(_) -> false.
+
+enum_representation(binary, V) -> V;
+enum_representation(atom, V) -> binary_to_atom(V, utf8);
+enum_representation(tagged, V) -> {enum, V}.
 

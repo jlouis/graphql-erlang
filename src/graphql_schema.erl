@@ -92,7 +92,7 @@ get(ID) ->
 -spec lookup_enum_type(binary()) -> binary() | not_found.
 lookup_enum_type(EnumValue) ->
     try ets:lookup_element(?ENUMS, EnumValue, 3) of
-        Ty -> Ty
+        Ty -> ?MODULE:get(Ty)
     catch
         error:badarg ->
             not_found
