@@ -50,7 +50,7 @@ vdef_lookup(Path, N) ->
     end.
 
 vdefs(_Path, []) -> [];
-vdefs(Path, [#vardef { id = ID, ty = {ty, Ty} } = V | Vs]) ->
+vdefs(Path, [#vardef { id = ID, ty = Ty } = V | Vs]) ->
     Obj = case unwrap_type(Ty) of
         {scalar, X} when
             X == int;
@@ -164,5 +164,4 @@ x_field_lookup(Path, Ty, SSet) ->
 %% -- AST MANIPULATION ---------------------------
 name('ROOT') -> <<"ROOT">>;
 name({name, N, _}) -> N;
-name({ty, Name}) -> name(Name);
 name({var, N}) -> name(N).

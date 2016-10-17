@@ -85,7 +85,6 @@ format_ty([Ty]) ->
 format_ty({list, Ty}) ->
     Inner = format_ty(Ty),
     <<"{list, ", Inner/binary, "}">>;
-format_ty({ty, Ty}) -> format_ty(Ty);
 format_ty({scalar, X, _}) -> format_scalar(X);
 format_ty({scalar, X}) -> format_scalar(X);
 format_ty({non_null, Ty}) ->
