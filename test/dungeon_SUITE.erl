@@ -24,6 +24,23 @@ init_per_group(dungeon, Config) ->
 init_per_group(_Group, Config) ->
     Config.
 
+
+
+
+init_per_testcase(disabled, Config) ->
+    {ok, _} = dbg:tracer(),
+    dbg:p(all, c),
+    dbg:tpl(graphql_type_check, ty_check, '_', cx),
+    Config;
+init_per_testcase(_Case, Config) ->
+    Config.
+
+end_per_testcase(disabled, Config) ->
+    dbg:stop_clear(),
+    ok;
+end_per_testcase(_Case, _Config) ->
+    ok.
+
 end_per_group(dungeon, _Config) ->
     dungeon:stop(),
     graphql_schema:reset(),
