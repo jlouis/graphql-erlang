@@ -137,13 +137,7 @@ check_param(Path, Ty, V) ->
     graphql_err:abort(Path, {param_mismatch, Ty, V}).
 
 check_input_object(Path, #input_object_type{ fields = Fields }, Obj) ->
-    {replace, check_object_fields(Path, maps:to_list(Fields), coerce_object(Obj), #{})};
-check_input_object(Path, #interface_type{ id = ID }, _Obj) ->
-    graphql_err:abort(Path, {invalid_input_type, ID});
-check_input_object(Path, #object_type{ id = ID }, _Obj) ->
-    graphql_err:abort(Path, {invalid_input_type, ID});
-check_input_object(Path, #union_type { id = ID }, _Obj) ->
-    graphql_err:abort(Path, {invalid_input_type, ID}).
+    {replace, check_object_fields(Path, maps:to_list(Fields), coerce_object(Obj), #{})}.
 
 coerce_object(#{} = Obj) -> Obj;
 coerce_object({object, Obj}) -> input_object_type_scheme(Obj).
