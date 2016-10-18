@@ -283,7 +283,7 @@ schema_type(Tag) ->
         #scalar_type{} = SType -> SType;
         #enum_type{} = Enum -> Enum;
         #object_type{} -> {object, Tag};
-        #input_object_type{} = IOType -> {input_object, IOType};
+        #input_object_type{} = IOType -> IOType;
         #interface_type{} -> {interface, Tag};
         not_found ->
             exit({schema_not_found, Tag})
@@ -337,7 +337,7 @@ ty_check(Path, {scalar, Tag, V}, #scalar_type { id = Tag, input_coerce = IC }) -
     end;
 ty_check(_Path, #input_object_type { id = ID }, {input_object, #input_object_type { id = ID }}) ->
     ok;
-ty_check(Path, Obj, {input_object, #input_object_type{} = Ty}) when is_map(Obj) ->
+ty_check(Path, Obj, #input_object_type{} = Ty) when is_map(Obj) ->
     check_input_object(Path, Ty, Obj);
 %% Failure:
 ty_check(_Path, A, T) -> {error, A, T}.
