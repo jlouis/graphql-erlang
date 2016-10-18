@@ -51,7 +51,10 @@ err_msg(params_on_unnamed) ->
 err_msg({selection_on_enum_type, Ty}) ->
     ["Cannot apply a selection set on the enum type ", format_ty(Ty)];
 err_msg(missing_non_null_param) ->
-    ["The parameter is non-null, but was undefined in parameter list"].
+    ["The parameter is non-null, but was undefined in parameter list"];
+err_msg({unbound_variable, Var}) ->
+    ["The document refers to a variable ", Var, " but no such var exists. Perhaps the variable is a typo?"].
+
 
 -spec path([Input]) -> [binary()]
   when

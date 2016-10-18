@@ -46,7 +46,7 @@ end_per_suite(_Config) ->
     ok.
 
 init_per_testcase(v_5_4_2_3_1, _Config) ->
-    {skip, needs_more_type_checking};
+    {skip, needs_more_validation};
 init_per_testcase(enum_no_incorrect_internal_value, _Config) ->
     {skip, no_output_validation_yet};
 init_per_testcase(disabled, Config) ->

@@ -8,24 +8,24 @@ suite() ->
 
 init_per_suite(Config) ->
     application:ensure_all_started(graphql),
-    Config.
-
-end_per_suite(_Config) ->
-    application:stop(graphql),
-    ok.
-
-init_per_group(dungeon, Config) ->
     {ok, Doc} = read_doc(Config, "dungeon.graphql"),
 
     ok = dungeon:inject(),
     ok = dungeon:start(),
     ok = graphql:validate_schema(),
-    [{document, Doc} | Config];
+    [{document, Doc} | Config].
+
+end_per_suite(_Config) ->
+    dungeon:stop(),
+    graphql_schema:reset(),
+    application:stop(graphql),
+    ok.
+
 init_per_group(_Group, Config) ->
     Config.
 
-
-
+end_per_group(_Group, _Config) ->
+    ok.
 
 init_per_testcase(disabled, Config) ->
     {ok, _} = dbg:tracer(),
@@ -41,14 +41,6 @@ end_per_testcase(disabled, Config) ->
 end_per_testcase(_Case, _Config) ->
     ok.
 
-end_per_group(dungeon, _Config) ->
-    dungeon:stop(),
-    graphql_schema:reset(),
-    ok;
-end_per_group(_Group, _Config) ->
-    graphql_schema:reset(),
-    ok.
-
 groups() ->
     Dungeon = {dungeon, [],
                [ unions,
@@ -59,12 +51,15 @@ groups() ->
                  nested_input_object,
                  inline_fragment,
                  fragment_over_union_interface,
-                 simple_field_merge ]},
+                 simple_field_merge]},
 
-    [Dungeon].
+    Errors = {errors, [],
+              [unknown_variable]},
+    [Dungeon, Errors].
 
-all() -> [
-    {group, dungeon} ].
+all() ->
+    [{group, dungeon},
+     {group, errors}].
     
 read_doc(Config, File) ->
     DocFile = filename:join(
@@ -282,4 +277,17 @@ simple_field_merge(Config) ->
     Expected = run(Config, <<"TestFieldMerge">>, #{ <<"id">> => ID }),
     ok.
 
+unknown_variable(Config) ->
+    ID = base64:encode(<<"monster:1">>),
 
+    #{errors :=
+          #{key := {unbound_variable,<<"i">>},
+            path := [<<"document">>,
+                     <<"GoblinQuery">>,
+                     <<"monster">>]}} =
+        run(Config,
+            "unknown_variable.graphql",
+            <<"TestFieldMerge">>,
+            #{ <<"id">> => ID }),
+    ok.
+    

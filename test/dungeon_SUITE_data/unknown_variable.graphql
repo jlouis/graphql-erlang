@@ -1,0 +1,7 @@
+query GoblinQuery($id : Id!) {
+  goblin: monster(id: $i) {
+    id
+    name
+    hitpoints
+  }
+}
