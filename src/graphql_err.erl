@@ -57,7 +57,8 @@ err_msg(missing_non_null_param) ->
   when
     Input :: document | frag() | op() | field() | binary() | [Input].
 path(Path) ->
-   F = fun 
+   F = fun
+           F('ROOT') -> <<"ROOT">>;
            F(document) -> <<"document">>;
            F(#frag { id = ID }) -> name(ID);
            F(#op { id = ID }) -> name(ID);
@@ -74,6 +75,7 @@ path(Path) ->
        end,
    lists:flatten([F(Elem) || Elem <- Path]).
 
+format_ty(#enum_type { id = Ty }) -> Ty;
 format_ty(#input_object_type { id = Ty }) -> Ty;
 format_ty({input_object, Ty}) -> Ty;
 format_ty({object, Fields}) ->
