@@ -227,7 +227,7 @@ tc_args_(Ctx, Path, [{ID, {Ty, Val}} = A | Next], Schema) ->
     Name = graphql_ast:name(ID),
     ValueType = value_type(Ctx, Path, graphql_ast:unwrap_type(Ty), Val),
     SchemaType = schema_type(Ty),
-    case ty_check(Path, ValueType, SchemaType) of
+    case refl(Path, ValueType, SchemaType) of
         ok ->
             [A | tc_args_(Ctx, Path, Next, Schema)];
         {replace, RVal } ->
@@ -289,30 +289,30 @@ value_type(Ctx, Path, {list, Ty}, {list, Ts}) when is_list(Ts) ->
     {list, [value_type(Ctx, Path, Ty, T) || T <- Ts]}.
 
 %% EQ Match:
-ty_check(_Path, X, X) -> ok;
+refl(_Path, X, X) -> ok;
 %% Compound:
-ty_check(Path, {non_null, A}, T) -> ty_check(Path, A, T);
-ty_check(Path, A, {non_null, T}) -> ty_check(Path, A, T);
-ty_check(Path, {list, As}, {list, T}) ->
-    case lists:all(fun(X) -> ty_check(Path, X, T) == ok end, As) of
+refl(Path, {non_null, A}, T) -> refl(Path, A, T);
+refl(Path, A, {non_null, T}) -> refl(Path, A, T);
+refl(Path, {list, As}, {list, T}) ->
+    case lists:all(fun(X) -> refl(Path, X, T) == ok end, As) of
         true -> ok;
         false -> {error, {list, T}}
     end;
 %% Ground:
-ty_check(_Path, {scalar, Tag, V}, {scalar, Tag}) -> {replace, V};
-ty_check(Path, {scalar, Tag, V}, #scalar_type { id = Tag, input_coerce = IC }) ->
+refl(_Path, {scalar, Tag, V}, {scalar, Tag}) -> {replace, V};
+refl(Path, {scalar, Tag, V}, #scalar_type { id = Tag, input_coerce = IC }) ->
     case IC(V) of
         {ok, V} -> ok;
         {ok, NV} -> {replace, NV};
         {error, Reason} ->
             graphql_err:abort(Path, {input_coercion, Tag, V, Reason})
     end;
-ty_check(_Path, #input_object_type { id = ID }, {input_object, #input_object_type { id = ID }}) ->
+refl(_Path, #input_object_type { id = ID }, {input_object, #input_object_type { id = ID }}) ->
     ok;
-ty_check(Path, Obj, #input_object_type{} = Ty) when is_map(Obj) ->
+refl(Path, Obj, #input_object_type{} = Ty) when is_map(Obj) ->
     check_input_object(Path, Ty, Obj);
 %% Failure:
-ty_check(_Path, A, T) -> {error, A, T}.
+refl(_Path, A, T) -> {error, A, T}.
 
 coerce_object(Obj) when is_map(Obj) ->
     coerce_object_(Obj).
