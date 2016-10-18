@@ -30,7 +30,7 @@ tc(Ctx, Path, Clauses) ->
    FragCtx = Ctx#{ fragenv => mk_fragenv(Fragments) },
    NewClauses = tc_clauses(FragCtx, Path, Clauses),
    {ok, #{
-       fun_env => mk_funenv(NewClauses),
+       fun_env => graphql_elaborate:mk_funenv(NewClauses),
        ast => {document, NewClauses}
    }}.
 
@@ -39,22 +39,6 @@ tc_clauses(Ctx, Path, Cs) ->
     
 tc_clause(Ctx, Path, #frag{} = Frag) -> tc_frag(Ctx, Path, Frag);
 tc_clause(Ctx, Path, #op{} = Op) -> tc_op(Ctx, Path, Op).
-
-%% -- MK OF FUNENV ------------------------------
-
-%% The function environment encodes a mapping from the name of a query
-%% or mutation into the vars/params it accepts and their corresponding
-%% type scheme. This allows us to look up a function call via the
-%% variable environment later when we execute a given function in the
-%% GraphQL Schema.
-
-mk_funenv(Ops) -> mk_funenv(Ops, #{}).
-
-mk_funenv([], FunEnv) -> FunEnv;
-mk_funenv([#frag{} | Next], FunEnv) -> mk_funenv(Next, FunEnv);
-mk_funenv([#op { id = OpName, vardefs = VDefs } | Next], FunEnv) ->
-    VarEnv = mk_varenv([], VDefs),
-    mk_funenv(Next, FunEnv#{ graphql_ast:name(OpName) => VarEnv }).
 
 %% -- TYPE CHECK OF PARAMETER ENVS ------------------
 
@@ -205,7 +189,7 @@ tc_frag(Ctx, Path, #frag {selection_set = SSet} = Frag) ->
 %% -- OPERATIONS -------------------------------
 
 tc_op(Ctx, Path, #op { vardefs = VDefs, selection_set = SSet} = Op) ->
-    VarEnv = mk_varenv([Op | Path], VDefs),
+    VarEnv = graphql_elaborate:mk_varenv([Op | Path], VDefs),
     Op#op { selection_set = tc_sset(Ctx#{ varenv => VarEnv }, [id(Op) | Path], SSet) }.
 
 %% -- SELECTION SETS ------------------------------------
@@ -282,9 +266,9 @@ schema_type(Tag) ->
     case graphql_schema:lookup(Tag) of
         #scalar_type{} = SType -> SType;
         #enum_type{} = Enum -> Enum;
-        #object_type{} -> {object, Tag};
+        #object_type{} = OType -> OType;
         #input_object_type{} = IOType -> IOType;
-        #interface_type{} -> {interface, Tag};
+        #interface_type{} = IFType -> IFType;
         not_found ->
             exit({schema_not_found, Tag})
     end.
@@ -350,37 +334,6 @@ coerce_object_(Obj) when is_map(Obj) ->
     maps:from_list([{graphql_ast:name(K), coerce_object_(V)} || {K, V} <- Elems]);
 coerce_object_(Other) -> Other.
 
-%% -- VARENV -------------------------------------
-mk_varenv(Path, VDefs) ->
-    maps:from_list([varenv_coerce(Path, Def) || Def <- VDefs]).
-
-varenv_coerce(Path, #vardef { id = Var, ty = T } = VarDef) ->
-    case varenv_ty_coerce(T) of
-        {ok, Type} ->
-            {graphql_ast:name(Var), VarDef#vardef { ty = Type }};
-        {error, Reason} ->
-            graphql_err:abort(Path, Reason)
-    end.
-
-varenv_ty_coerce({scalar, X}) -> {ok, {scalar, X}};
-varenv_ty_coerce({list, T}) ->
-    case varenv_ty_coerce(T) of
-        {ok, Ty} -> {ok, {list, Ty}};
-        {error, Reason} -> {error, Reason}
-    end;
-varenv_ty_coerce({non_null, T}) ->
-    case varenv_ty_coerce(T) of
-        {ok, Ty} -> {ok, {non_null, Ty}};
-        {error, Reason} -> {error, Reason}
-    end;
-varenv_ty_coerce(T) ->
-    N = graphql_ast:name(T),
-    case graphql_schema:lookup(N) of
-        not_found -> {error, {unknown_type, N}};
-        #enum_type{} = Enum -> {ok, Enum};
-        #scalar_type{} = Scalar -> {ok, Scalar};
-        #input_object_type{} = IOType -> {ok, IOType}
-    end.
 
 %% -- AST MANIPULATION -------------------------
 
