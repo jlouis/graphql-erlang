@@ -96,15 +96,6 @@ check_param(Path, #enum_type { id = Ty }, V) when is_binary(V) ->
         OtherTy ->
             graphql_err:abort(Path, {param_mismatch, {enum, Ty, OtherTy}})
     end;
-check_param(Path, {enum, Ty}, {enum, V}) when is_binary(V) ->
-    check_param(Path, {enum, Ty}, V);
-check_param(Path, {enum, Ty}, V) when is_binary(V) ->
-    case graphql_schema:lookup_enum_type(V) of
-        not_found -> graphql_err:abort(Path, {unknown_enum_value, V});
-        #enum_type { id = Ty, repr = Repr } ->
-            {replace, enum_representation(Repr, V)};
-        _OtherTy -> graphql_err:abort(Path, {param_mismatch, {enum, Ty}})
-    end;
 check_param(Path, {list, T}, L) when is_list(L) ->
     %% Build a dummy structure to match the recursor. Unwrap this
     %% structure before replacing the list parameter.
@@ -116,8 +107,6 @@ check_param(Path, {list, T}, L) when is_list(L) ->
     {replace, NewList};
 check_param(Path, #input_object_type{} = IOType, Obj) when is_map(Obj) ->
     check_input_object(Path, IOType, Obj);
-check_param(Path, {input_object, Ty}, Obj) ->
-    check_input_object(Path, Ty, Obj);
 %% The following expands un-elaborated (nested) types
 check_param(Path, Ty, V) when is_binary(Ty) ->
     case graphql_schema:lookup(Ty) of
