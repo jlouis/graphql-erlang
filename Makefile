@@ -16,6 +16,9 @@ dialyzer:
 test:
 	@$(REBAR) ct
 
+test-cover:
+	@$(REBAR) ct --cover
+
 update:
 	@$(REBAR) update
 
