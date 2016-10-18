@@ -168,9 +168,8 @@ fragments(Clauses) ->
     lists:partition(fun (#frag{}) -> true; (_) -> false end, Clauses).
 
 mk_fragenv(Frags) ->
-    F = fun(#frag { id = ID, ty = Ty }) -> {graphql_ast:name(ID), Ty} end,
-    maps:from_list(
-       [F(Frg) || Frg <- Frags]).
+    F = fun(#frag { id = ID } = Frag) -> {graphql_ast:name(ID), Frag} end,
+    maps:from_list([F(Frg) || Frg <- Frags]).
 
 tc_frag(Ctx, Path, #frag {selection_set = SSet} = Frag) ->
     Frag#frag { selection_set = tc_sset(Ctx, Path, SSet) }.
@@ -226,7 +225,7 @@ tc_args(Ctx, Path, Args, Schema) ->
 tc_args_(_Ctx, _Path, [], _Schema) -> [];
 tc_args_(Ctx, Path, [{ID, {Ty, Val}} = A | Next], Schema) ->
     Name = graphql_ast:name(ID),
-    ValueType = ty_of(Ctx, Path, graphql_ast:unwrap_type(Ty), Val),
+    ValueType = value_type(Ctx, Path, graphql_ast:unwrap_type(Ty), Val),
     SchemaType = schema_type(Ty),
     case ty_check(Path, ValueType, SchemaType) of
         ok ->
@@ -262,32 +261,32 @@ schema_type(Tag) ->
             exit({schema_not_found, Tag})
     end.
 
-ty_of(#{ varenv := VE }, Path, _, {var, ID}) ->
+value_type(#{ varenv := VE }, Path, _, {var, ID}) ->
     Name = graphql_ast:name(ID),
     case maps:get(Name, VE, not_found) of
         not_found ->
             graphql_err:abort(Path, {unbound_variable, Name});
         #vardef { ty = Ty } -> Ty
     end;
-ty_of(_Ctx, Path, _, {enum, N}) ->
+value_type(_Ctx, Path, _, {enum, N}) ->
     case graphql_schema:lookup_enum_type(N) of
         not_found -> graphql_err:abort(Path, {unknown_enum, N});
         #enum_type {} = Enum -> Enum
     end;
-ty_of(_Ctx, _Path, {scalar, Tag}, V) ->
+value_type(_Ctx, _Path, {scalar, Tag}, V) ->
     case valid_scalar_value(V) of
         true -> {scalar, Tag, V};
-        false -> ty_of(_Ctx, _Path, undefined, V)
+        false -> value_type(_Ctx, _Path, undefined, V)
     end;
-ty_of(_Ctx, _Path, _, {name, N, _}) -> N;
-ty_of(_Ctx, _Path, _, S) when is_binary(S) -> {scalar, string, S};
-ty_of(_Ctx, _Path, _, I) when is_integer(I) -> {scalar, int, I};
-ty_of(_Ctx, _Path, _, F) when is_float(F) -> {scalar, float, F};
-ty_of(_Ctx, _Path, _, true) -> {scalar, bool, true};
-ty_of(_Ctx, _Path, _, false) -> {scalar, bool, false};
-ty_of(_Ctx, _Path, _, Obj) when is_map(Obj) -> coerce_object(Obj);
-ty_of(Ctx, Path, {list, Ty}, {list, Ts}) when is_list(Ts) ->
-    {list, [ty_of(Ctx, Path, Ty, T) || T <- Ts]}.
+value_type(_Ctx, _Path, _, {name, N, _}) -> N;
+value_type(_Ctx, _Path, _, S) when is_binary(S) -> {scalar, string, S};
+value_type(_Ctx, _Path, _, I) when is_integer(I) -> {scalar, int, I};
+value_type(_Ctx, _Path, _, F) when is_float(F) -> {scalar, float, F};
+value_type(_Ctx, _Path, _, true) -> {scalar, bool, true};
+value_type(_Ctx, _Path, _, false) -> {scalar, bool, false};
+value_type(_Ctx, _Path, _, Obj) when is_map(Obj) -> coerce_object(Obj);
+value_type(Ctx, Path, {list, Ty}, {list, Ts}) when is_list(Ts) ->
+    {list, [value_type(Ctx, Path, Ty, T) || T <- Ts]}.
 
 %% EQ Match:
 ty_check(_Path, X, X) -> ok;
