@@ -125,7 +125,7 @@ run(Doc, OpName, Vars, Req, #{ viewer := Viewer, req_id := ReqID } = State) ->
                      req_id => ReqID,
                      viewer => Viewer },
                  AST2),
-             Req2 = cowboy_req:set_resp_body(jsx:encode(Response, [space, indent]), Req),
+             Req2 = cowboy_req:set_resp_body(encode_json(Response), Req),
              {ok, Reply} = cowboy_req:reply(200, Req2),
              {halt, Reply, State}
            catch
@@ -193,3 +193,7 @@ decode_json_map(Data) when is_binary(Data) ->
     catch error:badarg ->
         {error, invalid_json}
     end.
+
+%% @private
+encode_json(Data) ->
+    jsx:encode(Data, []).
