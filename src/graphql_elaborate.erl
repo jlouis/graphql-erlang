@@ -180,7 +180,7 @@ field_arg_type({scalar, _} = Ty) -> Ty;
 field_arg_type(Ty) when is_binary(Ty) ->
     case graphql_schema:lookup(Ty) of
         #scalar_type{} = ScalarTy -> {scalar, ScalarTy};
-        #enum_type{} -> Ty;
+        #enum_type{} = Enum -> Enum;
         #input_object_type{} -> Ty
     end.
 

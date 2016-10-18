@@ -247,6 +247,7 @@ uniq([_ | Next]) -> uniq(Next).
 schema_type({scalar, X}) when is_atom(X) -> {scalar, X};
 schema_type({non_null, T}) -> {non_null, schema_type(T)};
 schema_type([Tag]) -> {list, schema_type(Tag)};
+schema_type(#enum_type{} = Ty) -> Ty;
 %% Elaborate types which are not elaborated.
 %% Strictly, this ought to be unnecessary given enough
 %% elaboration and optimization.
@@ -268,6 +269,8 @@ value_type(#{ varenv := VE }, Path, _, {var, ID}) ->
             graphql_err:abort(Path, {unbound_variable, Name});
         #vardef { ty = Ty } -> Ty
     end;
+value_type(_Ctx, Path, #enum_type{} = Ty, {enum, _N}) ->
+    Ty;
 value_type(_Ctx, Path, _, {enum, N}) ->
     case graphql_schema:lookup_enum_type(N) of
         not_found -> graphql_err:abort(Path, {unknown_enum, N});

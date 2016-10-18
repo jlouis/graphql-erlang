@@ -306,6 +306,13 @@ alias(#field { alias = undefined, id = ID }) -> name(ID);
 alias(#field { alias = Alias }) -> name(Alias).
 
 value(Ctx, {Ty, Val}) -> value(Ctx, #{ type => Ty, value => Val});
+value(_Ctx, #{ type := #enum_type { repr = Repr }, value := {enum, E}}) ->
+    N = name(E),
+    case Repr of
+        binary -> N;
+         atom -> binary_to_atom(N, utf8);
+        tagged -> {enum, N}
+    end;
 value(_Ctx, #{ type := Ty, value := {enum, E}}) ->
     N = name(E),
     #enum_type { repr = Repr } = graphql_schema:get(Ty),
