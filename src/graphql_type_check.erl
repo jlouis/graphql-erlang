@@ -337,21 +337,34 @@ coerce_object_(Other) -> Other.
 
 %% -- VARENV -------------------------------------
 mk_varenv(Path, VDefs) ->
-    maps:from_list(
-       [{graphql_ast:name(Var), {varenv_ty_coerce(Path, Ty), Def}}
-           || #vardef { id = Var, ty = Ty, default = Def } <- VDefs]).
+    maps:from_list([varenv_coerce(Path, Def) || Def <- VDefs]).
 
-varenv_ty_coerce(_Path, {scalar, X}) -> {scalar, X};
-varenv_ty_coerce(Path, {list, T}) -> {list, varenv_ty_coerce(Path, T)};
-varenv_ty_coerce(Path, {non_null, T}) -> {non_null, varenv_ty_coerce(Path, T)};
-varenv_ty_coerce(Path, T) ->
+varenv_coerce(Path, #vardef { id = Var, ty = T } = Var) ->
+    case varenv_ty_coerce(T) of
+        {ok, Type} ->
+            {graphql_ast:name(Var), Var#vardef { ty = Type }};
+        {error, Reason} ->
+            graphql_err:abort(Path, Reason)
+    end.
+
+varenv_ty_coerce({scalar, X}) -> {ok, {scalar, X}};
+varenv_ty_coerce({list, T}) ->
+    case varenv_ty_coerce(T) of
+        {ok, Ty} -> {ok, {list, Ty}};
+        {error, Reason} -> {error, Reason}
+    end;
+varenv_ty_coerce({non_null, T}) ->
+    case varenv_ty_coerce(T) of
+        {ok, Ty} -> {non_null, Ty};
+        {error, Reason} -> {error, Reason}
+    end;
+varenv_ty_coerce(T) ->
     N = graphql_ast:name(T),
     case graphql_schema:lookup(N) of
-        not_found -> graphql_err:abort(Path, {unknown_type, N});
-        #enum_type{} -> {enum, N};
-        #scalar_type{} -> {scalar, N};
-        #input_object_type{} = IOType -> {input_object, IOType};
-        #interface_type{} -> {interface, N}
+        not_found -> {error, {unknown_type, N}};
+        #enum_type{} = Enum -> Enum;
+        #scalar_type{} = Scalar -> Scalar;
+        #input_object_type{} = IOType -> IOType
     end.
 
 %% -- AST MANIPULATION -------------------------
