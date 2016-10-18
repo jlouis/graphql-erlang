@@ -305,7 +305,8 @@ name(#field { id = ID }) -> name(ID).
 alias(#field { alias = undefined, id = ID }) -> name(ID);
 alias(#field { alias = Alias }) -> name(Alias).
 
-value(_Ctx, {Ty, {enum, E}}) ->
+value(Ctx, {Ty, Val}) -> value(Ctx, #{ type => Ty, value => Val});
+value(_Ctx, #{ type := Ty, value := {enum, E}}) ->
     N = name(E),
     #enum_type { repr = Repr } = graphql_schema:get(Ty),
     case Repr of
@@ -313,27 +314,27 @@ value(_Ctx, {Ty, {enum, E}}) ->
         atom -> binary_to_atom(N, utf8);
         tagged -> {enum, N}
     end;
-value(Ctx, {[Ty], {list, Vals}}) ->
+value(Ctx, #{ type := [Ty], value := {list, Vals}}) ->
     [value(Ctx, {Ty, V}) || V <- Vals];
-value(Ctx, {[Ty], Vals}) when is_list(Vals) ->
+value(Ctx, #{ type := [Ty], value := Vals}) when is_list(Vals) ->
     [value(Ctx, {Ty, V}) || V <- Vals];
-value(Ctx, {ObjTy, {object, O}}) ->
+value(Ctx, #{ type := ObjTy, value := {object, O}}) ->
     #input_object_type { fields = FieldEnv } = graphql_schema:get(
         graphql_ast:unwrap_type(ObjTy)),
     ObjVals = value_object(Ctx, FieldEnv, O),
     maps:from_list(ObjVals);
-value(Ctx, {ObjTy, O}) when is_map(O) ->
+value(Ctx, #{ type := ObjTy, value := O}) when is_map(O) ->
     #input_object_type { fields = FieldEnv } = graphql_schema:get(
         graphql_ast:unwrap_type(ObjTy)),
     ObjVals = value_object(Ctx, FieldEnv, maps:to_list(O)),
     maps:from_list(ObjVals);
-value(Ctx, {_Ty, {var, {name, N, _}}}) -> var_lookup(Ctx, N);
-value(Ctx, {{non_null, Ty}, V}) ->
-    value(Ctx, {Ty, V});
-value(_Ctx, {{scalar, STy}, V}) ->
+value(Ctx, #{ value := {var, {name, N, _}}}) -> var_lookup(Ctx, N);
+value(Ctx, #{ type := {non_null, Ty}, value := V}) ->
+    value(Ctx, #{ type => Ty, value => V});
+value(_Ctx, #{ type := {scalar, STy}, value := V}) ->
     value_scalar(STy, V);
-value(_Ctx, {Ty, V}) ->
-    lager:warning("Resolving: ~p", [{Ty, V}]),
+value(_Ctx, #{ type := _, value := V} = M) ->
+    lager:warning("Resolving: ~p", [M]),
     V.
 
 value_scalar(string, null) -> null;

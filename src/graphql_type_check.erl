@@ -223,7 +223,7 @@ tc_args(Ctx, Path, Args, Schema) ->
     end.
 
 tc_args_(_Ctx, _Path, [], _Schema) -> [];
-tc_args_(Ctx, Path, [{ID, {Ty, Val}} = A | Next], Schema) ->
+tc_args_(Ctx, Path, [{ID, #{ type := Ty, value := Val}} = A | Next], Schema) ->
     Name = graphql_ast:name(ID),
     ValueType = value_type(Ctx, Path, graphql_ast:unwrap_type(Ty), Val),
     SchemaType = schema_type(Ty),

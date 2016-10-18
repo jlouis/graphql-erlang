@@ -172,7 +172,7 @@ field_arg(Path, K, V, SArgs) ->
         not_found ->
             graphql_err:abort(Path, {argument_not_found, N});
         #schema_arg{ ty = Ty } ->
-            {K, {field_arg_type(Ty), V}}
+            {K, #{ type => field_arg_type(Ty), value => V}}
     end.
 
 field_arg_type({non_null, Ty}) -> {non_null, field_arg_type(Ty)};
