@@ -21,6 +21,8 @@ operation_(Path, #op{} = O) -> op(Path, O).
 %% -- VARIABLE ENVIRONMENTS -----------------------
 
 %% -- VARENV -------------------------------------
+mk_varenv(Defs) -> mk_varenv([], Defs).
+
 mk_varenv(Path, VDefs) ->
     maps:from_list([varenv_coerce(Path, Def) || Def <- VDefs]).
 
@@ -60,14 +62,15 @@ varenv_ty(T) ->
 %% variable environment later when we execute a given function in the
 %% GraphQL Schema.
 
-mk_funenv(Ops) -> mk_funenv(Ops, #{}).
-
-mk_funenv([], FunEnv) -> FunEnv;
-mk_funenv([#frag{} | Next], FunEnv) -> mk_funenv(Next, FunEnv);
-mk_funenv([#op { id = OpName, vardefs = VDefs } | Next], FunEnv) ->
-    VarEnv = mk_varenv([], VDefs),
-    mk_funenv(Next, FunEnv#{ graphql_ast:name(OpName) => VarEnv }).
-
+mk_funenv(Ops) ->
+    F = fun
+        (#frag{}, FE) -> FE;
+        (#op { id = ID, vardefs = VDefs }, FE) ->
+            Name = graphql_ast:name(ID),
+            VarEnv = mk_varenv(VDefs),
+            FE#{ Name => VarEnv }
+    end,
+    lists:foldl(F, #{}, Ops).
 
 %% -- FRAGMENTS -----------------------------------
 frag(Path, #frag { ty = T } = F) ->
