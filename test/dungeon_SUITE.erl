@@ -54,7 +54,8 @@ groups() ->
                  simple_field_merge]},
 
     Errors = {errors, [],
-              [unknown_variable]},
+              [unknown_variable,
+               input_coerce_error]},
     [Dungeon, Errors].
 
 all() ->
@@ -290,4 +291,18 @@ unknown_variable(Config) ->
             <<"TestFieldMerge">>,
             #{ <<"id">> => ID }),
     ok.
-    
+
+input_coerce_error(Config) ->
+    Input = #{
+      <<"clientMutationId">> => <<"MUTID">>,
+      <<"name">> => <<"rat">>,
+      <<"color">> => <<"Invalid Color">>,
+      <<"hitpoints">> => 3,
+      <<"mood">> => <<"AGGRESSIVE">>
+     },
+    #{errors := #{key := {input_coercion,<<"Color">>,_,_},
+                  path := [<<"IntroduceMonster">>,
+                           <<"input">>,
+                           <<"color">>]}} =
+        run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input }),
+    ok.

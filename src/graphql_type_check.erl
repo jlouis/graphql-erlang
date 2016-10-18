@@ -151,10 +151,10 @@ input_coerce_scalar(_Path, int, V) when is_integer(V) -> ok;
 input_coerce_scalar(_Path, float, V) when is_float(V) -> ok;
 input_coerce_scalar(_Path, bool, true) -> ok;
 input_coerce_scalar(_Path, bool, false) -> ok;
-input_coerce_scalar(Path, #scalar_type { input_coerce = IC }, Val) ->
+input_coerce_scalar(Path, #scalar_type { id = ID, input_coerce = IC }, Val) ->
     try IC(Val) of
         {ok, NewVal} -> {replace, NewVal};
-        {error, Reason} -> graphql_err:abort(Path, Reason)
+        {error, Reason} -> graphql_err:abort(Path, {input_coercion, ID, Val, Reason})
     catch
         Cl:Err ->
             graphql_err:abort(Path, {input_coerce_abort, {Cl, Err}})
@@ -306,11 +306,14 @@ refl(Path, {list, As}, {list, T}) ->
 %% Ground:
 refl(_Path, {scalar, Tag, V}, {scalar, Tag}) -> {replace, V};
 refl(Path, {scalar, Tag, V}, #scalar_type { id = Tag, input_coerce = IC }) ->
-    case IC(V) of
+    try IC(V) of
         {ok, V} -> ok;
         {ok, NV} -> {replace, NV};
         {error, Reason} ->
             graphql_err:abort(Path, {input_coercion, Tag, V, Reason})
+    catch
+        Cl:Err ->
+            graphql_err:abort(Path, {input_coerce_abort, {Cl, Err}})
     end;
 refl(_Path, #input_object_type { id = ID }, {input_object, #input_object_type { id = ID }}) ->
     ok;

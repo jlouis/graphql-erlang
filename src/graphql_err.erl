@@ -53,8 +53,9 @@ err_msg({selection_on_enum_type, Ty}) ->
 err_msg(missing_non_null_param) ->
     ["The parameter is non-null, but was undefined in parameter list"];
 err_msg({unbound_variable, Var}) ->
-    ["The document refers to a variable ", Var, " but no such var exists. Perhaps the variable is a typo?"].
-
+    ["The document refers to a variable ", Var, " but no such var exists. Perhaps the variable is a typo?"];
+err_msg({input_coercion, Type, Value, Reason}) ->
+    io_lib:format("Input coercion failed for type ~s with value ~p. The reason it failed is: ~p", [Type, Value, Reason]).
 
 -spec path([Input]) -> [binary()]
   when
