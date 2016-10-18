@@ -89,12 +89,12 @@ tc_params(Path, TyVarEnv, InitialParams) ->
         end
       end,
     maps:fold(F, InitialParams, (TyVarEnv)).
-    
-tc_param(Path, K, {{non_null, _}, _Default}, not_found) ->
+
+tc_param(Path, K, #vardef { ty = {non_null, _} }, not_found) ->
     graphql_err:abort([K | Path], missing_non_null_param);
-tc_param(_Path, _K, {_Ty, Default}, not_found) ->
+tc_param(_Path, _K, #vardef { default = Default }, not_found) ->
     {replace, Default};
-tc_param(Path, K, {Ty, _}, Val) ->
+tc_param(Path, K, #vardef { ty = Ty }, Val) ->
     check_param([K | Path], Ty, Val).
     
 %% When checking params, the top level has been elaborated by the
@@ -103,6 +103,15 @@ tc_param(Path, K, {Ty, _}, Val) ->
 
 check_param(Path, {non_null, Ty}, V) -> check_param(Path, Ty, V);
 check_param(Path, {scalar, Sc}, V) -> input_coerce_scalar(Path, Sc, V);
+check_param(Path, #enum_type{} = ETy, {enum, V}) when is_binary(V) ->
+    check_param(Path, ETy, V);
+check_param(Path, #enum_type { id = Ty }, V) when is_binary(V) ->
+    case graphql_schema:lookup_enum_type(V) of
+        #enum_type { id = Ty, repr = Repr } ->
+            {replace, enum_representation(Repr, V)};
+        OtherTy ->
+            graphql_err:abort(Path, {param_mismatch, {enum, Ty, OtherTy}})
+    end;
 check_param(Path, {enum, Ty}, {enum, V}) when is_binary(V) ->
     check_param(Path, {enum, Ty}, V);
 check_param(Path, {enum, Ty}, V) when is_binary(V) ->
@@ -121,6 +130,8 @@ check_param(Path, {list, T}, L) when is_list(L) ->
             {replace, X2} -> X2
         end || X <- L],
     {replace, NewList};
+check_param(Path, #input_object_type{} = IOType, Obj) when is_map(Obj) ->
+    check_input_object(Path, IOType, Obj);
 check_param(Path, {input_object, Ty}, Obj) ->
     check_input_object(Path, Ty, Obj);
 %% The following expands un-elaborated (nested) types
@@ -128,7 +139,7 @@ check_param(Path, Ty, V) when is_binary(Ty) ->
     case graphql_schema:lookup(Ty) of
         #scalar_type {} = ScalarTy -> input_coerce_scalar(Path, ScalarTy, V);
         #input_object_type {} = IOType -> check_input_object(Path, IOType, V);
-        #enum_type {} -> check_param(Path, {enum, Ty}, V);
+        #enum_type {} = Enum -> check_param(Path, Enum, V);
         _ ->
             graphql_err:abort(Path, {param_mismatch, Ty, V})
     end;
@@ -195,7 +206,7 @@ tc_frag(Ctx, Path, #frag {selection_set = SSet} = Frag) ->
 
 tc_op(Ctx, Path, #op { vardefs = VDefs, selection_set = SSet} = Op) ->
     VarEnv = mk_varenv([Op | Path], VDefs),
-    Op#op { selection_set = tc_sset(Ctx#{ varenv => VarEnv }, [Op | Path], SSet) }.
+    Op#op { selection_set = tc_sset(Ctx#{ varenv => VarEnv }, [id(Op) | Path], SSet) }.
 
 %% -- SELECTION SETS ------------------------------------
 tc_sset(Ctx, Path, SSet) ->
@@ -242,7 +253,9 @@ tc_args(Ctx, Path, Args, Schema) ->
 tc_args_(_Ctx, _Path, [], _Schema) -> [];
 tc_args_(Ctx, Path, [{ID, {Ty, Val}} = A | Next], Schema) ->
     Name = graphql_ast:name(ID),
-    case ty_check(Path, ty_of(Ctx, Path, graphql_ast:unwrap_type(Ty), Val), schema_type(Ty)) of
+    ValueType = ty_of(Ctx, Path, graphql_ast:unwrap_type(Ty), Val),
+    SchemaType = schema_type(Ty),
+    case ty_check(Path, ValueType, SchemaType) of
         ok ->
             [A | tc_args_(Ctx, Path, Next, Schema)];
         {replace, RVal } ->
@@ -268,7 +281,7 @@ schema_type([Tag]) -> {list, schema_type(Tag)};
 schema_type(Tag) ->
     case graphql_schema:lookup(Tag) of
         #scalar_type{} = SType -> SType;
-        #enum_type{} -> {enum, Tag};
+        #enum_type{} = Enum -> Enum;
         #object_type{} -> {object, Tag};
         #input_object_type{} = IOType -> {input_object, IOType};
         #interface_type{} -> {interface, Tag};
@@ -281,12 +294,12 @@ ty_of(#{ varenv := VE }, Path, _, {var, ID}) ->
     case maps:get(Name, VE, not_found) of
         not_found ->
             graphql_err:abort(Path, {unbound_variable, Name});
-        {Ty, _Default} -> Ty
+        #vardef { ty = Ty } -> Ty
     end;
 ty_of(_Ctx, Path, _, {enum, N}) ->
     case graphql_schema:lookup_enum_type(N) of
         not_found -> graphql_err:abort(Path, {unknown_enum, N});
-        #enum_type { id = EnumTy } -> {enum, EnumTy}
+        #enum_type {} = Enum -> Enum
     end;
 ty_of(_Ctx, _Path, {scalar, Tag}, V) ->
     case valid_scalar_value(V) of
@@ -322,6 +335,8 @@ ty_check(Path, {scalar, Tag, V}, #scalar_type { id = Tag, input_coerce = IC }) -
         {error, Reason} ->
             graphql_err:abort(Path, {input_coercion, Tag, V, Reason})
     end;
+ty_check(_Path, #input_object_type { id = ID }, {input_object, #input_object_type { id = ID }}) ->
+    ok;
 ty_check(Path, Obj, {input_object, #input_object_type{} = Ty}) when is_map(Obj) ->
     check_input_object(Path, Ty, Obj);
 %% Failure:
@@ -339,10 +354,10 @@ coerce_object_(Other) -> Other.
 mk_varenv(Path, VDefs) ->
     maps:from_list([varenv_coerce(Path, Def) || Def <- VDefs]).
 
-varenv_coerce(Path, #vardef { id = Var, ty = T } = Var) ->
+varenv_coerce(Path, #vardef { id = Var, ty = T } = VarDef) ->
     case varenv_ty_coerce(T) of
         {ok, Type} ->
-            {graphql_ast:name(Var), Var#vardef { ty = Type }};
+            {graphql_ast:name(Var), VarDef#vardef { ty = Type }};
         {error, Reason} ->
             graphql_err:abort(Path, Reason)
     end.
@@ -355,16 +370,16 @@ varenv_ty_coerce({list, T}) ->
     end;
 varenv_ty_coerce({non_null, T}) ->
     case varenv_ty_coerce(T) of
-        {ok, Ty} -> {non_null, Ty};
+        {ok, Ty} -> {ok, {non_null, Ty}};
         {error, Reason} -> {error, Reason}
     end;
 varenv_ty_coerce(T) ->
     N = graphql_ast:name(T),
     case graphql_schema:lookup(N) of
         not_found -> {error, {unknown_type, N}};
-        #enum_type{} = Enum -> Enum;
-        #scalar_type{} = Scalar -> Scalar;
-        #input_object_type{} = IOType -> IOType
+        #enum_type{} = Enum -> {ok, Enum};
+        #scalar_type{} = Scalar -> {ok, Scalar};
+        #input_object_type{} = IOType -> {ok, IOType}
     end.
 
 %% -- AST MANIPULATION -------------------------
@@ -381,3 +396,4 @@ enum_representation(binary, V) -> V;
 enum_representation(atom, V) -> binary_to_atom(V, utf8);
 enum_representation(tagged, V) -> {enum, V}.
 
+id(#op { id = ID }) -> ID.
