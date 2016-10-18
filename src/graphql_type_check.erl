@@ -248,6 +248,7 @@ schema_type({scalar, X}) when is_atom(X) -> {scalar, X};
 schema_type({non_null, T}) -> {non_null, schema_type(T)};
 schema_type([Tag]) -> {list, schema_type(Tag)};
 schema_type(#enum_type{} = Ty) -> Ty;
+schema_type(#input_object_type{} = Ty) -> Ty;
 %% Elaborate types which are not elaborated.
 %% Strictly, this ought to be unnecessary given enough
 %% elaboration and optimization.

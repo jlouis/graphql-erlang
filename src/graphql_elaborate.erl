@@ -181,7 +181,7 @@ field_arg_type(Ty) when is_binary(Ty) ->
     case graphql_schema:lookup(Ty) of
         #scalar_type{} = ScalarTy -> {scalar, ScalarTy};
         #enum_type{} = Enum -> Enum;
-        #input_object_type{} -> Ty
+        #input_object_type{} = IOType -> IOType
     end.
 
 field_lookup(Path, Ty, SSet) ->
