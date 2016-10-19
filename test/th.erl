@@ -35,7 +35,7 @@ x(Config, Input, OpName, Params) ->
                Track5 = track(validate, Track4),
                Res = case OpName of
                    undefined -> graphql:execute(Ctx, AST2);
-                   Op -> graphql:execute(Ctx#{ operation_name => Op }, Elaborated)
+                   Op -> graphql:execute(Ctx#{ operation_name => Op }, AST2)
                end,
                
                Track6 = track(execute, Track5),
