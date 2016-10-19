@@ -330,6 +330,10 @@ value(Ctx, #{ type := ObjTy, value := {object, O}}) ->
         graphql_ast:unwrap_type(ObjTy)),
     ObjVals = value_object(Ctx, FieldEnv, O),
     maps:from_list(ObjVals);
+value(Ctx, #{ type := #input_object_type { fields = FieldEnv },
+              value := O}) when is_map(O) ->
+    ObjVals = value_object(Ctx, FieldEnv, maps:to_list(O)),
+    maps:from_list(ObjVals);
 value(Ctx, #{ type := ObjTy, value := O}) when is_map(O) ->
     #input_object_type { fields = FieldEnv } = graphql_schema:get(
         graphql_ast:unwrap_type(ObjTy)),
