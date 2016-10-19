@@ -1,0 +1,5 @@
+query GoblinQuery($id : Id!) {
+  goblin: monster(id: $id) {
+    ...GoblinFragment
+  }
+}

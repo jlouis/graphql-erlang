@@ -56,6 +56,7 @@ groups() ->
 
     Errors = {errors, [],
               [unknown_variable,
+               missing_fragment,
                input_coerce_error_exception,
                input_coerce_error]},
     [Dungeon, Errors].
@@ -312,6 +313,20 @@ unknown_variable(Config) ->
         run(Config,
             "unknown_variable.graphql",
             <<"TestFieldMerge">>,
+            #{ <<"id">> => ID }),
+    ok.
+
+missing_fragment(Config) ->
+    ID = base64:encode(<<"monster:1">>),
+
+    #{errors :=
+          #{key := {unknown_fragment,<<"GoblinFragment">>},
+            path := [<<"document">>,
+                     <<"GoblinQuery">>,
+                     <<"monster">>]}} =
+        run(Config,
+            "missing_fragment.graphql",
+            <<"GoblinQuery">>,
             #{ <<"id">> => ID }),
     ok.
 
