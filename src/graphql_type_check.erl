@@ -151,16 +151,19 @@ input_coerce_scalar(_Path, int, V) when is_integer(V) -> ok;
 input_coerce_scalar(_Path, float, V) when is_float(V) -> ok;
 input_coerce_scalar(_Path, bool, true) -> ok;
 input_coerce_scalar(_Path, bool, false) -> ok;
-input_coerce_scalar(Path, #scalar_type { id = ID, input_coerce = IC }, Val) ->
+input_coerce_scalar(Path, #scalar_type {} = SType, Val) ->
+    input_coercer(Path, SType, Val);
+input_coerce_scalar(Path, Ty, _V) ->
+    graphql_err:abort(Path, {type_mismatch, #{ schema => {scalar, Ty}}}).
+
+input_coercer(Path, #scalar_type { id = ID, input_coerce = IC}, Val) ->
     try IC(Val) of
         {ok, NewVal} -> {replace, NewVal};
         {error, Reason} -> graphql_err:abort(Path, {input_coercion, ID, Val, Reason})
     catch
         Cl:Err ->
             graphql_err:abort(Path, {input_coerce_abort, {Cl, Err}})
-    end;
-input_coerce_scalar(Path, Ty, _V) ->
-    graphql_err:abort(Path, {type_mismatch, #{ schema => {scalar, Ty}}}).
+    end.
 
 %% -- FRAGMENTS --------------------------------
 
@@ -305,16 +308,8 @@ refl(Path, {list, As}, {list, T}) ->
     end;
 %% Ground:
 refl(_Path, {scalar, Tag, V}, {scalar, Tag}) -> {replace, V};
-refl(Path, {scalar, Tag, V}, #scalar_type { id = Tag, input_coerce = IC }) ->
-    try IC(V) of
-        {ok, V} -> ok;
-        {ok, NV} -> {replace, NV};
-        {error, Reason} ->
-            graphql_err:abort(Path, {input_coercion, Tag, V, Reason})
-    catch
-        Cl:Err ->
-            graphql_err:abort(Path, {input_coerce_abort, {Cl, Err}})
-    end;
+refl(Path, {scalar, Tag, V}, #scalar_type { id = Tag } = SType) ->
+    input_coercer(Path, SType, V);
 refl(_Path, #input_object_type { id = ID }, {input_object, #input_object_type { id = ID }}) ->
     ok;
 refl(Path, Obj, #input_object_type{} = Ty) when is_map(Obj) ->
