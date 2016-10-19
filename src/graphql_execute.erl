@@ -345,7 +345,7 @@ value(Ctx, #{ type := {non_null, Ty}, value := V}) ->
 value(_Ctx, #{ type := {scalar, STy}, value := V}) ->
     value_scalar(STy, V);
 value(_Ctx, #{ type := _, value := V} = M) ->
-    lager:warning("Resolving: ~p", [M]),
+    lager:info("Resolving: ~p", [M]),
     V.
 
 value_scalar(string, null) -> null;
@@ -355,7 +355,7 @@ value_scalar(id, S) when is_binary(S) -> S;
 value_scalar(bool, true) -> true;
 value_scalar(bool, false) -> false;
 value_scalar(Ty, V) ->
-    lager:warning("Scalar Resolving: ~p", [{Ty, V}]),
+    lager:info("Scalar Resolving: ~p", [{Ty, V}]),
     V.
 
 value_object(_, _, []) -> [];
