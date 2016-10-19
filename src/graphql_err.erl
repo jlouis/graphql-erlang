@@ -54,6 +54,8 @@ err_msg(missing_non_null_param) ->
     ["The parameter is non-null, but was undefined in parameter list"];
 err_msg({unbound_variable, Var}) ->
     ["The document refers to a variable ", Var, " but no such var exists. Perhaps the variable is a typo?"];
+err_msg({input_coerce_abort, {Class, Reason}}) ->
+    io_lib:format("Input coercer failed with an exception of class ~p and reason ~p", [Class, Reason]);
 err_msg({input_coercion, Type, Value, Reason}) ->
     io_lib:format("Input coercion failed for type ~s with value ~p. The reason it failed is: ~p", [Type, Value, Reason]).
 

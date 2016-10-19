@@ -55,6 +55,7 @@ groups() ->
 
     Errors = {errors, [],
               [unknown_variable,
+               input_coerce_error_exception,
                input_coerce_error]},
     [Dungeon, Errors].
 
@@ -301,6 +302,21 @@ input_coerce_error(Config) ->
       <<"mood">> => <<"AGGRESSIVE">>
      },
     #{errors := #{key := {input_coercion,<<"Color">>,_,_},
+                  path := [<<"IntroduceMonster">>,
+                           <<"input">>,
+                           <<"color">>]}} =
+        run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input }),
+    ok.
+
+input_coerce_error_exception(Config) ->
+    Input = #{
+      <<"clientMutationId">> => <<"MUTID">>,
+      <<"name">> => <<"rat">>,
+      <<"color">> => <<"#">>, %% Forces an exception in the dungeon code
+      <<"hitpoints">> => 3,
+      <<"mood">> => <<"AGGRESSIVE">>
+     },
+    #{errors := #{key := {input_coerce_abort, _},
                   path := [<<"IntroduceMonster">>,
                            <<"input">>,
                            <<"color">>]}} =

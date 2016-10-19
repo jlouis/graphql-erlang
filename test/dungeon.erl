@@ -115,6 +115,8 @@ inject_color() ->
                                 Green = binary_to_integer(<<G1, G2>>, 16),
                                 Blue = binary_to_integer(<<B1, B2>>, 16),
                                 {ok, {Red, Green, Blue}};
+                            (<<"#">>) ->
+                                exit(argh);
                             (X) ->
                                 {error, {invalid_color, X}}
                         end,
