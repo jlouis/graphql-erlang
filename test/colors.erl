@@ -38,11 +38,7 @@ inject() ->
 				fromEnum => #{ type => 'Color', description => "" },
 				fromInt => #{ type => int, description => "" }
 			},
-			resolve => fun
-			    (_Ctx, _, #{ <<"fromInt">> := X}) -> {ok, color_from_int(X)};
-			    (_Ctx, _, #{ <<"fromEnum">> := X}) -> {ok, color_from_enum(X)};
-			    (_Ctx, _, #{}) -> {error, cannot_resolve_color}
-			end
+			resolve => fun color_int/3
 		}
 	}
     }},
@@ -91,7 +87,29 @@ color_from_enum({enum, En}) ->
 
 color_from_string(X) -> color_from_enum({enum, X}).
 
-color_enum(Ctx, _, #{ <<"fromEnum">> := X}) -> {ok, color_from_enum(X)};
-color_enum(Ctx, _, #{ <<"fromInt">> := X}) -> {ok, color_from_int(X)};
-color_enum(Ctx, _, #{ <<"fromString">> := X}) -> {ok, color_from_string(X)};
-color_enum(Ctx, _, #{}) -> {ok, null}.
+color_enum(_Ctx, _, #{
+    <<"fromEnum">> := null,
+    <<"fromInt">> := null,
+    <<"fromString">> := null}) -> {ok, null};
+color_enum(_Ctx, _, #{
+    <<"fromEnum">> := X,
+    <<"fromInt">> := null,
+    <<"fromString">> := null}) -> {ok, color_from_enum(X)};
+color_enum(_Ctx, _, #{
+    <<"fromEnum">> := null,
+    <<"fromInt">> := X,
+    <<"fromString">> := null}) -> {ok, color_from_int(X)};
+color_enum(_Ctx, _, #{
+    <<"fromEnum">> := null,
+    <<"fromInt">> := null,
+    <<"fromString">> := X}) -> {ok, color_from_string(X)}.
+
+color_int(_Ctx, _, #{
+    <<"fromEnum">> := null,
+    <<"fromInt">> := null }) -> {ok, null};
+color_int(_Ctx, _, #{
+    <<"fromEnum">> := null,
+    <<"fromInt">> := X }) when X /= null -> {ok, color_from_int(X)};
+color_int(_Ctx, _, #{
+    <<"fromEnum">> := X,
+    <<"fromInt">> := null }) when X /= null -> {ok, color_from_enum(X)}.

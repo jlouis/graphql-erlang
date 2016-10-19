@@ -18,6 +18,7 @@
           inventory = ordsets:new(),
           stats = #stats{},
           hitpoints,
+          plush_factor = 0.0,
           mood}).
 -record(item, {
 	id,
@@ -233,6 +234,10 @@ inject_monster() ->
             resolve => fun(_, #monster { mood = M}, _) -> {ok, M} end,
             description => "The mood of the monster"
            },
+          plushFactor => #{
+            type => 'float!',
+            resolve => fun(_, #monster { plush_factor = F }, _) -> {ok, F} end,
+            description => "How much of a plush animal the monster is (cuteness)" },
           stats => #{
             type => 'Stats',
             resolve => fun(_, #monster { stats = S}, _) -> {ok, S} end,
@@ -252,6 +257,10 @@ inject_monster() ->
                                  type => 'int',
                                  default => 15,
                                  description => "The number of hitpoints of a monster" },
+                               plushFactor => #{
+                                  type => 'float',
+                                  default => 0.01,
+                                  description => "The plush-factor of the monster" },
                                mood => #{
                                  type => 'Mood',
                                  default => <<"DODGY">>,
@@ -550,10 +559,11 @@ mut_int_room(_Ctx, none, #{ <<"input">> := Input }) ->
 mut_int_monster(_Ctx, none, #{ <<"input">> := Input }) ->
     #{ <<"clientMutationId">> := MID,
        <<"name">> := N,
-       <<"color">> := C,
+       <<"color">> := {_,_,_} = C,
        <<"hitpoints">> := HP,
        <<"stats">> := Stats,
-       <<"mood">> := M
+       <<"mood">> := M,
+       <<"plushFactor">> := PF
     } = Input,
     S = case Stats of
             null -> #stats{};
@@ -566,7 +576,7 @@ mut_int_monster(_Ctx, none, #{ <<"input">> := Input }) ->
                    yell = Yell
                   }
         end,
-    {atomic, Monster} = insert(#monster { stats = S, name = N, color = C, hitpoints = HP, mood = M }),
+    {atomic, Monster} = insert(#monster { plush_factor = PF, stats = S, name = N, color = C, hitpoints = HP, mood = M }),
     {ok, #{
         <<"clientMutationId">> => MID,
         <<"monster">> => Monster } }.

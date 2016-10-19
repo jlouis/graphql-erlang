@@ -220,26 +220,54 @@ tc_field(Ctx, Path, #field { args = Args,
             
 %% -- ARGS -------------------------------------
 tc_args(Ctx, Path, Args, Schema) ->
-    case uniq(lists:sort(Args)) of
-        ok -> tc_args_(Ctx, Path, Args, Schema);
+    NArgs = names(Args),
+    case uniq(lists:sort(NArgs)) of
+        ok ->
+          SchemaArgs = maps:to_list(Schema),
+          tc_args_(Ctx, Path, NArgs, SchemaArgs, []);
         {error, Reason} -> graphql_err:abort(Path, Reason)
     end.
 
-tc_args_(_Ctx, _Path, [], _Schema) -> [];
-tc_args_(Ctx, Path, [{ID, #{ type := Ty, value := Val}} = A | Next], Schema) ->
-    Name = graphql_ast:name(ID),
-    ValueType = value_type(Ctx, Path, graphql_ast:unwrap_type(Ty), Val),
-    SchemaType = schema_type(Ty),
-    case refl(Path, ValueType, SchemaType) of
-        ok ->
-            [A | tc_args_(Ctx, Path, Next, Schema)];
-        {replace, RVal } ->
-            [{ID, {Ty, RVal}} | tc_args_(Ctx, Path, Next, Schema)];
-        {error, Expected} ->
-            graphql_err:abort(Path, {type_mismatch, #{ id => Name, schema => Expected }});
-        {error, Got, Expected} ->
-            graphql_err:abort(Path, {type_mismatch,
-                 #{ id => Name, document => Got, schema => Expected }})
+names(Args) -> [{graphql_ast:name(K), V} || {K, V} <- Args].
+     
+tc_args_(_Ctx, _Path, [], [], Acc) -> Acc;
+tc_args_(_Ctx, Path, [_|_] = Args, [], _Acc) ->
+    graphql_err:abort(Path, {excess_args, Args});
+tc_args_(Ctx, Path, Args, [{Name, #schema_arg { ty = STy }} = SArg | Next], Acc) ->
+    case find_arg(Args, SArg) of
+        {error, Reason} ->
+            graphql_err:abort([Name | Path], Reason);
+        {ok, {_, #{ type := Ty, value := Val}} = A, NextArgs} ->
+            ValueType = value_type(Ctx, Path, graphql_ast:unwrap_type(Ty), Val),
+            SchemaType = schema_type(STy),
+            case refl(Path, ValueType, SchemaType) of
+                ok ->
+                    tc_args_(Ctx, Path, NextArgs, Next, [A | Acc]);
+                {replace, RVal} ->
+                    tc_args_(Ctx, Path, NextArgs, Next, [{Name, {Ty, RVal}} | Acc]);
+                {error, Expected} ->
+                    graphql_err:abort(Path, {type_mismatch, #{ id => Name, schema => Expected }});
+                {error, Got, Expected} ->
+                     graphql_err:abort(Path, {type_mismatch,
+                          #{ id => Name, document => Got, schema => Expected }})
+            end
+    end.
+
+%% Search a list of arguments for the next argument. Handle non-null values
+%% correctly as we are conducting the search
+find_arg(Args, {Key, #schema_arg { ty = {non_null, _}}}) ->
+    case lists:keytake(Key, 1, Args) of
+        false ->
+            {error, missing_non_null_param};
+        {value, Arg, NextArgs} ->
+            {ok, Arg, NextArgs}
+    end;
+find_arg(Args, {Key, #schema_arg { ty = Ty, default = Default }}) ->
+    case lists:keytake(Key, 1, Args) of
+        false ->
+            {ok, {Key, #{ type => Ty, value => Default }}, Args};
+        {value, Arg, NextArgs} ->
+            {ok, Arg, NextArgs}
     end.
 
 uniq([]) -> ok;
@@ -274,6 +302,7 @@ value_type(#{ varenv := VE }, Path, _, {var, ID}) ->
             graphql_err:abort(Path, {unbound_variable, Name});
         #vardef { ty = Ty } -> Ty
     end;
+value_type(_Ctx, _Path, _, null) -> null;
 value_type(_Ctx, _Path, #enum_type{} = Ty, {enum, _N}) ->
     Ty;
 value_type(_Ctx, Path, _, {enum, N}) ->
@@ -299,13 +328,15 @@ value_type(Ctx, Path, {list, Ty}, {list, Ts}) when is_list(Ts) ->
 %% EQ Match:
 refl(_Path, X, X) -> ok;
 %% Compound:
-refl(Path, {non_null, A}, T) -> refl(Path, A, T);
-refl(Path, A, {non_null, T}) -> refl(Path, A, T);
+refl(_Path, null, {non_null, _}) -> {error, non_null};
 refl(Path, {list, As}, {list, T}) ->
     case lists:all(fun(X) -> refl(Path, X, T) == ok end, As) of
         true -> ok;
         false -> {error, {list, T}}
     end;
+refl(_Path, null, _T) -> ok;
+refl(Path, {non_null, A}, T) -> refl(Path, A, T);
+refl(Path, A, {non_null, T}) -> refl(Path, A, T);
 %% Ground:
 refl(_Path, {scalar, Tag, V}, {scalar, Tag}) -> {replace, V};
 refl(Path, {scalar, Tag, V}, #scalar_type { id = Tag } = SType) ->
@@ -314,6 +345,7 @@ refl(_Path, #input_object_type { id = ID }, {input_object, #input_object_type { 
     ok;
 refl(Path, Obj, #input_object_type{} = Ty) when is_map(Obj) ->
     check_input_object(Path, Ty, Obj);
+%% Nullable types
 %% Failure:
 refl(_Path, A, T) -> {error, A, T}.
 

@@ -51,6 +51,7 @@ groups() ->
                  nested_input_object,
                  inline_fragment,
                  fragment_over_union_interface,
+                 scalar_as_expression_coerce,
                  simple_field_merge]},
 
     Errors = {errors, [],
@@ -232,20 +233,41 @@ nested_input_object(Config) ->
         <<"attack">> => 7,
         <<"shellScripting">> => 5,
         <<"yell">> => <<"...">> }},
-    Expected = #{ data =>
-                      #{<<"introduceMonster">> => #{<<"clientMutationId">> => <<"123">>,
-                                                    <<"monster">> =>
-                                                        #{ <<"color">> => <<"#1BE215">>,
-                                                           <<"hitpoints">> => 9001,
-                                                           <<"mood">> => <<"TRANQUIL">>,
-                                                           <<"name">> => <<"Green Slime">>,
-                                                           <<"id">> => <<"bW9uc3Rlcjo1">>,
-                                                           <<"stats">> => #{
-                                                            <<"attack">> => 7,
-                                                            <<"shellScripting">> => 5,
-                                                            <<"yell">> => <<"...">> }}}}},
-    Expected = run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
+    #{ data :=
+                      #{<<"introduceMonster">> := #{<<"clientMutationId">> := <<"123">>,
+                                                    <<"monster">> :=
+                                                        #{ <<"color">> := <<"#1BE215">>,
+                                                           <<"hitpoints">> := 9001,
+                                                           <<"mood">> := <<"TRANQUIL">>,
+                                                           <<"name">> := <<"Green Slime">>,
+                                                           <<"id">> := _,
+                                                           <<"plushFactor">> := PF,
+                                                           <<"stats">> := #{
+                                                            <<"attack">> := 7,
+                                                            <<"shellScripting">> := 5,
+                                                            <<"yell">> := <<"...">> }}}}} =
+             run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
+    true = (PF - 0.01) < 0.00001,
     %% Expected = run(Config, <<"IntroduceMonsterFatExpr">>, #{ <<"input">> => Input}),
+    ok.
+
+scalar_as_expression_coerce(Config) ->
+    ct:log("When inputtting a scalar as an expression, it must coerce"),
+    #{ data :=
+           #{<<"introduceMonster">> := #{<<"clientMutationId">> := <<"123">>,
+                                         <<"monster">> :=
+                                             #{ <<"color">> := <<"#1BE215">>,
+                                                <<"hitpoints">> := 9001,
+                                                <<"mood">> := <<"TRANQUIL">>,
+                                                <<"name">> := <<"Green Slime">>,
+                                                <<"id">> := _,
+                                                <<"plushFactor">> := PF,
+                                                <<"stats">> := #{
+                                                    <<"attack">> := 7,
+                                                    <<"shellScripting">> := 5,
+                                                    <<"yell">> := <<"...">> }}}}} =
+             run(Config, <<"IntroduceMonsterFatExpr">>, #{}),
+    true = (PF - 0.01) < 0.00001,
     ok.
 
 inline_fragment(Config) ->
