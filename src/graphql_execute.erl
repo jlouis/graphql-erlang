@@ -325,6 +325,8 @@ value(Ctx, #{ type := [Ty], value := {list, Vals}}) ->
     [value(Ctx, {Ty, V}) || V <- Vals];
 value(Ctx, #{ type := [Ty], value := Vals}) when is_list(Vals) ->
     [value(Ctx, {Ty, V}) || V <- Vals];
+value(Ctx, #{ type := {non_null, Ty}, value := V}) ->
+    value(Ctx, #{ type => Ty, value => V});
 value(Ctx, #{ type := ObjTy, value := {object, O}}) ->
     #input_object_type { fields = FieldEnv } = graphql_schema:get(
         graphql_ast:unwrap_type(ObjTy)),
@@ -340,8 +342,6 @@ value(Ctx, #{ type := ObjTy, value := O}) when is_map(O) ->
     ObjVals = value_object(Ctx, FieldEnv, maps:to_list(O)),
     maps:from_list(ObjVals);
 value(Ctx, #{ value := {var, {name, N, _}}}) -> var_lookup(Ctx, N);
-value(Ctx, #{ type := {non_null, Ty}, value := V}) ->
-    value(Ctx, #{ type => Ty, value => V});
 value(_Ctx, #{ type := {scalar, STy}, value := V}) ->
     value_scalar(STy, V);
 value(_Ctx, #{ type := _, value := V} = M) ->
