@@ -83,6 +83,7 @@ path(Path) ->
 
 format_ty(#enum_type { id = Ty }) -> Ty;
 format_ty(#input_object_type { id = Ty }) -> Ty;
+format_ty(#scalar_type { id = Ty }) -> Ty;
 format_ty({input_object, Ty}) -> Ty;
 format_ty({object, Fields}) ->
     FEs = format_fields(Fields),
