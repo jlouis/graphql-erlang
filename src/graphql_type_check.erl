@@ -339,8 +339,13 @@ refl(Path, {non_null, A}, T) -> refl(Path, A, T);
 refl(Path, A, {non_null, T}) -> refl(Path, A, T);
 %% Ground:
 refl(_Path, {scalar, Tag, V}, {scalar, Tag}) -> {replace, V};
-refl(Path, {scalar, Tag, V}, #scalar_type { id = Tag } = SType) ->
-    input_coercer(Path, SType, V);
+refl(Path, {scalar, Tag, V}, #scalar_type { id = ID } = SType) ->
+    case Tag of
+        string -> input_coercer(Path, SType, V);
+        int -> input_coercer(Path, SType, V);
+        float -> input_coercer(Path, SType, V);
+        ID -> input_coercer(Path, SType, V)
+    end;
 refl(_Path, #input_object_type { id = ID }, {input_object, #input_object_type { id = ID }}) ->
     ok;
 refl(Path, Obj, #input_object_type{} = Ty) when is_map(Obj) ->
