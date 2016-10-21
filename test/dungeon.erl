@@ -107,6 +107,19 @@ inject_error() ->
     ok.
 
 inject_color() ->
+    ColorType = {scalar, #{
+    	id => 'ColorType',
+    	description => "How to represent colors in the output",
+    	input_coerce => fun(Bin) ->
+    	    V = list_to_binary(
+    	        string:to_lower(
+    	            binary_to_list(Bin))),
+    	    {ok, V}
+    	end,
+    	output_coerce => fun(X) -> {ok, X} end
+    }},
+    ok = graphql:insert_schema_definition(ColorType),
+
     Color = {scalar, #{
     	id => 'Color',
     	description => "Represents a color in the system",
@@ -209,10 +222,20 @@ inject_monster() ->
             description => "The name of the monster" },
           color => #{
             type => 'Color!',
-            resolve => fun(_, #monster{ color = {_,_,_} = C }, _) ->
-                               {ok, C}
+            resolve => fun(_, #monster{ color = {R,G,B} = C }, #{ <<"colorType">> := CType }) ->
+                                  case CType of
+                                      <<"rgb">> -> {ok, C};
+                                      <<"gray">> ->
+                                          V = 0.30*R + 0.59*G + 0.11*B,
+                                          {ok, {V, V, V}}
+                                  end
                        end,
-            description => "The color of the monster" },
+            description => "The color of the monster",
+            args => #{
+              colorType => #{
+                type => 'ColorType',
+                default => <<"rgb">>,
+                description => "How to process the color of the monster" }}},
           hitpoints => #{
             type => 'int!',
             resolve => fun(_, #monster { hitpoints = HP}, _) -> {ok, HP} end,

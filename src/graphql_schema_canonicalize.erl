@@ -162,6 +162,9 @@ c_field_val_description(_) -> undefined.
 c_args(K, V) ->
     {binarize(K), c_arg_val(V)}.
 
+
+c_arg_val(#{ type := Ty, description := Desc, default := Def }) ->
+    #schema_arg { ty = handle_type(Ty), description = binarize(Desc), default = Def };
 c_arg_val(#{ type := Ty, description := Desc }) ->
     #schema_arg { ty = handle_type(Ty), description = binarize(Desc) }.
 
