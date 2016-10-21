@@ -221,10 +221,10 @@ resolve_paginate_ordered(Source, Type, #{}, Bound) ->
 cursors_to_edges(#{<<"after">> := null,<<"before">> := null}, Bound) -> Bound;
 cursors_to_edges(#{ <<"after">> := Cursor } = Input, {Lo, Hi}) ->
     {_CursorType, K} = unpack_cursor(Cursor),
-    cursors_to_edges(maps:remove(<<"after">>, Input), slice({'after', K}, {Lo, Hi}));
+    cursors_to_edges(Input#{<<"after">> := null}, slice({'after', K}, {Lo, Hi}));
 cursors_to_edges(#{ <<"before">> := Cursor } = Input, {Lo, Hi}) ->
     {_CursorType, K} = unpack_cursor(Cursor),
-    cursors_to_edges(maps:remove(<<"before">>, Input), slice({'before', K}, {Lo, Hi})).
+    cursors_to_edges(Input#{<<"before">> := null}, slice({'before', K}, {Lo, Hi})).
 
 %% Slice the structure into its pieces
 slice({'after', K}, {Lo, Hi}) when K >= Lo andalso K < Hi ->
