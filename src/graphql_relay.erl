@@ -3,7 +3,7 @@
 -module(graphql_relay).
 
 -export([input/3, with_client_mutation/2]).
--export([pagination/1, pagination_fields/0, resolve_paginate/1, paginate/3]).
+-export([pagination/1, pagination_fields/0, resolve_paginate/2, paginate/3, paginate/4]).
 
 -define(DEFAULT_N, 10).
 
@@ -52,12 +52,15 @@ input(Ty, InputFields, PayloadFields) ->
     ok.
 
 paginate(Type, Description, AssocType) ->
+    paginate(Type, Description, AssocType, #{pagination_type => sequential}).
+
+paginate(Type, Description, AssocType, #{pagination_type := PaginationType}) ->
     #{
         type => Type,
         description => Description,
-        resolve => graphql_relay:resolve_paginate(AssocType),
+        resolve => graphql_relay:resolve_paginate(PaginationType, AssocType),
         args => graphql_relay:pagination_fields()
-     }.
+    }.
 
 -spec pagination(atom()) -> ok.
 pagination(Type) ->
@@ -113,8 +116,8 @@ pagination_fields(Additional) ->
     },
     maps:merge(Base, Additional).
 
-resolve_paginate(Type) ->
-    fun (_Ctx, Src, Input) -> resolve_paginate(Type, Src, Input) end.
+resolve_paginate(PaginationType, Type) ->
+    fun (_Ctx, Src, Input) -> resolve_paginate(PaginationType, Type, Src, Input) end.
 
 %% -- INTERNAL FUNCTIONS --------------------------------------
 
@@ -129,24 +132,28 @@ with_mutation(#{ <<"input">> := Input}, Fun, Key) ->
 take(K, Map) ->
     {maps:get(K, Map), maps:remove(K, Map)}.
 
-resolve_paginate(Type, Source, Input) ->
+resolve_paginate(sequential, Type, Source, Input) ->
     case gryphon_hydra:assoc_count(Source, Type) of
         {res, null, []} ->
             {error, invalid_type};
         {res, Count, []} ->
             Bounds = {0, Count},
             Sliced = cursors_to_edges(Input, Bounds),
-            resolve_paginate_(Source, Type, Input, Sliced, Count)
-    end.
+            resolve_paginate_sequential(Source, Type, Input, Sliced, Count)
+    end;
+resolve_paginate(ordered, Type, Source, Input) ->
+    Bounds = {0, 9000000000000000000},
+    Sliced = cursors_to_edges(Input, Bounds),
+    resolve_paginate_ordered(Source, Type, Input, Sliced).
 
 %% The spec says you can set both first and last, but the results are confusing
 %% when doing so. Hence, we reject such attempts for the simplicity of the
 %% implementation here.
-resolve_paginate_(_Source, _Type, #{ <<"first">> := _, <<"last">> := _}, _Bounds, _Count) ->
+resolve_paginate_sequential(_Source, _Type, #{ <<"first">> := F, <<"last">> := L}, _Bounds, _Count) when F /= null, L /= null ->
     {error, first_last};
-resolve_paginate_(_Source, _Type, #{ <<"first">> := N }, _Bounds, _Count) when N < 0 ->
+resolve_paginate_sequential(_Source, _Type, #{ <<"first">> := N }, _Bounds, _Count) when N /= null, N < 0 ->
     {error, negative_first};
-resolve_paginate_(Source, Type, #{ <<"first">> := N }, {Lo, Hi}, Count) ->
+resolve_paginate_sequential(Source, Type, #{ <<"first">> := N }, {Lo, Hi}, Count) when N /= null ->
     Offset = Lo,
     Limit = min(Hi-Lo, N),
     {res, Edges, []} = gryphon_hydra:assoc_range(Source, Type, Offset, Limit),
@@ -156,12 +163,12 @@ resolve_paginate_(Source, Type, #{ <<"first">> := N }, {Lo, Hi}, Count) ->
     },
     {ok, #{
        <<"pageInfo">> => PageInfo,
-       <<"edges">> => edges(Edges, Offset),
+       <<"edges">> => edges_sequential(Edges, Offset),
        <<"count">> => Count
     }};
-resolve_paginate_(_Source, _Type, #{ <<"last">> := N }, _Bounds, _Count) when N < 0 ->
+resolve_paginate_sequential(_Source, _Type, #{ <<"last">> := N }, _Bounds, _Count) when N /= null, N < 0 ->
     {error, negative_last};
-resolve_paginate_(Source, Type, #{ <<"last">> := N }, {Lo, Hi}, Count) ->
+resolve_paginate_sequential(Source, Type, #{ <<"last">> := N }, {Lo, Hi}, Count) when N /= null ->
     Offset = max(Hi-N, 0),
     Limit = min(Hi-Lo, N),
     {res, Edges, []} = gryphon_hydra:assoc_range(Source, Type, Offset, Limit),
@@ -171,20 +178,53 @@ resolve_paginate_(Source, Type, #{ <<"last">> := N }, {Lo, Hi}, Count) ->
     },
     {ok, #{
         <<"pageInfo">> => PageInfo,
-        <<"edges">> => edges(Edges, Offset),
+        <<"edges">> => edges_sequential(Edges, Offset),
         <<"count">> => Count
       }};
-resolve_paginate_(Source, Type, #{}, Bound, Count) ->
-    resolve_paginate_(Source, Type, #{ <<"first">> => ?DEFAULT_N }, Bound, Count).
+resolve_paginate_sequential(Source, Type, #{}, Bound, Count) ->
+    resolve_paginate_sequential(Source, Type, #{ <<"first">> => ?DEFAULT_N }, Bound, Count).
 
+resolve_paginate_ordered(_Source, _Type, #{ <<"first">> := F, <<"last">> := L}, _Bounds) when F /= null, L /= null ->
+    {error, first_last};
+resolve_paginate_ordered(_Source, _Type, #{ <<"first">> := N }, _Bounds) when N /= null, N < 0 ->
+    {error, negative_first};
+resolve_paginate_ordered(Source, Type, #{ <<"first">> := N }, {Lo, Hi}) when N /= null ->
+    {res, Edges, []} = gryphon_hydra:assoc_ordered_range(Source, Type, Hi, Lo, N + 1),
+    Count = length(Edges),
+    PageInfo = #{
+        <<"hasNextPage">> => Count > N,
+        <<"hasPreviousPage">> => false
+    },
+    {ok, #{
+        <<"pageInfo">> => PageInfo,
+        <<"edges">> => edges_ordered(Edges, N),
+        <<"count">> => Count
+    }};
+resolve_paginate_ordered(_Source, _Type, #{ <<"last">> := N }, _Bounds) when N /= null, N < 0 ->
+    {error, negative_last};
+resolve_paginate_ordered(Source, Type, #{ <<"last">> := N }, {Lo, Hi}) when N /= null ->
+    {error, not_implemented};
+%%    {res, Edges, []} = gryphon_hydra:assoc_ordered_range(Source, Type, Hi, Lo, N + 1),
+%%    Count = length(Edges),
+%%    PageInfo = #{
+%%        <<"hasNextPage">> => false,
+%%        <<"hasPreviousPage">> => N < (Hi-Lo)
+%%    },
+%%    {ok, #{
+%%        <<"pageInfo">> => PageInfo,
+%%        <<"edges">> => edges_ordered(Edges),
+%%        <<"count">> => Count
+%%    }};
+resolve_paginate_ordered(Source, Type, #{}, Bound) ->
+    resolve_paginate_ordered(Source, Type, #{ <<"first">> => ?DEFAULT_N }, Bound).
 
+cursors_to_edges(#{<<"after">> := null,<<"before">> := null}, Bound) -> Bound;
 cursors_to_edges(#{ <<"after">> := Cursor } = Input, {Lo, Hi}) ->
-    K = unpack_cursor(Cursor),
+    {_CursorType, K} = unpack_cursor(Cursor),
     cursors_to_edges(maps:remove(<<"after">>, Input), slice({'after', K}, {Lo, Hi}));
 cursors_to_edges(#{ <<"before">> := Cursor } = Input, {Lo, Hi}) ->
-    K = unpack_cursor(Cursor),
-    cursors_to_edges(maps:remove(<<"before">>, Input), slice({'before', K}, {Lo, Hi}));
-cursors_to_edges(#{}, Bound) -> Bound.
+    {_CursorType, K} = unpack_cursor(Cursor),
+    cursors_to_edges(maps:remove(<<"before">>, Input), slice({'before', K}, {Lo, Hi})).
 
 %% Slice the structure into its pieces
 slice({'after', K}, {Lo, Hi}) when K >= Lo andalso K < Hi ->
@@ -197,14 +237,23 @@ slice(K, {Lo, Hi}) ->
 
 unpack_cursor(Cur) ->
     Data = base64:decode(Cur),
-    binary_to_integer(Data).
+    binary_to_term(Data, [safe]).
 
 pack_cursor(K) ->
-    base64:encode(integer_to_binary(K)).
+    base64:encode(term_to_binary(K, [compressed])).
 
-edges([], _K) -> [];
-edges([Obj | Next], K) ->
-    Cursor = pack_cursor(K),
+edges_sequential([], _K) -> [];
+edges_sequential([Obj | Next], K) ->
+    Cursor = pack_cursor({sequential, K}),
     Edge = #{ <<"node">> => Obj, <<"cursor">> => Cursor },
-    [Edge | edges(Next, K+1)].
+    [Edge | edges_sequential(Next, K+1)].
+
+edges_ordered([], _) -> [];
+edges_ordered(_, 0) -> [];
+edges_ordered([{Obj, Timestamp} | Next], N) ->
+    Cursor = pack_cursor({ordered, Timestamp}),
+    Edge = #{ <<"node">> => Obj, <<"cursor">> => Cursor },
+    [Edge | edges_ordered(Next, N-1)].
+
+
 
