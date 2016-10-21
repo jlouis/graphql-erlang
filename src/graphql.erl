@@ -2,13 +2,16 @@
 
 -include("graphql_internal.hrl").
 
+%% GraphQL Documents
 -export([
-    elaborate/1,
-    execute/1, execute/2,
-    parse/1,
-    type_check/1, type_check_params/3,
-    validate/1]).
+         parse/1,
+         elaborate/1,
+         type_check/1, type_check_params/3,
+         validate/1,
+         execute/1, execute/2
+        ]).
 
+%% Schema Definitions
 -export([
     insert_schema_definition/1,
     validate_schema/0
