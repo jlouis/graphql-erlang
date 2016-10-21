@@ -197,7 +197,7 @@ resolve_paginate_ordered(Source, Type, #{ <<"first">> := N }, {Lo, Hi}) when N /
     },
     {ok, #{
         <<"pageInfo">> => PageInfo,
-        <<"edges">> => edges_ordered(Edges, N),
+        <<"edges">> => lists:reverse(edges_ordered(Edges, N)),
         <<"count">> => Count
     }};
 resolve_paginate_ordered(_Source, _Type, #{ <<"last">> := N }, _Bounds) when N /= null, N < 0 ->
