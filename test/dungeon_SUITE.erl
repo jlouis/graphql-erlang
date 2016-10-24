@@ -27,15 +27,15 @@ init_per_group(_Group, Config) ->
 end_per_group(_Group, _Config) ->
     ok.
 
-init_per_testcase(d, Config) ->
+init_per_testcase(disabled, Config) ->
     {ok, _} = dbg:tracer(),
     dbg:p(all, c),
-    dbg:tpl(graphql_parser, yeccerror, '_', cx),
+    dbg:tpl(graphql_type_check, check_param, '_', cx),
     Config;
 init_per_testcase(_Case, Config) ->
     Config.
 
-end_per_testcase(d, Config) ->
+end_per_testcase(disabled, Config) ->
     dbg:stop_clear(),
     ok;
 end_per_testcase(_Case, _Config) ->
@@ -206,6 +206,7 @@ direct_input(Config) ->
       <<"name">> => <<"Albino Hobgoblin">>,
       <<"color">> => <<"#ffffff">>,
       <<"hitpoints">> => 5,
+      <<"properties">> => [<<"DRAGON">>, <<"MURLOC">>],
       <<"mood">> => <<"AGGRESSIVE">>
     },
     #{ data := #{
@@ -216,7 +217,7 @@ direct_input(Config) ->
                 <<"name">> := <<"Albino Hobgoblin">>,
                 <<"color">> := <<"#FFFFFF">>,
                 <<"hitpoints">> := 5,
-                <<"properties">> := [],
+                <<"properties">> := [<<"DRAGON">>, <<"MURLOC">>],
                 <<"mood">> := <<"AGGRESSIVE">>}
         }}} = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input}),
     ok.

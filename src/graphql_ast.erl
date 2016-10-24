@@ -10,7 +10,7 @@
 -spec resolve_type(graphql_type()) -> tycond().
 resolve_type({scalar, Sc}) -> {scalar, Sc};
 resolve_type({non_null, Ty}) -> resolve_type(Ty);
-resolve_type([Ty]) -> {list, resolve_type(Ty)};
+resolve_type({list, Ty}) -> {list, resolve_type(Ty)};
 resolve_type(B) when is_binary(B) -> B;
 resolve_type(#scalar_type{} = Ty) -> Ty;
 resolve_type(#enum_type{} = Ty) -> Ty;

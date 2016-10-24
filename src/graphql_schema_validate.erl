@@ -141,7 +141,7 @@ is_union_type(Obj) ->
     end.
 
 type({non_null, T}) -> type(T);
-type([T]) -> type(T);
+type({list, T}) -> type(T);
 type({scalar, S}) -> scalar(S);
 type(X) when is_binary(X) ->
     case lookup(X) of
@@ -153,7 +153,7 @@ type(X) when is_binary(X) ->
     end.
 
 input_type({non_null, T}) -> input_type(T);
-input_type([T]) -> input_type(T);
+input_type({list, T}) -> input_type(T);
 input_type({scalar, S}) -> scalar(S);
 input_type(X) when is_binary(X) ->
     case lookup(X) of
