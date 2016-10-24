@@ -45,7 +45,7 @@ Rules.
 {Punctuator}	: {token, {list_to_atom(TokenChars), TokenLine}}.
 {IntValue}		: {token, {int, TokenLine, list_to_integer(TokenChars)}}.
 {FloatValue}	: {token, {float, TokenLine, list_to_float(TokenChars)}}.
-{StringValue}	: {token, {string, TokenLine, iolist_to_binary(unquote(TokenChars))}}.
+{StringValue}	: {token, {bstring, TokenLine, iolist_to_binary(unquote(TokenChars))}}.
 {Name}		: {token, identifier(TokenChars, TokenLine)}.
 
 Erlang code.

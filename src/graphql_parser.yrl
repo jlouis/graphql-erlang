@@ -31,7 +31,7 @@ Terminals
   '{' '}' '(' ')' '[' ']' '!' ':' '@' '$' '=' '|' '...'
   'query' 'mutation' 'subscription' 'fragment' 'on' 'null'
   'type' 'implements' 'interface' 'union' 'scalar' 'enum' 'input' 'extend'
-  name int float string bool.
+  name int float bstring bool.
 
 Rootsymbol Document.
 
@@ -195,7 +195,7 @@ Name -> 'on' : '$1'.
 Value -> Variable : g_var('$1').
 Value -> int : g_integer('$1').
 Value -> float : g_float('$1').
-Value -> string : g_string('$1').
+Value -> bstring : g_string('$1').
 Value -> bool : g_bool('$1').
 Value -> EnumValue : {enum, '$1'}.
 Value -> ListValue : {list, '$1'}.
@@ -298,7 +298,7 @@ g_enum({name, _Line, N}) -> N.
 g_var({name, _, _} = N) -> {var, N}.
 g_integer({int, _, I}) -> I.
 g_float({float, _, F}) -> F.
-g_string({string, _, S}) -> S.
+g_string({bstring, _, S}) -> S.
 g_bool({bool, _, B}) -> B.
 
 g_input_object(KVPairs) -> maps:from_list(KVPairs).
