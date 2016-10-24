@@ -27,15 +27,15 @@ init_per_group(_Group, Config) ->
 end_per_group(_Group, _Config) ->
     ok.
 
-init_per_testcase(disabled, Config) ->
+init_per_testcase(quoted_input_error, Config) ->
     {ok, _} = dbg:tracer(),
     dbg:p(all, c),
-    dbg:tpl(graphql_type_check, ty_check, '_', cx),
+    dbg:tpl(graphql_parser, yeccerror, '_', cx),
     Config;
 init_per_testcase(_Case, Config) ->
     Config.
 
-end_per_testcase(disabled, Config) ->
+end_per_testcase(quoted_input_error, Config) ->
     dbg:stop_clear(),
     ok;
 end_per_testcase(_Case, _Config) ->
@@ -57,8 +57,10 @@ groups() ->
     Errors = {errors, [],
               [unknown_variable,
                missing_fragment,
+               %quoted_input_error,
                input_coerce_error_exception,
-               input_coerce_error]},
+               input_coerce_error
+               ]},
     [Dungeon, Errors].
 
 all() ->
@@ -329,6 +331,9 @@ missing_fragment(Config) ->
             <<"GoblinQuery">>,
             #{ <<"id">> => ID }),
     ok.
+
+quoted_input_error(Config) ->
+    ok = run(Config, "quoted_input.graphql", <<"IMonster">>, #{}).
 
 input_coerce_error(Config) ->
     Input = #{
