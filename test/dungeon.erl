@@ -308,6 +308,10 @@ inject_monster() ->
                                  type => 'Mood',
                                  default => <<"DODGY">>,
                                  description => "The mood of the monster" },
+                               properties => #{
+                                 type => ['Property'],
+                                 default => [],
+                                 description => "The properties of the monster" },
                                stats => #{
                                  type => 'StatsInput',
                                  description => "The monster stats"
@@ -606,6 +610,7 @@ mut_int_monster(_Ctx, none, #{ <<"input">> := Input }) ->
        <<"hitpoints">> := HP,
        <<"stats">> := Stats,
        <<"mood">> := M,
+       <<"properties">> := Props,
        <<"plushFactor">> := PF
     } = Input,
     S = case Stats of
@@ -619,7 +624,14 @@ mut_int_monster(_Ctx, none, #{ <<"input">> := Input }) ->
                    yell = Yell
                   }
         end,
-    {atomic, Monster} = insert(#monster { plush_factor = PF, stats = S, name = N, color = C, hitpoints = HP, mood = M }),
+    {atomic, Monster} = insert(#monster {
+    	properties = Props,
+    	plush_factor = PF,
+    	stats = S,
+    	name = N,
+    	color = C,
+    	hitpoints = HP,
+    	mood = M }),
     {ok, #{
         <<"clientMutationId">> => MID,
         <<"monster">> => Monster } }.
