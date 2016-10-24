@@ -15,11 +15,11 @@ resolve_type(B) when is_binary(B) -> B;
 resolve_type(#scalar_type{} = Ty) -> Ty;
 resolve_type(#enum_type{} = Ty) -> Ty;
 resolve_type(#input_object_type{} = Ty) -> Ty;
-resolve_type({name, N, _}) -> N.
+resolve_type({name, _, N}) -> N.
 
 -spec unwrap_to_base_type(graphql_type()) -> tycond().
 unwrap_to_base_type({scalar, X}) -> {scalar, X};
-unwrap_to_base_type({name, N, _}) -> N;
+unwrap_to_base_type({name, _, N}) -> N;
 unwrap_to_base_type(#enum_type{} = Ty) -> Ty;
 unwrap_to_base_type(#input_object_type{} = Ty) -> Ty;
 unwrap_to_base_type(#scalar_type{} = Ty) -> Ty;
@@ -33,6 +33,6 @@ unwrap_type(Ty) ->
 
 -spec name('ROOT' | name()) -> binary().
 name('ROOT') -> <<"ROOT">>;
-name({name, X, _}) -> X;
+name({name, _Line, X}) -> X;
 name({var, N}) -> name(N).
 

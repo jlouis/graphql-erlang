@@ -282,23 +282,23 @@ g_query({query, _L} = Q) -> Q.
 g_mutation({mutation, _L} = Mut) -> Mut.
 g_subscription({subscription, _L} = Sub) -> Sub.
 
-g_ty({name, <<"String">>, _}) -> {scalar, string};
-g_ty({name, <<"string">>, _}) -> {scalar, string};
-g_ty({name, <<"Int">>, _}) -> {scalar, int};
-g_ty({name, <<"int">>, _}) -> {scalar, int};
-g_ty({name, <<"float">>, _}) -> {scalar, float};
-g_ty({name, <<"Float">>, _}) -> {scalar, float};
-g_ty({name, <<"id">>, _}) -> {scalar, id};
-g_ty({name, <<"Id">>, _}) -> {scalar, id};
-g_ty({name, <<"ID">>, _}) -> {scalar, id};
+g_ty({name, _, <<"String">>}) -> {scalar, string};
+g_ty({name, _, <<"string">>}) -> {scalar, string};
+g_ty({name, _, <<"Int">>}) -> {scalar, int};
+g_ty({name, _, <<"int">>}) -> {scalar, int};
+g_ty({name, _, <<"float">>}) -> {scalar, float};
+g_ty({name, _, <<"Float">>}) -> {scalar, float};
+g_ty({name, _, <<"id">>}) -> {scalar, id};
+g_ty({name, _, <<"Id">>}) -> {scalar, id};
+g_ty({name, _, <<"ID">>}) -> {scalar, id};
 g_ty({name, _, _} = N) -> N.
 
-g_enum({name, ID, _Line}) -> ID.
+g_enum({name, _Line, N}) -> N.
 
 g_var({name, _, _} = N) -> {var, N}.
-g_integer({int, I, _}) -> I.
-g_float({float, F, _}) -> F.
-g_string({string, S, _}) -> S.
-g_bool({bool, B, _}) -> B.
+g_integer({int, _, I}) -> I.
+g_float({float, _, F}) -> F.
+g_string({string, _, S}) -> S.
+g_bool({bool, _, B}) -> B.
 
 g_input_object(KVPairs) -> maps:from_list(KVPairs).
