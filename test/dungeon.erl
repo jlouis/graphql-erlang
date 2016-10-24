@@ -19,6 +19,7 @@
           stats = #stats{},
           hitpoints,
           plush_factor = 0.0,
+          properties = [],
           mood}).
 -record(item, {
 	id,
@@ -207,6 +208,20 @@ inject_monster() ->
         }
     }},
     ok = graphql:insert_schema_definition(Mood),
+    Property = {enum, #{
+        id => 'Property',
+        description => "Monster properties",
+        repr => binary,
+        values => #{
+        	   'BEAST' => #{ value => 0, description => "The monster is a BEAST!" },
+        	   'MECH' => #{ value => 1, description => "The monster is a mech" },
+        	   'DRAGON' => #{ value => 2, description => "The monster is a dragon" },
+        	   'PIRATE' => #{ value => 3, description => "The monstARRRRRR is a PirARRRRte" },
+        	   'MURLOC' => #{ value => 4, description => "MRRGLGLGLGLGLGL" },
+        	   'TOTEM' => #{ value => 5, description => "The monster is a totem" },
+        	   'DEMON' => #{ value => 6, description => "The monster is a demon" }
+        }}},
+    ok = graphql:insert_schema_definition(Property),
     Monster = {object, #{
     	id => 'Monster',
     	description => "Represents a monster in the dungeon",
@@ -265,7 +280,12 @@ inject_monster() ->
             type => 'Stats',
             resolve => fun(_, #monster { stats = S}, _) -> {ok, S} end,
             description => "The stats of the monster"
-           }
+           },
+          properties => #{
+            type => ['Property'],
+            resolve => fun(_, #monster { properties = Props }, _) -> {ok, Props} end,
+            description => "Monster properies"
+          }
     	}}},
     ok = graphql:insert_schema_definition(Monster),
 
