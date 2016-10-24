@@ -299,7 +299,7 @@ resolve_args_(Ctx, [{ID, Val} | As], Acc) ->
 %% -- AST MANIPULATION ----------------
 
 name(N) when is_binary(N) -> N;
-name({name, N, _}) -> N;
+name({name, _, N}) -> N;
 name(#field { id = ID }) -> name(ID).
 
 alias(#field { alias = undefined, id = ID }) -> name(ID);
@@ -341,7 +341,7 @@ value(Ctx, #{ type := ObjTy, value := O}) when is_map(O) ->
         graphql_ast:unwrap_type(ObjTy)),
     ObjVals = value_object(Ctx, FieldEnv, maps:to_list(O)),
     maps:from_list(ObjVals);
-value(Ctx, #{ value := {var, {name, N, _}}}) -> var_lookup(Ctx, N);
+value(Ctx, #{ value := {var, {name, _, N}}}) -> var_lookup(Ctx, N);
 value(_Ctx, #{ type := {scalar, STy}, value := V}) ->
     value_scalar(STy, V);
 value(_Ctx, #{ type := _, value := V} = M) ->
@@ -365,7 +365,7 @@ value_object(Ctx, FieldEnv, [{K, Val} | Rest]) ->
     Value = value(Ctx, {Ty, Val}),
     [{Name, Value} | value_object(Ctx, FieldEnv, Rest)].
 
-line({name, _, L}) -> L;
+line({name, L, _}) -> L;
 line(#field { id = ID }) -> line(ID).
 
 var_lookup(#{ params := Params }, N) ->

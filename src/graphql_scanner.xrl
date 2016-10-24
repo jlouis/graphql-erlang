@@ -43,9 +43,9 @@ Rules.
 
 {Ignored}		: skip_token.
 {Punctuator}	: {token, {list_to_atom(TokenChars), TokenLine}}.
-{IntValue}		: {token, {int, list_to_integer(TokenChars), TokenLine}}.
-{FloatValue}	: {token, {float, list_to_float(TokenChars), TokenLine}}.
-{StringValue}	: {token, {string, iolist_to_binary(unquote(TokenChars)), TokenLine}}.
+{IntValue}		: {token, {int, TokenLine, list_to_integer(TokenChars)}}.
+{FloatValue}	: {token, {float, TokenLine, list_to_float(TokenChars)}}.
+{StringValue}	: {token, {bstring, TokenLine, iolist_to_binary(unquote(TokenChars))}}.
 {Name}		: {token, identifier(TokenChars, TokenLine)}.
 
 Erlang code.
@@ -54,15 +54,15 @@ Erlang code.
 %% will never call.
 -dialyzer({nowarn_function, yyrev/2}).
 
-identifier("true", TokenLine) -> {bool, true, TokenLine};
-identifier("false", TokenLine) -> {bool, false, TokenLine};
+identifier("true", TokenLine) -> {bool, TokenLine, true};
+identifier("false", TokenLine) -> {bool, TokenLine, false};
 identifier("query", TokenLine) -> {query, TokenLine};
 identifier("mutation", TokenLine) -> {mutation, TokenLine};
 identifier("subscription", TokenLine) -> {subscription, TokenLine};
 identifier("fragment", TokenLine) -> {fragment, TokenLine};
 identifier("on", TokenLine) -> {on, TokenLine};
 identifier("null", TokenLine) -> {null, TokenLine};
-identifier(ID, TokenLine) -> {name, iolist_to_binary(ID), TokenLine}.
+identifier(ID, TokenLine) -> {name, TokenLine, iolist_to_binary(ID)}.
 
 unquote(Str) ->
     string:strip(Str, both, $").

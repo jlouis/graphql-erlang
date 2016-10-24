@@ -104,7 +104,7 @@ format_ty({non_null, Ty}) ->
     <<Inner/binary, "!">>;
 format_ty(Ty) when is_binary(Ty) ->
     Ty;
-format_ty({name, N, _}) -> N;
+format_ty({name, _, N}) -> N;
 format_ty(Ty) when is_atom(Ty) ->
     atom_to_binary(Ty, utf8).
 
@@ -133,7 +133,7 @@ format_scalar(B) when is_binary(B) -> B.
 %% -- AST MANIPULATION -------------------------
 name('ROOT') -> <<"ROOT">>;
 name('...') -> <<"...">>;
-name({name, N, _}) -> N;
+name({name, _, N}) -> N;
 name(X) when is_binary(X) -> X.
 
 %% -- INTERNALS ----------------------------
