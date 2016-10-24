@@ -365,7 +365,7 @@ value_object(Ctx, FieldEnv, [{K, Val} | Rest]) ->
     Value = value(Ctx, {Ty, Val}),
     [{Name, Value} | value_object(Ctx, FieldEnv, Rest)].
 
-line({name, _, L}) -> L;
+line({name, L, _}) -> L;
 line(#field { id = ID }) -> line(ID).
 
 var_lookup(#{ params := Params }, N) ->
