@@ -159,6 +159,7 @@ fragment FatMonsterFragment on Monster {
   ...MonsterFragment
   color
   mood
+  properties
 }
 
 fragment RoomFragment on Room {

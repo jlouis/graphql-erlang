@@ -27,15 +27,15 @@ init_per_group(_Group, Config) ->
 end_per_group(_Group, _Config) ->
     ok.
 
-init_per_testcase(d, Config) ->
+init_per_testcase(disabled, Config) ->
     {ok, _} = dbg:tracer(),
     dbg:p(all, c),
-    dbg:tpl(graphql_parser, yeccerror, '_', cx),
+    dbg:tpl(graphql_type_check, check_param, '_', cx),
     Config;
 init_per_testcase(_Case, Config) ->
     Config.
 
-end_per_testcase(d, Config) ->
+end_per_testcase(disabled, Config) ->
     dbg:stop_clear(),
     ok;
 end_per_testcase(_Case, _Config) ->
@@ -125,17 +125,17 @@ populate(Config) ->
       <<"hitpoints">> => 30,
       <<"mood">> => <<"AGGRESSIVE">>
      },
-    Expected = #{ data => #{
-                     <<"introduceMonster">> => #{
-                       <<"clientMutationId">> => <<"MUTID">>,
-                       <<"monster">> => #{
-                         <<"id">> => base64:encode(<<"monster:2">>),
-                         <<"name">> => <<"orc">>,
-                         <<"color">> => <<"#593E1A">>,
-                         <<"hitpoints">> => 30,
-                         <<"mood">> => <<"AGGRESSIVE">>}
-                      }}},
-    Expected = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input }),
+    #{ data := #{
+                     <<"introduceMonster">> := #{
+                       <<"clientMutationId">> := <<"MUTID">>,
+                       <<"monster">> := #{
+                         <<"id">> := _,
+                         <<"name">> := <<"orc">>,
+                         <<"color">> := <<"#593E1A">>,
+                         <<"hitpoints">> := 30,
+                         <<"properties">> := [],
+                         <<"mood">> := <<"AGGRESSIVE">>}
+                      }}} = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input }),
 
     ct:log("Missing names should lead to failure"),
     MissingNameInput = #{
@@ -157,21 +157,17 @@ populate(Config) ->
     	<<"name">> => <<"hobgoblin">>,
     	<<"color">> => <<"#266A2E">>
     },
-    HobgoblinExpected = #{ data => #{
-                     <<"introduceMonster">> => #{
-                       <<"clientMutationId">> => <<"MUTID">>,
-                       <<"monster">> => #{
-                         <<"color">> => <<"#266A2E">>,
-                         <<"id">> => base64:encode(<<"monster:3">>),
-                         <<"name">> => <<"hobgoblin">>,
-                         <<"hitpoints">> => 15,
-                         <<"mood">> => <<"DODGY">>
+    #{ data := #{
+                     <<"introduceMonster">> := #{
+                       <<"clientMutationId">> := <<"MUTID">>,
+                       <<"monster">> := #{
+                         <<"color">> := <<"#266A2E">>,
+                         <<"id">> := _,
+                         <<"name">> := <<"hobgoblin">>,
+                         <<"hitpoints">> := 15,
+                         <<"mood">> := <<"DODGY">>
                        }
-         }}},
-    HobgoblinExpected =
-        run(Config,
-            <<"IntroduceMonster">>,
-            #{ <<"input">> => HobgoblinInput }),
+         }}} = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => HobgoblinInput }),
     
     ct:log("Create a room"),
     RoomInput = #{
@@ -206,23 +202,24 @@ populate(Config) ->
     ok.
 
 direct_input(Config) ->
-    Expected = #{ data => #{
-        <<"introduceMonster">> => #{
-            <<"clientMutationId">> => null,
-            <<"monster">> => #{
-                <<"id">> => base64:encode(<<"monster:4">>),
-                <<"name">> => <<"Albino Hobgoblin">>,
-                <<"color">> => <<"#FFFFFF">>,
-                <<"hitpoints">> => 5,
-                <<"mood">> => <<"AGGRESSIVE">>}
-        }}},
     Input = #{
       <<"name">> => <<"Albino Hobgoblin">>,
       <<"color">> => <<"#ffffff">>,
       <<"hitpoints">> => 5,
+      <<"properties">> => [<<"DRAGON">>, <<"MURLOC">>],
       <<"mood">> => <<"AGGRESSIVE">>
     },
-    Expected = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input}),
+    #{ data := #{
+        <<"introduceMonster">> := #{
+            <<"clientMutationId">> := null,
+            <<"monster">> := #{
+                <<"id">> := _,
+                <<"name">> := <<"Albino Hobgoblin">>,
+                <<"color">> := <<"#FFFFFF">>,
+                <<"hitpoints">> := 5,
+                <<"properties">> := [<<"DRAGON">>, <<"MURLOC">>],
+                <<"mood">> := <<"AGGRESSIVE">>}
+        }}} = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input}),
     ok.
 
 nested_input_object(Config) ->

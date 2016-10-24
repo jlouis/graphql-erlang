@@ -4,7 +4,7 @@
 -type ty() ::
 	  {non_null, ty_ground()}
 	| {non_null, [ty_ground()]}
-	| [ty_ground()]
+	| {list, ty_ground()}
 	| ty_ground().
 
 -type resolver_args() :: #{ binary() => term() }.

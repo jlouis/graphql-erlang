@@ -138,9 +138,8 @@ handle_type('id!') -> {non_null, {scalar, id}};
 handle_type(bool) -> {scalar, bool};
 handle_type('bool!') -> {non_null, {scalar, bool}};
 handle_type({non_null, Ty}) -> {non_null, handle_type(Ty)};
-handle_type([Ty]) -> [handle_type(Ty)];
-handle_type(A) when is_atom(A) ->
-    non_null(atom_to_list(A)).
+handle_type([Ty]) -> {list, handle_type(Ty)};
+handle_type(A) when is_atom(A) -> non_null(atom_to_list(A)).
     
 non_null(Ty) ->
     case lists:reverse(Ty) of
