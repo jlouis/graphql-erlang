@@ -55,10 +55,12 @@ root(Path, Ctx, #op { selection_set = SSet, schema = Schema } = Op) ->
 
 %% -- RETURNING RESULTS -------------------------------
 
-return(_Ctx, {Result, []}) ->
-    #{ data => maps:from_list(Result) };
-return(_Ctx, {Result, Errs}) ->
-    #{ data => maps:from_list(Result), errors => Errs }.
+return(_Ctx, {Res, Errs}) when is_map(Res) ->
+    Map = case Errs of
+        [] -> #{};
+        Errs -> #{ errors => Errs }
+    end,
+    Map#{ data => Res }.
 
 %% -- GENERIC HANDLING --------------------------------
 
@@ -150,7 +152,10 @@ resolve_frag(Ctx, Frag, SObj) ->
 %% -- OBJECT HANDLING --------------------------------
 
 resolve_obj(Path, Ctx, Cur, Fields, SObj, SoFar) ->
-    resolve_obj_fold(Path, Ctx, Cur, Fields, SObj, SoFar, [], []).
+    case resolve_obj_fold(Path, Ctx, Cur, Fields, SObj, SoFar, [], []) of
+        {Acc, Errs} ->
+            {maps:from_list(Acc), Errs}
+    end.
     
 resolve_obj_fold(_Path, _Ctx, _Cur, [], _SObj, _SoFar, Acc, Errs) ->
     {Acc, Errs};
@@ -322,21 +327,7 @@ materialize_list(Path, K, Ctx, [R | RS], FObj, SSet, Acc, Errs) ->
     materialize_list(Path, K+1, Ctx, RS, FObj, SSet, [MRes | Acc], Es ++ Errs).
     
 materialize(Path, Ctx, Cur, Ty, SSet) ->
-    case handle(Path, Ctx, Cur, Ty, SSet) of
-        {L, Es} when is_list(L) ->
-            {LR, LErrs} = split_list_result(L, [], []),
-            {maps:from_list(LR), LErrs ++ Es};
-        {V, Es} when is_integer(V) -> {V, Es};
-        {V, Es} when is_binary(V) -> {V, Es};
-        {V, Es} when is_float(V) -> {V, Es}
-    end.
-
-split_list_result([], Acc, Errs) -> {Acc, Errs};
-split_list_result([ {K, {V, E}} | Next], Acc, Errs) ->
-    split_list_result(Next, [{K, V} | Acc], E ++ Errs);
-split_list_result([ {K, V} | Next], Acc, Errs) ->
-    split_list_result(Next, [{K,V}|Acc], Errs).
-
+    handle(Path, Ctx, Cur, Ty, SSet).
 
 %% -- LOWER LEVEL RESOLVERS ----------------
 
