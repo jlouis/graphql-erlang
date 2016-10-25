@@ -184,7 +184,8 @@ resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema_obj = FObj } 
                                     { {Alias, output_coerce(Scalar, Result)}, []};
                                 {list, {scalar, Scalar}} when is_list(Result) ->
                                     [] = SSet,
-                                    { {Alias, list_output_coerce(Scalar, Result)}, []};
+                                    Coerced = [output_coerce(Scalar, R) || R <- Result],
+                                    { {Alias, [C || C <- Coerced, C /= null]}, []};
                                 {list, {scalar, _}} ->
                                     [] = SSet,
                                     { {Alias, null}, [] };
@@ -235,38 +236,50 @@ default_resolver(#{ field := Field}, Cur, _Args) ->
 
 %% -- OUTPUT COERCION ------------------------------------
 
-list_output_coerce(_Scalar, []) -> [];
-list_output_coerce(Scalar, [X | Xs]) ->
-    case output_coerce(Scalar, X) of
-        null -> list_output_coerce(Scalar, Xs);
-        Res -> [Res | list_output_coerce(Scalar, Xs)]
-    end.
-
-output_coerce(_, null) -> null;
-output_coerce(string, B) when is_binary(B) -> B;
-output_coerce(string, _) -> null;
-output_coerce(bool, true) -> true;
-output_coerce(bool, false) -> false;
-output_coerce(bool, <<"true">>) -> true;
-output_coerce(bool, <<"false">>) -> false;
-output_coerce(bool, _) -> null;
-output_coerce(int, I) when is_integer(I) -> I;
-output_coerce(int, _) -> null;
-output_coerce(float, F) when is_float(F) -> F;
-output_coerce(float, _) -> null;
-output_coerce(id, B) when is_binary(B) -> B;
-output_coerce(id, _) -> null;
-output_coerce(UserDefined, Data) ->
-    case graphql_schema:lookup(UserDefined) of
+output_coerce(Ty, Val) ->
+    case output_coerce_type(Ty) of
         #scalar_type { output_coerce = F } ->
-           try F(Data) of
-              Result -> Result
+           try F(Val) of Result -> Result
            catch
               Class:Error ->
-                  throw({user_defined_output_coerce, UserDefined, Data, Class, Error})
+                  throw({user_defined_output_coerce, Ty, Val, Class, Error})
            end;
         not_found ->
-           throw({user_defined_scalar_not_found, UserDefined})
+           throw({user_defined_scalar_not_found, Ty})
+    end.
+    
+output_coerce_type(id) ->
+    #scalar_type { output_coerce = fun
+        (B) when is_binary(B) -> B;
+        (_) -> null
+      end };output_coerce_type(string) ->
+    #scalar_type { output_coerce = fun
+        (B) when is_binary(B) -> B;
+        (_) -> null
+      end };
+output_coerce_type(bool) ->
+    #scalar_type { output_coerce = fun
+        (true) -> true;
+        (<<"true">>) -> true;
+        (false) -> false;
+        (<<"false">>) -> false;
+        (_) -> null
+      end };
+output_coerce_type(int) ->
+    #scalar_type { output_coerce = fun
+        (I) when is_integer(I) -> I;
+        (_) -> null
+      end };
+output_coerce_type(float) ->
+    #scalar_type { output_coerce = fun
+        (F) when is_float(F) -> F;
+        (_) -> null
+      end };
+output_coerce_type(#scalar_type{} = SType) -> SType;
+output_coerce_type(UserDefined) when is_binary(UserDefined) ->
+    case graphql_schema:lookup(UserDefined) of
+        #scalar_type{} = SType -> SType;
+        not_found -> not_found
     end.
 
 %% -- MATERIALIZATION ------------------------------------------
