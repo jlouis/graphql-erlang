@@ -216,12 +216,17 @@ resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema_obj = FObj } 
                         {ok, Result} ->
                             case graphql_ast:resolve_type(Ty) of
                                 {scalar, Scalar} ->
-                                    [] = SSet,
-                                    {ok, Alias, output_coerce(Scalar, Result)};
+                                    SType = output_coerce_type(Scalar),
+                                    case handle(Path, Ctx, Result, SType, SSet) of
+                                        {Materialized, []} ->
+                                            {ok, Alias, Materialized};
+                                        {_, Errs} ->
+                                            {field_error, Alias, Errs}
+                                    end;
                                 {list, {scalar, Scalar}} when is_list(Result) ->
                                     [] = SSet,
                                     Coerced = [output_coerce(Scalar, R) || R <- Result],
-                                    {ok, Alias, [C || C <- Coerced, C /= null]};
+                                    {ok, Alias, [C || {ok, C} <- Coerced, C /= null]};
                                 {list, {scalar, _}} ->
                                     [] = SSet,
                                     {ok, Alias, null};
@@ -279,31 +284,32 @@ output_coerce(Ty, Val) ->
     end.
     
 output_coerce_type(id) ->
-    #scalar_type { output_coerce = fun
-        (B) when is_binary(B) -> B;
-        (_) -> null
-      end };output_coerce_type(string) ->
-    #scalar_type { output_coerce = fun
-        (B) when is_binary(B) -> B;
-        (_) -> null
+    #scalar_type { id = id, output_coerce = fun
+        (B) when is_binary(B) -> {ok, B};
+        (_) -> {ok, null}
+      end };
+output_coerce_type(string) ->
+    #scalar_type { id = string, output_coerce = fun
+        (B) when is_binary(B) -> {ok, B};
+        (_) -> {ok, null}
       end };
 output_coerce_type(bool) ->
-    #scalar_type { output_coerce = fun
-        (true) -> true;
-        (<<"true">>) -> true;
-        (false) -> false;
-        (<<"false">>) -> false;
-        (_) -> null
+    #scalar_type { id = bool, output_coerce = fun
+        (true) -> {ok, true};
+        (<<"true">>) -> {ok, true};
+        (false) -> {ok, false};
+        (<<"false">>) -> {ok, false};
+        (_) -> {ok, null}
       end };
 output_coerce_type(int) ->
-    #scalar_type { output_coerce = fun
-        (I) when is_integer(I) -> I;
-        (_) -> null
+    #scalar_type { id = int, output_coerce = fun
+        (I) when is_integer(I) -> {ok, I};
+        (_) -> {ok, null}
       end };
 output_coerce_type(float) ->
-    #scalar_type { output_coerce = fun
-        (F) when is_float(F) -> F;
-        (_) -> null
+    #scalar_type { id = float, output_coerce = fun
+        (F) when is_float(F) -> {ok, F};
+        (_) -> {ok, null}
       end };
 output_coerce_type(#scalar_type{} = SType) -> SType;
 output_coerce_type(UserDefined) when is_binary(UserDefined) ->
