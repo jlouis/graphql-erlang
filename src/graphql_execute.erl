@@ -145,8 +145,26 @@ resolve_obj_fold(Path, Ctx, Cur, [F | Next], SObj, SoFar, Acc, Errs) ->
     case resolve_obj_([F | Path], Ctx, Cur, F, SObj, SoFar) of
         skip ->
             resolve_obj_fold(Path, Ctx, Cur, Next, SObj, SoFar, Acc, Errs);
-        { {A, _} = R, E} ->
-            resolve_obj_fold(Path, Ctx, Cur, Next, SObj, SoFar#{ A => true}, [R | Acc], E ++ Errs);
+        {ok, Alias, Result} ->
+            resolve_obj_fold(
+                Path,
+                Ctx,
+                Cur,
+                Next,
+                SObj,
+                SoFar#{ Alias => true},
+                [{Alias, Result} | Acc],
+                Errs);
+        {field_error, Alias, Es} ->
+            resolve_obj_fold(
+                Path,
+                Ctx,
+                Cur,
+                Next,
+                SObj,
+                SoFar#{ Alias => true },
+                [{Alias, null} | Acc],
+                Es ++ Errs);
         {add_fields, FragFields} ->
             resolve_obj_fold(Path, Ctx, Cur, FragFields ++ Next, SObj, SoFar, Acc, Errs)
     end.
@@ -164,7 +182,7 @@ resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema_obj = FObj } 
         false ->
             case maps:get(Name, SFields, not_found) of
                 not_found when Name == <<"__typename">> ->
-                    { {Alias, resolve_typename(SObj)}, [] };
+                    {ok, Alias, resolve_typename(SObj)};
                 not_found ->
                     throw({execute, {unknown_field, Name, line(F)}});
                 #schema_field { ty = Ty, resolve = RF } ->
@@ -173,30 +191,36 @@ resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema_obj = FObj } 
                     case Fun(Ctx#{ field => Name, object_type => OID }, Cur, Args) of
                         {error, Reason} ->
                             Error = format_error(Path, Ctx, Name, OID, Reason),
-                            { {Alias, null}, Error };
+                            {field_error, Alias, [Error]};
                         {ok, null} ->
-                          %% Failure to retrieve a result cuts the computation at this node
-                          { {Alias, null}, [] };
+                            %% Failure to retrieve a result cuts the computation at this node
+                            {ok, Alias, null};
                         {ok, Result} ->
-                            {R, Es} = case graphql_ast:resolve_type(Ty) of
+                            case graphql_ast:resolve_type(Ty) of
                                 {scalar, Scalar} ->
                                     [] = SSet,
-                                    { {Alias, output_coerce(Scalar, Result)}, []};
+                                    {ok, Alias, output_coerce(Scalar, Result)};
                                 {list, {scalar, Scalar}} when is_list(Result) ->
                                     [] = SSet,
                                     Coerced = [output_coerce(Scalar, R) || R <- Result],
-                                    { {Alias, [C || C <- Coerced, C /= null]}, []};
+                                    {ok, Alias, [C || C <- Coerced, C /= null]};
                                 {list, {scalar, _}} ->
                                     [] = SSet,
-                                    { {Alias, null}, [] };
+                                    {ok, Alias, null};
                                 {list, _T} ->
                                     {RL, Errs} = materialize_list(Path, Ctx, Result, FObj, SSet),
-                                    { {Alias, RL}, Errs };
+                                    case Errs of
+                                        [] -> {ok, Alias, RL};
+                                        Errs -> {field_error, Alias, Errs}
+                                    end;
                                  _T ->
-                                    {Materialized, Errs} = materialize(Path, Ctx, Result, FObj, SSet),
-                                    { {Alias, Materialized}, Errs}
-                           end,
-                           { R, Es };
+                                    case materialize(Path, Ctx, Result, FObj, SSet) of
+                                        {Materialized, []} ->
+                                            {ok, Alias, Materialized};
+                                        {_, Errs} ->
+                                            {field_error, Alias, Errs}
+                                    end
+                           end;
                        Wrong ->
                            exit({wrong_resolver_function_return, Fun, Alias, Wrong})
                    end
