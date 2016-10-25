@@ -226,13 +226,13 @@ resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema_obj = FObj } 
                                     [] = SSet,
                                     {ok, Alias, null};
                                 {list, _T} ->
-                                    {RL, Errs} = materialize_list(Path, Ctx, Result, FObj, SSet),
+                                    {RL, Errs} = handle_list(Path, Ctx, Result, FObj, SSet),
                                     case Errs of
                                         [] -> {ok, Alias, RL};
                                         Errs -> {field_error, Alias, Errs}
                                     end;
                                  _T ->
-                                    case materialize(Path, Ctx, Result, FObj, SSet) of
+                                    case handle(Path, Ctx, Result, FObj, SSet) of
                                         {Materialized, []} ->
                                             {ok, Alias, Materialized};
                                         {_, Errs} ->
@@ -317,18 +317,15 @@ output_coerce_type(UserDefined) when is_binary(UserDefined) ->
 %% The materialization step collects underlying values and collects them together
 %% into a coherent whole.
     
-materialize_list(Path, Ctx, Result, FObj, SSet) when is_list(Result) ->
-    materialize_list(Path, 0, Ctx, Result, FObj, SSet, [], []).
+handle_list(Path, Ctx, Result, FObj, SSet) when is_list(Result) ->
+    handle_list(Path, 0, Ctx, Result, FObj, SSet, [], []).
 
-materialize_list(_Path, _K, _Ctx, [], _FObj, _SSet, Acc, Errs) ->
+handle_list(_Path, _K, _Ctx, [], _FObj, _SSet, Acc, Errs) ->
     {lists:reverse(Acc), Errs};
-materialize_list(Path, K, Ctx, [R | RS], FObj, SSet, Acc, Errs) ->
-    {MRes, Es} = materialize([K | Path], Ctx, R, FObj, SSet),
-    materialize_list(Path, K+1, Ctx, RS, FObj, SSet, [MRes | Acc], Es ++ Errs).
+handle_list(Path, K, Ctx, [R | RS], FObj, SSet, Acc, Errs) ->
+    {MRes, Es} = handle([K | Path], Ctx, R, FObj, SSet),
+    handle_list(Path, K+1, Ctx, RS, FObj, SSet, [MRes | Acc], Es ++ Errs).
     
-materialize(Path, Ctx, Cur, Ty, SSet) ->
-    handle(Path, Ctx, Cur, Ty, SSet).
-
 %% -- LOWER LEVEL RESOLVERS ----------------
 
 resolve_args(Ctx, #field { args = As }) ->
