@@ -15,9 +15,8 @@ x(Ctx, X) ->
     document(Canon, X).
 
 document(Ctx, {document, Operations}) ->
-    {Fragments, Rest} = operation_fragments(Operations),
-    Frags = fragments(Fragments),
-    operations(Ctx#{ fragments => Frags }, Rest).
+    {Fragments, Ops} = lists:partition(fun (#frag {}) -> true;(_) -> false end, Operations),
+    operations(Ctx#{ fragments => fragments(Fragments) }, Ops).
 
 %% -- FRAGMENTS -------------------------------
 fragments(Frags) ->
@@ -26,9 +25,6 @@ fragments(Frags) ->
     end,
     #{},
     Frags).
-
-operation_fragments(Ops) ->
-    lists:partition(fun (#frag {}) -> true;(_) -> false end, Ops).
 
 %% -- TOP LEVEL HANDLING ------------------------------
 operations(#{ operation_name := undefined } = Ctx, [Op]) ->
@@ -55,7 +51,7 @@ find_operation(N, [#op { id = ID } = O | Next]) ->
     end.
 
 root(Path, Ctx, #op { selection_set = SSet, schema = Schema } = Op) ->
-    object([Op | Path], Ctx, none, Schema, SSet).
+    handle([Op | Path], Ctx, none, Schema, SSet).
 
 %% -- RETURNING RESULTS -------------------------------
 
@@ -64,8 +60,17 @@ return(_Ctx, {Result, []}) ->
 return(_Ctx, {Result, Errs}) ->
     #{ data => maps:from_list(Result), errors => Errs }.
 
-%% -- OBJECT HANDLING --------------------------------
-object(Path, _Ctx, Cur, #scalar_type { id = ID, output_coerce = Coerce }, []) ->
+%% -- GENERIC HANDLING --------------------------------
+
+%% -- Product objects / vector types
+handle(Path, Ctx, Cur, #object_type {} = Obj, SSet) ->
+    resolve_obj([Obj | Path], Ctx, Cur, SSet, Obj, #{});
+handle(Path, Ctx, Cur, #interface_type { id = IFaceID, resolve_type = R }, SSet) ->
+    resolve_type(Path, Ctx, Cur, IFaceID, R, SSet);
+handle(Path, Ctx, Cur, #union_type { id = UnionID, resolve_type = R}, SSet) ->
+    resolve_type(Path, Ctx, Cur, UnionID, R, SSet);
+%% -- Scalars / scalar types
+handle(Path, _Ctx, Cur, #scalar_type { id = ID, output_coerce = Coerce }, []) ->
     try Coerce(Cur) of
         {ok, Result} -> {Result, []};
         {error, Reason} -> err(Path, {output_coerce, ID, Cur, Reason})
@@ -73,14 +78,10 @@ object(Path, _Ctx, Cur, #scalar_type { id = ID, output_coerce = Coerce }, []) ->
         Class:Error ->
             err(Path, {coerce, ID, Cur, {Class,Error}})
     end;
-object(Path, Ctx, Cur, #object_type {} = Obj, SSet) ->
-    resolve_obj([Obj | Path], Ctx, Cur, SSet, Obj, #{});
-object(Path, Ctx, Cur, #interface_type { id = IFaceID, resolve_type = R }, SSet) ->
-    resolve_type(Path, Ctx, Cur, IFaceID, R, SSet);
-object(Path, Ctx, Cur, #union_type { id = UnionID, resolve_type = R}, SSet) ->
-    resolve_type(Path, Ctx, Cur, UnionID, R, SSet);
-object(_Path, Ctx, Cur, #enum_type {} = Enum, SSet) ->
+handle(_Path, Ctx, Cur, #enum_type {} = Enum, SSet) ->
     resolve_enum(Ctx, Cur, SSet, Enum).
+
+%% -- ENUM HANDLING ------------------------------------
 
 resolve_enum(_Ctx, Val, [], #enum_type {}) when is_binary(Val) ->
     {Val, []};
@@ -90,6 +91,40 @@ resolve_enum(_Ctx, Val, [], #enum_type { values = Vals }) when is_integer(Val) -
     #enum_value { val = Res } = maps:get(Val, Vals),
     {Res, []}.
 
+%% -- FRAGMENT HANDLING -----------------------------------
+
+%% fragment_match/3 will try to match a fragment against a type
+%%
+%%
+fragment_match(_Ctx,
+	#frag { schema = SchemaTy } = Frag,
+	#object_type { id = ID, interfaces = Implements }) ->
+    case SchemaTy of
+        #object_type{ id = OID } ->
+            %% Objects need a perfect match
+            case OID =:= ID of
+                true -> {match, Frag};
+                false -> nomatch
+            end;
+        #interface_type { id = IFaceID } ->
+            %% Interfaces must be implemented by the concrete object
+            case lists:member(IFaceID, Implements) of
+                true -> {match, Frag};
+                false -> nomatch
+            end;
+        #union_type{ types = Types } ->
+            %% Unions match if they match one of the implementing types
+            case lists:member(ID, Types) of
+                true -> {match, Frag};
+                false -> nomatch
+            end
+    end;
+fragment_match(#{ fragments := Fragments } = Ctx, #frag_spread { id = FragID }, Obj) ->
+    %% Matching a fragment requires an environment lookup, otherwise it's
+    %% the same as for inline fragments.
+    Frag = maps:get(name(FragID), Fragments),
+    fragment_match(Ctx, Frag, Obj).
+
 resolve_frag(Ctx, Frag, SObj) ->
     case fragment_match(Ctx, Frag, SObj) of
         {match, #frag { selection_set = FragFields }} ->
@@ -97,6 +132,9 @@ resolve_frag(Ctx, Frag, SObj) ->
         nomatch ->
             skip
     end.
+
+
+%% -- OBJECT HANDLING --------------------------------
 
 resolve_obj(Path, Ctx, Cur, Fields, SObj, SoFar) ->
     resolve_obj_fold(Path, Ctx, Cur, Fields, SObj, SoFar, [], []).
@@ -122,8 +160,7 @@ resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema_obj = FObj } 
     Name = name(F),
     Alias = alias(F),
     case maps:is_key(Alias, SoFar) of
-        true ->
-            skip; %% Already rendered this entry, skip it
+        true -> skip; %% Already rendered this entry, skip it
         false ->
             case maps:get(Name, SFields, not_found) of
                 not_found when Name == <<"__typename">> ->
@@ -165,6 +202,8 @@ resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema_obj = FObj } 
             end
     end.
 
+%% -- FUNCTION RESOLVERS ---------------------------------
+
 resolver_function(R) when is_function(R, 3) -> R;
 resolver_function(undefined) -> fun ?MODULE:default_resolver/3.
 
@@ -172,7 +211,7 @@ resolver_function(undefined) -> fun ?MODULE:default_resolver/3.
 resolve_type(Path, Ctx, Cur, ID, R, SSet) ->
     try R(Cur) of
         {ok, Ty} ->
-          #object_type{} = Obj = graphql_schema:get(canon_ty(Ty)),
+          #object_type{} = Obj = graphql_schema:get(binarize(Ty)),
           resolve_obj([Obj | Path], Ctx, Cur, SSet, Obj, #{});
         {error, Reason} ->
             throw(err(Path, {unresolved_type, ID, Reason}))
@@ -181,34 +220,20 @@ resolve_type(Path, Ctx, Cur, ID, R, SSet) ->
             throw(err(Path, {resolver_crash, ID, Cur, {Class, Err}}))
     end.
 
-fragment_match(_Ctx,
-	#frag { schema = SchemaTy } = Frag,
-	#object_type { id = ID, interfaces = Implements }) ->
-    case SchemaTy of
-        #object_type{ id = OID } ->
-            %% Objects need a perfect match
-            case OID =:= ID of
-                true -> {match, Frag};
-                false -> nomatch
-            end;
-        #interface_type { id = IFaceID } ->
-            %% Interfaces must be implemented by the concrete object
-            case lists:member(IFaceID, Implements) of
-                true -> {match, Frag};
-                false -> nomatch
-            end;
-        #union_type{ types = Types } ->
-            %% Unions match if they match one of the implementing types
-            case lists:member(ID, Types) of
-                true -> {match, Frag};
-                false -> nomatch
-            end
-    end;
-fragment_match(#{ fragments := Fragments } = Ctx, #frag_spread { id = FragID }, Obj) ->
-    %% Matching a fragment requires an environment lookup, otherwise it's
-    %% the same as for inline fragments.
-    Frag = maps:get(name(FragID), Fragments),
-    fragment_match(Ctx, Frag, Obj).
+default_resolver(_, none, _) -> {error, no_object};
+default_resolver(_, undefined, _) -> {error, undefined_object};
+default_resolver(_, null, _) ->
+    %% A Null value is a valid object value
+    {ok, null};
+default_resolver(#{ field := Field}, Cur, _Args) ->
+    case maps:get(Field, Cur, not_found) of
+        {'$lazy', F} when is_function(F, 0) -> F();
+        not_found ->
+            {error, not_found};
+        V -> {ok, V}
+    end.
+
+%% -- OUTPUT COERCION ------------------------------------
 
 list_output_coerce(_Scalar, []) -> [];
 list_output_coerce(Scalar, [X | Xs]) ->
@@ -244,21 +269,11 @@ output_coerce(UserDefined, Data) ->
            throw({user_defined_scalar_not_found, UserDefined})
     end.
 
-default_resolver(_, none, _) -> {error, no_object};
-default_resolver(_, undefined, _) -> {error, undefined_object};
-default_resolver(_, null, _) ->
-    %% A Null value is a valid object value
-    {ok, null};
-default_resolver(#{ field := Field}, Cur, _Args) ->
-    case maps:get(Field, Cur, not_found) of
-        {'$lazy', F} when is_function(F, 0) -> F();
-        not_found ->
-            {error, not_found};
-        V -> {ok, V}
-    end.
-    
-resolve_typename(#object_type { id = ID }) -> ID.
+%% -- MATERIALIZATION ------------------------------------------
 
+%% The materialization step collects underlying values and collects them together
+%% into a coherent whole.
+    
 materialize_list(Path, Ctx, Result, FObj, SSet) when is_list(Result) ->
     materialize_list(Path, 0, Ctx, Result, FObj, SSet, [], []).
 
@@ -269,7 +284,7 @@ materialize_list(Path, K, Ctx, [R | RS], FObj, SSet, Acc, Errs) ->
     materialize_list(Path, K+1, Ctx, RS, FObj, SSet, [MRes | Acc], Es ++ Errs).
     
 materialize(Path, Ctx, Cur, Ty, SSet) ->
-    case object(Path, Ctx, Cur, Ty, SSet) of
+    case handle(Path, Ctx, Cur, Ty, SSet) of
         {L, Es} when is_list(L) ->
             {LR, LErrs} = split_list_result(L, [], []),
             {maps:from_list(LR), LErrs ++ Es};
@@ -296,14 +311,7 @@ resolve_args_(Ctx, [{ID, Val} | As], Acc) ->
     V = value(Ctx, Val),
     resolve_args_(Ctx, As, Acc#{ K => V }).
 
-%% -- AST MANIPULATION ----------------
-
-name(N) when is_binary(N) -> N;
-name({name, _, N}) -> N;
-name(#field { id = ID }) -> name(ID).
-
-alias(#field { alias = undefined, id = ID }) -> name(ID);
-alias(#field { alias = Alias }) -> name(Alias).
+%% Produce a valid value for an argument.
 
 value(Ctx, {Ty, Val}) -> value(Ctx, #{ type => Ty, value => Val});
 value(_Ctx, #{ type := #enum_type { repr = Repr }, value := {enum, E}}) ->
@@ -341,7 +349,8 @@ value(Ctx, #{ type := ObjTy, value := O}) when is_map(O) ->
         graphql_ast:unwrap_type(ObjTy)),
     ObjVals = value_object(Ctx, FieldEnv, maps:to_list(O)),
     maps:from_list(ObjVals);
-value(Ctx, #{ value := {var, {name, _, N}}}) -> var_lookup(Ctx, N);
+value(#{ params := Params }, #{ value := {var, ID}}) ->
+    maps:get(name(ID), Params);
 value(_Ctx, #{ type := {scalar, STy}, value := V}) ->
     value_scalar(STy, V);
 value(_Ctx, #{ type := _, value := V} = M) ->
@@ -365,11 +374,19 @@ value_object(Ctx, FieldEnv, [{K, Val} | Rest]) ->
     Value = value(Ctx, {Ty, Val}),
     [{Name, Value} | value_object(Ctx, FieldEnv, Rest)].
 
+%% -- AST MANIPULATION ----------------
+
+resolve_typename(#object_type { id = ID }) -> ID.
+
+name(N) when is_binary(N) -> N;
+name({name, _, N}) -> N;
+name(#field { id = ID }) -> name(ID).
+
+alias(#field { alias = undefined, id = ID }) -> name(ID);
+alias(#field { alias = Alias }) -> name(Alias).
+
 line({name, L, _}) -> L;
 line(#field { id = ID }) -> line(ID).
-
-var_lookup(#{ params := Params }, N) ->
-    maps:get(N, Params).
 
 %% -- ERROR FORMATTING --------------------
 format_error(Path, #{ error_formatter := EFMod }, Name, OID, Reason) ->
@@ -394,8 +411,6 @@ err(Path, Reason) ->
     {error, Path, Reason}.
 
 %% -- CONTEXT CANONICALIZATION ------------
-canon_ty(A) when is_atom(A) -> atom_to_binary(A, utf8).
-
 canon_context(#{ params := Params } = Ctx) ->
      Ctx#{ params := canon_params(Params) }.
      
