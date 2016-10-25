@@ -401,8 +401,12 @@ value_scalar(id, null) -> null;
 value_scalar(id, S) when is_binary(S) -> S;
 value_scalar(bool, true) -> true;
 value_scalar(bool, false) -> false;
+value_scalar(int, I) when is_integer(I) -> I;
+value_scalar(int, null) -> null;
+value_scalar(float, F) when is_float(F) -> F;
+value_scalar(float, null) -> null;
 value_scalar(Ty, V) ->
-    lager:info("Scalar Resolving: ~p", [{Ty, V}]),
+    lager:warning("Scalar resolver missing for built-in type: ~p (value: ~p)", [Ty, V]),
     V.
 
 value_object(_, _, []) -> [];
