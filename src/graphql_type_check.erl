@@ -279,6 +279,7 @@ uniq([_]) -> ok;
 uniq([{X, _}, {X, _} | _]) -> {error, {unique, X}};
 uniq([_ | Next]) -> uniq(Next).
 
+-spec schema_type(binary() | schema_type()) -> schema_type().
 schema_type({scalar, X}) when is_atom(X) -> {scalar, X};
 schema_type({non_null, T}) -> {non_null, schema_type(T)};
 schema_type([Tag]) -> {list, schema_type(Tag)};

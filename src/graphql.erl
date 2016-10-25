@@ -33,7 +33,7 @@ parse(Input) when is_list(Input) ->
     case graphql_scanner:string(Input) of
         {ok, Tokens, _EndLine} ->
             graphql_parser:parse(Tokens);
-        {error, Err} ->
+        {error, Err, _EndLine} ->
             {error, Err}
     end.
 

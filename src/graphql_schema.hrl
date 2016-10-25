@@ -1,11 +1,11 @@
 %% Schema definitions
 
--type ty_ground() :: binary() | {scalar, string | int | bool | float | id | binary()}.
--type ty() ::
-	  {non_null, ty_ground()}
-	| {non_null, [ty_ground()]}
-	| {list, ty_ground()}
-	| ty_ground().
+-type schema_base_type() :: binary() | {scalar, string | int | bool | float | id}.
+-type schema_type() ::
+	  {non_null, schema_base_type()}
+	| {non_null, {list, schema_base_type()}}
+	| {list, schema_base_type()}
+	| schema_base_type().
 
 -type resolver_args() :: #{ binary() => term() }.
 -type ctx() :: #{ atom() => term() }.
@@ -43,14 +43,14 @@
 -type union_type() :: #union_type{}.
 
 -record(schema_arg, {
-	ty :: ty(),
+	ty :: schema_type(),
 	default = null :: any(),
 	description :: binary()
 }).
 -type schema_arg() :: #schema_arg{}.
 
 -record(schema_field, {
-	ty :: ty(),
+	ty :: schema_type(),
 	description :: binary() | undefined,
 	resolve = undefined :: undefined | resolver(),
 	deprecation = undefined :: undefined | binary(),
