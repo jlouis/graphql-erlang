@@ -70,8 +70,8 @@ process_query(Req, State) ->
         {ok, JSON} ->
             process_query(Req3, State, JSON, Params);
 
-        {error, _} ->
-            err(400, invalid_json, Req3, State)
+        {error, invalid_json} ->
+            err(400, invalid_body_json, Req3, State)
     end.
 
 process_query(Req, State, Body, Params) ->
@@ -82,7 +82,7 @@ process_query(Req, State, Body, Params) ->
             run(Doc, Operation, Variables, Req, State);
 
         {error, invalid_json} ->
-            err(400, invalid_json, Req, State)
+            err(400, invalid_input_variables, Req, State)
     end.
 
 -spec to_json(any(), any()) -> any().
@@ -168,6 +168,12 @@ format_err({parser_error, {Line, graphql_parser, _Description} = E}) ->
     [#{ type => graphql_parser_error,
         line => Line,
         message => iolist_to_binary(graphql_parser:format_error(E)) }];
+
+format_err(invalid_input_variables) ->
+    [#{ type => invalid_input_variables }];
+
+format_err(invalid_body_json) ->
+    [#{ type => invalid_body_json }];
 
 format_err(invalid_json) ->
     [#{ type => json_parser_error }];
