@@ -99,7 +99,7 @@ type_kind(#input_object_type {}) -> <<"INPUT_OBJECT">>;
 type_kind(#interface_type{}) -> <<"INTERFACE">>;
 type_kind(#union_type{}) -> <<"UNION">>;
 type_kind(#enum_type{}) -> <<"ENUM">>;
-type_kind([_Ty]) -> <<"LIST">>;
+type_kind({list, _}) -> <<"LIST">>;
 type_kind({non_null, _Ty}) -> <<"NON_NULL">>.
 
 type_name({scalar, Ty}) -> scalar_name(Ty);
@@ -110,7 +110,7 @@ type_name(#object_type { id = N }) -> N;
 type_name(#input_object_type { id = N }) -> N;
 type_name(#union_type { id = N }) -> N;
 type_name({non_null, _}) -> null;
-type_name([_]) -> null.
+type_name({list, _}) -> null.
 
 scalar_name(string) -> <<"String">>;
 scalar_name(int) -> <<"Int">>;
@@ -139,7 +139,7 @@ type_enum_values(#enum_type { values = VMap }) ->
     [render_enum_value(V) || V <- maps:to_list(VMap)];
 type_enum_values(_) -> null.
 
-type_unwrap([Ty]) -> render_type(Ty);
+type_unwrap({list, Ty}) -> render_type(Ty);
 type_unwrap({non_null, Ty}) -> render_type(Ty);
 type_unwrap(_) -> null.
 
