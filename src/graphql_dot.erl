@@ -118,7 +118,7 @@ ty('bool!') -> "Bool!";
 ty(id) -> "ID";
 ty('id!') -> "ID!";
 ty(B) when is_binary(B) -> B;
-ty([Ty]) -> ["[", ty(Ty), "]"];
+ty({list, Ty}) -> ["[", ty(Ty), "]"];
 ty({non_null, Ty}) -> [ty(Ty), "!"].
 
 unwrap(Ty) when is_binary(Ty) -> Ty;
