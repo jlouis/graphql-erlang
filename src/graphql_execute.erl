@@ -66,9 +66,9 @@ return(_Ctx, {Result, Errs}) ->
 handle(Path, Ctx, Cur, #object_type {} = Obj, SSet) ->
     resolve_obj([Obj | Path], Ctx, Cur, SSet, Obj, #{});
 handle(Path, Ctx, Cur, #interface_type { id = IFaceID, resolve_type = R }, SSet) ->
-    resolve_type(Path, Ctx, Cur, IFaceID, R, SSet);
+    handle_abstract_type(Path, Ctx, Cur, IFaceID, R, SSet);
 handle(Path, Ctx, Cur, #union_type { id = UnionID, resolve_type = R}, SSet) ->
-    resolve_type(Path, Ctx, Cur, UnionID, R, SSet);
+    handle_abstract_type(Path, Ctx, Cur, UnionID, R, SSet);
 %% -- Scalars / scalar types
 handle(Path, _Ctx, Cur, #scalar_type { id = ID, output_coerce = Coerce }, []) ->
     try Coerce(Cur) of
@@ -80,6 +80,19 @@ handle(Path, _Ctx, Cur, #scalar_type { id = ID, output_coerce = Coerce }, []) ->
     end;
 handle(_Path, Ctx, Cur, #enum_type {} = Enum, SSet) ->
     resolve_enum(Ctx, Cur, SSet, Enum).
+
+%% Helper for calling the type resolver in an interface or union
+handle_abstract_type(Path, Ctx, Cur, ID, R, SSet) ->
+    try R(Cur) of
+        {ok, Ty} ->
+          #object_type{} = Obj = graphql_schema:get(binarize(Ty)),
+          resolve_obj([Obj | Path], Ctx, Cur, SSet, Obj, #{});
+        {error, Reason} ->
+            throw(err(Path, {unresolved_type, ID, Reason}))
+    catch
+        Class:Err ->
+            throw(err(Path, {resolver_crash, ID, Cur, {Class, Err}}))
+    end.
 
 %% -- ENUM HANDLING ------------------------------------
 
@@ -232,18 +245,6 @@ resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema_obj = FObj } 
 resolver_function(R) when is_function(R, 3) -> R;
 resolver_function(undefined) -> fun ?MODULE:default_resolver/3.
 
-%% Helper for calling the type resolver in an interface or union
-resolve_type(Path, Ctx, Cur, ID, R, SSet) ->
-    try R(Cur) of
-        {ok, Ty} ->
-          #object_type{} = Obj = graphql_schema:get(binarize(Ty)),
-          resolve_obj([Obj | Path], Ctx, Cur, SSet, Obj, #{});
-        {error, Reason} ->
-            throw(err(Path, {unresolved_type, ID, Reason}))
-    catch
-        Class:Err ->
-            throw(err(Path, {resolver_crash, ID, Cur, {Class, Err}}))
-    end.
 
 default_resolver(_, none, _) -> {error, no_object};
 default_resolver(_, undefined, _) -> {error, undefined_object};
