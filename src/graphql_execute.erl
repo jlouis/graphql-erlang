@@ -214,40 +214,34 @@ resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema_obj = FObj } 
                             %% Failure to retrieve a result cuts the computation at this node
                             {ok, Alias, null};
                         {ok, Result} ->
-                            case graphql_ast:resolve_type(Ty) of
-                                {scalar, Scalar} ->
-                                    SType = output_coerce_type(Scalar),
-                                    case handle(Path, Ctx, Result, SType, SSet) of
-                                        {Materialized, []} ->
-                                            {ok, Alias, Materialized};
-                                        {_, Errs} ->
-                                            {field_error, Alias, Errs}
-                                    end;
-                                {list, {scalar, Scalar}} when is_list(Result) ->
-                                    [] = SSet,
-                                    Coerced = [output_coerce(Scalar, R) || R <- Result],
-                                    {ok, Alias, [C || {ok, C} <- Coerced, C /= null]};
-                                {list, {scalar, _}} ->
-                                    [] = SSet,
-                                    {ok, Alias, null};
-                                {list, _T} ->
-                                    {RL, Errs} = handle_list(Path, Ctx, Result, FObj, SSet),
-                                    case Errs of
-                                        [] -> {ok, Alias, RL};
-                                        Errs -> {field_error, Alias, Errs}
-                                    end;
-                                 _T ->
-                                    case handle(Path, Ctx, Result, FObj, SSet) of
-                                        {Materialized, []} ->
-                                            {ok, Alias, Materialized};
-                                        {_, Errs} ->
-                                            {field_error, Alias, Errs}
-                                    end
-                           end;
+                            case handle_type(Path, Ctx, Result, Ty, SSet, FObj) of
+                                {Materialized, []} ->
+                                    {ok, Alias, Materialized};
+                                {_, Errs} ->
+                                    {field_error, Alias, Errs}
+                            end;
                        Wrong ->
                            exit({wrong_resolver_function_return, Fun, Alias, Wrong})
                    end
             end
+    end.
+
+handle_type(Path, Ctx, Result, Ty, SSet, FObj) ->
+    case graphql_ast:resolve_type(Ty) of
+        {scalar, Scalar} ->
+            SType = output_coerce_type(Scalar),
+            handle(Path, Ctx, Result, SType, SSet);
+        {list, {scalar, Scalar}} when is_list(Result) ->
+            SType = output_coerce_type(Scalar),
+            Coerced = [handle(Path, Ctx, R, SType, SSet) || R <- Result],
+            {Vals, Errs} = lists:unzip(Coerced),
+            {[V || V <- Vals, V /= null], lists:concat(Errs)};
+        {list, {scalar, _}} ->
+            {null, [non_list_type]};
+        {list, _T} ->
+            handle_list(Path, Ctx, Result, FObj, SSet);
+        _T ->
+            handle(Path, Ctx, Result, FObj, SSet)
     end.
 
 %% -- FUNCTION RESOLVERS ---------------------------------
@@ -271,18 +265,6 @@ default_resolver(#{ field := Field}, Cur, _Args) ->
 
 %% -- OUTPUT COERCION ------------------------------------
 
-output_coerce(Ty, Val) ->
-    case output_coerce_type(Ty) of
-        #scalar_type { output_coerce = F } ->
-           try F(Val) of Result -> Result
-           catch
-              Class:Error ->
-                  throw({user_defined_output_coerce, Ty, Val, Class, Error})
-           end;
-        not_found ->
-           throw({user_defined_scalar_not_found, Ty})
-    end.
-    
 output_coerce_type(id) ->
     #scalar_type { id = id, output_coerce = fun
         (B) when is_binary(B) -> {ok, B};
