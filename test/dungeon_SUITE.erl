@@ -261,6 +261,7 @@ scalar_as_expression_coerce(Config) ->
                                                 <<"mood">> := <<"TRANQUIL">>,
                                                 <<"name">> := <<"Green Slime">>,
                                                 <<"id">> := _,
+                                                <<"properties">> := [<<"MURLOC">>, <<"MECH">>],
                                                 <<"plushFactor">> := PF,
                                                 <<"stats">> := #{
                                                     <<"attack">> := 7,

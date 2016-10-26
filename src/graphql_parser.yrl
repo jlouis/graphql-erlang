@@ -198,7 +198,7 @@ Value -> float : g_float('$1').
 Value -> bstring : g_string('$1').
 Value -> bool : g_bool('$1').
 Value -> EnumValue : {enum, '$1'}.
-Value -> ListValue : {list, '$1'}.
+Value -> ListValue : g_list('$1').
 Value -> InputObjectValue : g_input_object('$1').
 
 EnumValue -> Name : g_enum('$1').
@@ -301,4 +301,5 @@ g_float({float, _, F}) -> F.
 g_string({bstring, _, S}) -> S.
 g_bool({bool, _, B}) -> B.
 
+g_list(L) when is_list(L) -> L.
 g_input_object(KVPairs) -> maps:from_list(KVPairs).

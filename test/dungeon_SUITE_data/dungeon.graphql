@@ -100,6 +100,7 @@ mutation IntroduceMonsterFatExpr {
       color: "#1be215",
       hitpoints: 9001,
       mood: TRANQUIL,
+      properties: [MURLOC, MECH],
       stats: {
         attack: 7,
         shellScripting: 5,
