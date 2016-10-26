@@ -19,16 +19,9 @@ x(Obj) ->
         ok -> ok
     catch
         throw:{invalid, Reason} ->
-            throw({schema_validation, id(Obj), Reason})
+            throw({schema_validation, graphql_schema:id(Obj), Reason})
     end.
 
-id(#root_schema{}) -> 'ROOT';
-id(#scalar_type{ id = ID }) -> ID;
-id(#object_type{ id = ID}) -> ID;
-id(#enum_type{ id = ID}) -> ID;
-id(#interface_type{ id = ID}) -> ID;
-id(#union_type{ id = ID}) -> ID;
-id(#input_object_type{ id = ID }) -> ID.
 
 validate(#scalar_type {}) -> ok;
 validate(#root_schema {} = X) -> root_schema(X);
@@ -94,7 +87,7 @@ implements(#interface_type { fields = IFFields } = IFace,
         ok ->
             ok;
         {error, Reason} ->
-            err({implements, id(IFace), Reason})
+            err({implements, graphql_schema:id(IFace), Reason})
     end.
     
 implements_field_check([], []) -> ok;
