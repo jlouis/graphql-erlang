@@ -143,16 +143,16 @@ field(Path, #field { id = ID, args = Args, selection_set = SSet } = F, Fields) -
     Name = graphql_ast:name(ID),
     case maps:get(Name, Fields, not_found) of
         not_found when Name == <<"__typename">> ->
-            F#field { schema = {introspection, typename}, schema_obj = scalar};
+            F#field { schema = {introspection, typename}, schema_obj = {scalar, string} };
         not_found ->
             graphql_err:abort(Path, {unknown_field, Name});
         #schema_field{ ty = Ty, args = SArgs } = SchemaTy ->
             case graphql_ast:unwrap_type(Ty) of
-                {scalar, _} ->
+                {scalar, STy} ->
                     F#field {
                       args = field_args([F | Path], Args, SArgs),
                       schema = SchemaTy,
-                      schema_obj = scalar };
+                      schema_obj = {scalar, STy} };
                 T when is_binary(T) ->
                     {Obj, SSet2} = field_lookup([F | Path], T, SSet),
                     F#field {
