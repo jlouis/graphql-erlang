@@ -203,8 +203,7 @@ resolve_paginate_sequential_assoc(Source, Type, #{ <<"first">> := N }, {Lo, Hi},
     {res, Res, []} = gryphon_hydra:assoc_range_data(Source, Type, Offset, Limit),
     Edges = lists:map(
         fun({Target, Data}) ->
-            NewData = maps:merge(Data, #{TargetField => Target}),
-            NewData
+            maps:merge(Data, #{TargetField => Target})
         end,
         Res
     ),
@@ -225,8 +224,7 @@ resolve_paginate_sequential_assoc(Source, Type, #{ <<"last">> := N }, {Lo, Hi}, 
     {res, Res, []} = gryphon_hydra:assoc_range_data(Source, Type, Offset, Limit),
     Edges = lists:map(
         fun({Target, Data}) ->
-            NewData = maps:merge(Data, #{TargetField => Target}),
-            NewData
+            maps:merge(Data, #{TargetField => Target})
         end,
         Res
     ),
