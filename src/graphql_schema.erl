@@ -14,6 +14,7 @@
 	lookup_enum_type/1]).
 -export([resolve_root_type/2]).
 
+-export([id/1]).
 
 %% Callbacks
 -export([init/1, handle_call/3, handle_cast/2, terminate/2, handle_info/2,
@@ -110,6 +111,14 @@ resolve_root_type(undefined, #root_schema { query = Q }) -> Q;
 resolve_root_type({query, _}, #root_schema { query = Q }) -> Q;
 resolve_root_type({mutation, _}, #root_schema { mutation = M }) -> M;
 resolve_root_type({subscription, _}, #root_schema { subscription = S }) -> S.
+
+id(#root_schema{}) -> 'ROOT';
+id(#scalar_type{ id = ID }) -> ID;
+id(#object_type{ id = ID}) -> ID;
+id(#enum_type{ id = ID}) -> ID;
+id(#interface_type{ id = ID}) -> ID;
+id(#union_type{ id = ID}) -> ID;
+id(#input_object_type{ id = ID }) -> ID.
 
 %% -- CALLBACKS
 

@@ -207,14 +207,14 @@ tc_field(Ctx, Path, #frag { id = '...', selection_set = SSet} = InlineFrag) ->
         selection_set = tc_sset(Ctx, [InlineFrag | Path], SSet)
     };
 tc_field(_Ctx, Path, #field { selection_set = [_|_],
-                              schema_obj = scalar }) ->
+                              schema_obj = {scalar, _} }) ->
     graphql_err:abort(Path, selection_on_scalar);
 tc_field(_Ctx, _Path, #field { schema = {introspection, typename},
-                               schema_obj = scalar } = F) ->
+                               schema_obj = {scalar, _} } = F) ->
     F;
 tc_field(Ctx, Path, #field { args = Args,
                              schema = #schema_field { args = SArgs },
-                             schema_obj = scalar } = F) ->
+                             schema_obj = {scalar, _} } = F) ->
     F#field { args = tc_args(Ctx, [F | Path], Args, SArgs)};
 tc_field(Ctx, Path, #field { args = Args,
                              selection_set = SSet,
@@ -279,9 +279,10 @@ uniq([_]) -> ok;
 uniq([{X, _}, {X, _} | _]) -> {error, {unique, X}};
 uniq([_ | Next]) -> uniq(Next).
 
+-spec schema_type(binary() | schema_type()) -> schema_type().
 schema_type({scalar, X}) when is_atom(X) -> {scalar, X};
 schema_type({non_null, T}) -> {non_null, schema_type(T)};
-schema_type([Tag]) -> {list, schema_type(Tag)};
+schema_type({list, Tag}) -> {list, schema_type(Tag)};
 schema_type(#enum_type{} = Ty) -> Ty;
 schema_type(#input_object_type{} = Ty) -> Ty;
 schema_type(#scalar_type{} = Ty) -> Ty;
