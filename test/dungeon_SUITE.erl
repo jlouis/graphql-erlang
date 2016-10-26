@@ -230,10 +230,11 @@ nested_input_object(Config) ->
       <<"color">> => <<"#1be215">>,
       <<"hitpoints">> => 9001,
       <<"mood">> => <<"TRANQUIL">>,
-      <<"stats">> => #{
+      <<"stats">> => [#{
         <<"attack">> => 7,
         <<"shellScripting">> => 5,
-        <<"yell">> => <<"...">> }},
+        <<"yell">> => <<"...">> }]
+      },
     #{ data :=
                       #{<<"introduceMonster">> := #{<<"clientMutationId">> := <<"123">>,
                                                     <<"monster">> :=
@@ -243,10 +244,10 @@ nested_input_object(Config) ->
                                                            <<"name">> := <<"Green Slime">>,
                                                            <<"id">> := _,
                                                            <<"plushFactor">> := PF,
-                                                           <<"stats">> := #{
+                                                           <<"stats">> := [#{
                                                             <<"attack">> := 7,
                                                             <<"shellScripting">> := 5,
-                                                            <<"yell">> := <<"...">> }}}}} =
+                                                            <<"yell">> := <<"...">> }]}}}} =
              run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
     true = (PF - 0.01) < 0.00001,
     %% Expected = run(Config, <<"IntroduceMonsterFatExpr">>, #{ <<"input">> => Input}),
@@ -260,10 +261,10 @@ integer_in_float_context(Config) ->
       <<"hitpoints">> => 7001,
       <<"mood">> => <<"TRANQUIL">>,
       <<"plushFactor">> => 1,
-      <<"stats">> => #{
+      <<"stats">> => [#{
         <<"attack">> => 7,
         <<"shellScripting">> => 5,
-        <<"yell">> => <<"...">> }},
+        <<"yell">> => <<"...">> }]},
     #{ data :=
                       #{<<"introduceMonster">> := #{<<"clientMutationId">> := <<"123">>,
                                                     <<"monster">> :=
@@ -273,10 +274,10 @@ integer_in_float_context(Config) ->
                                                            <<"name">> := <<"Brown Slime">>,
                                                            <<"id">> := _,
                                                            <<"plushFactor">> := PF,
-                                                           <<"stats">> := #{
+                                                           <<"stats">> := [#{
                                                             <<"attack">> := 7,
                                                             <<"shellScripting">> := 5,
-                                                            <<"yell">> := <<"...">> }}}}} =
+                                                            <<"yell">> := <<"...">> }]}}}} =
              run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
     true = (PF - 1.0) < 0.00001,
     %% Expected = run(Config, <<"IntroduceMonsterFatExpr">>, #{ <<"input">> => Input}),
@@ -294,10 +295,10 @@ scalar_as_expression_coerce(Config) ->
                                                 <<"id">> := _,
                                                 <<"properties">> := [<<"MURLOC">>, <<"MECH">>],
                                                 <<"plushFactor">> := PF,
-                                                <<"stats">> := #{
+                                                <<"stats">> := [#{
                                                     <<"attack">> := 7,
                                                     <<"shellScripting">> := 5,
-                                                    <<"yell">> := <<"...">> }}}}} =
+                                                    <<"yell">> := <<"...">> }]}}}} =
              run(Config, <<"IntroduceMonsterFatExpr">>, #{}),
     true = (PF - 0.01) < 0.00001,
     ok.

@@ -101,11 +101,11 @@ mutation IntroduceMonsterFatExpr {
       hitpoints: 9001,
       mood: TRANQUIL,
       properties: [MURLOC, MECH],
-      stats: {
+      stats: [{
         attack: 7,
         shellScripting: 5,
         yell: "..."
-      }
+      }]
     }) {
       clientMutationId,
       monster {
