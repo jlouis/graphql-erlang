@@ -54,11 +54,11 @@ input(Ty, InputFields, PayloadFields) ->
 paginate(Type, Description, AssocType) ->
     paginate(Type, Description, AssocType, #{pagination_type => sequential}).
 
-paginate(Type, Description, AssocType, #{pagination_type := PaginationType}) ->
+paginate(Type, Description, AssocType, PaginationInfo) ->
     #{
         type => Type,
         description => Description,
-        resolve => graphql_relay:resolve_paginate(PaginationType, AssocType),
+        resolve => graphql_relay:resolve_paginate(PaginationInfo, AssocType),
         args => graphql_relay:pagination_fields()
     }.
 
@@ -116,8 +116,8 @@ pagination_fields(Additional) ->
     },
     maps:merge(Base, Additional).
 
-resolve_paginate(PaginationType, Type) ->
-    fun (_Ctx, Src, Input) -> resolve_paginate(PaginationType, Type, Src, Input) end.
+resolve_paginate(PaginationInfo, Type) ->
+    fun (_Ctx, Src, Input) -> resolve_paginate(PaginationInfo, Type, Src, Input) end.
 
 %% -- INTERNAL FUNCTIONS --------------------------------------
 
@@ -132,7 +132,7 @@ with_mutation(#{ <<"input">> := Input}, Fun, Key) ->
 take(K, Map) ->
     {maps:get(K, Map), maps:remove(K, Map)}.
 
-resolve_paginate(sequential, Type, Source, Input) ->
+resolve_paginate(#{ pagination_type := sequential }, Type, Source, Input) ->
     case gryphon_hydra:assoc_count(Source, Type) of
         {res, null, []} ->
             {error, invalid_type};
@@ -141,7 +141,16 @@ resolve_paginate(sequential, Type, Source, Input) ->
             Sliced = cursors_to_edges(Input, Bounds),
             resolve_paginate_sequential(Source, Type, Input, Sliced, Count)
     end;
-resolve_paginate(ordered, Type, Source, Input) ->
+resolve_paginate(#{ pagination_type := sequential_assoc, target_field := TargetField }, Type, Source, Input) ->
+    case gryphon_hydra:assoc_count(Source, Type) of
+        {res, null, []} ->
+            {error, invalid_type};
+        {res, Count, []} ->
+            Bounds = {0, Count},
+            Sliced = cursors_to_edges(Input, Bounds),
+            resolve_paginate_sequential_assoc(Source, Type, Input, Sliced, Count, TargetField)
+    end;
+resolve_paginate(#{ pagination_type := ordered }, Type, Source, Input) ->
     Bounds = {0, 9000000000000000000},
     Sliced = cursors_to_edges(Input, Bounds),
     resolve_paginate_ordered(Source, Type, Input, Sliced).
@@ -184,6 +193,53 @@ resolve_paginate_sequential(Source, Type, #{ <<"last">> := N }, {Lo, Hi}, Count)
 resolve_paginate_sequential(Source, Type, #{}, Bound, Count) ->
     resolve_paginate_sequential(Source, Type, #{ <<"first">> => ?DEFAULT_N }, Bound, Count).
 
+resolve_paginate_sequential_assoc(_Source, _Type, #{ <<"first">> := F, <<"last">> := L}, _Bounds, _Count, _TargetField) when F /= null, L /= null ->
+    {error, first_last};
+resolve_paginate_sequential_assoc(_Source, _Type, #{ <<"first">> := N }, _Bounds, _Count, _TargetField) when N /= null, N < 0 ->
+    {error, negative_first};
+resolve_paginate_sequential_assoc(Source, Type, #{ <<"first">> := N }, {Lo, Hi}, Count, TargetField) when N /= null ->
+    Offset = Lo,
+    Limit = min(Hi-Lo, N),
+    {res, Res, []} = gryphon_hydra:assoc_range_data(Source, Type, Offset, Limit),
+    Edges = lists:map(
+        fun({Target, Data}) ->
+            maps:merge(Data, #{TargetField => Target})
+        end,
+        Res
+    ),
+    PageInfo = #{
+        <<"hasNextPage">> => N < (Hi-Lo),
+        <<"hasPreviousPage">> => false
+    },
+    {ok, #{
+        <<"pageInfo">> => PageInfo,
+        <<"edges">> => edges_sequential(Edges, Offset),
+        <<"count">> => Count
+    }};
+resolve_paginate_sequential_assoc(_Source, _Type, #{ <<"last">> := N }, _Bounds, _Count, _TargetField) when N /= null, N < 0 ->
+    {error, negative_last};
+resolve_paginate_sequential_assoc(Source, Type, #{ <<"last">> := N }, {Lo, Hi}, Count, TargetField) when N /= null ->
+    Offset = max(Hi-N, 0),
+    Limit = min(Hi-Lo, N),
+    {res, Res, []} = gryphon_hydra:assoc_range_data(Source, Type, Offset, Limit),
+    Edges = lists:map(
+        fun({Target, Data}) ->
+            maps:merge(Data, #{TargetField => Target})
+        end,
+        Res
+    ),
+    PageInfo = #{
+        <<"hasNextPage">> => false,
+        <<"hasPreviousPage">> => N < (Hi-Lo)
+    },
+    {ok, #{
+        <<"pageInfo">> => PageInfo,
+        <<"edges">> => edges_sequential(Edges, Offset),
+        <<"count">> => Count
+    }};
+resolve_paginate_sequential_assoc(Source, Type, #{}, Bound, Count, TargetField) ->
+    resolve_paginate_sequential_assoc(Source, Type, #{ <<"first">> => ?DEFAULT_N }, Bound, Count, TargetField).
+
 resolve_paginate_ordered(_Source, _Type, #{ <<"first">> := F, <<"last">> := L}, _Bounds) when F /= null, L /= null ->
     {error, first_last};
 resolve_paginate_ordered(_Source, _Type, #{ <<"first">> := N }, _Bounds) when N /= null, N < 0 ->
@@ -202,7 +258,7 @@ resolve_paginate_ordered(Source, Type, #{ <<"first">> := N }, {Lo, Hi}) when N /
     }};
 resolve_paginate_ordered(_Source, _Type, #{ <<"last">> := N }, _Bounds) when N /= null, N < 0 ->
     {error, negative_last};
-resolve_paginate_ordered(Source, Type, #{ <<"last">> := N }, {Lo, Hi}) when N /= null ->
+resolve_paginate_ordered(_Source, _Type, #{ <<"last">> := N }, {_Lo, _Hi}) when N /= null ->
     {error, not_implemented};
 %%    {res, Edges, []} = gryphon_hydra:assoc_ordered_range(Source, Type, Hi, Lo, N + 1),
 %%    Count = length(Edges),
