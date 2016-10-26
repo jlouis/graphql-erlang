@@ -166,6 +166,8 @@ input_coercer(Path, #scalar_type { id = ID, input_coerce = IC}, Val) ->
         {error, Reason} -> graphql_err:abort(Path, {input_coercion, ID, Val, Reason})
     catch
         Cl:Err ->
+            lager:warning("Exception on input coercer ~p: ~p:~p stack: ~p",
+                [ID, Cl, Err, erlang:get_stacktrace()]),
             graphql_err:abort(Path, {input_coerce_abort, {Cl, Err}})
     end.
 
