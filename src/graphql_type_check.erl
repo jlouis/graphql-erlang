@@ -149,6 +149,7 @@ input_coerce_scalar(_Path, id, V) when is_binary(V) -> ok;
 input_coerce_scalar(_Path, string, V) when is_binary(V) -> ok;
 input_coerce_scalar(_Path, int, V) when is_integer(V) -> ok;
 input_coerce_scalar(_Path, float, V) when is_float(V) -> ok;
+input_coerce_scalar(_Path, float, I) when is_integer(I) -> {replace, float(I)};
 input_coerce_scalar(_Path, bool, true) -> ok;
 input_coerce_scalar(_Path, bool, false) -> ok;
 input_coerce_scalar(Path, #scalar_type {} = SType, Val) ->

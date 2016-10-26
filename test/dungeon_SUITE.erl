@@ -51,6 +51,7 @@ groups() ->
                  nested_input_object,
                  inline_fragment,
                  fragment_over_union_interface,
+                 integer_in_float_context,
                  scalar_as_expression_coerce,
                  simple_field_merge]},
 
@@ -248,6 +249,36 @@ nested_input_object(Config) ->
                                                             <<"yell">> := <<"...">> }}}}} =
              run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
     true = (PF - 0.01) < 0.00001,
+    %% Expected = run(Config, <<"IntroduceMonsterFatExpr">>, #{ <<"input">> => Input}),
+    ok.
+    
+integer_in_float_context(Config) ->
+    Input = #{
+      <<"clientMutationId">> => <<"123">>,
+      <<"name">> => <<"Brown Slime">>,
+      <<"color">> => <<"#B7411E">>,
+      <<"hitpoints">> => 7001,
+      <<"mood">> => <<"TRANQUIL">>,
+      <<"plushFactor">> => 1,
+      <<"stats">> => #{
+        <<"attack">> => 7,
+        <<"shellScripting">> => 5,
+        <<"yell">> => <<"...">> }},
+    #{ data :=
+                      #{<<"introduceMonster">> := #{<<"clientMutationId">> := <<"123">>,
+                                                    <<"monster">> :=
+                                                        #{ <<"color">> := <<"#B7411E">>,
+                                                           <<"hitpoints">> := 7001,
+                                                           <<"mood">> := <<"TRANQUIL">>,
+                                                           <<"name">> := <<"Brown Slime">>,
+                                                           <<"id">> := _,
+                                                           <<"plushFactor">> := PF,
+                                                           <<"stats">> := #{
+                                                            <<"attack">> := 7,
+                                                            <<"shellScripting">> := 5,
+                                                            <<"yell">> := <<"...">> }}}}} =
+             run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
+    true = (PF - 1.0) < 0.00001,
     %% Expected = run(Config, <<"IntroduceMonsterFatExpr">>, #{ <<"input">> => Input}),
     ok.
 
