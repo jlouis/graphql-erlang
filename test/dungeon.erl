@@ -181,8 +181,10 @@ inject_monster() ->
                  attack => #{
                    type => 'int!',
                    description => "The attack value of the monster",
-                   resolve => fun(_, #stats { attack = A }, _) -> {ok, A} end
-                  },
+                   resolve => fun
+                       (_, #stats { attack = 13 }, _) -> {ok, null};
+                       (_, #stats { attack = A }, _) -> {ok, A}
+                   end },
                  yell => #{
                    type => 'string',
                    description => "The yell of the monster",
