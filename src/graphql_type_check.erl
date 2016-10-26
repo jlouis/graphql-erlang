@@ -121,7 +121,10 @@ check_param(Path, Ty, V) ->
     graphql_err:abort(Path, {param_mismatch, Ty, V}).
 
 check_input_object(Path, #input_object_type{ fields = Fields }, Obj) ->
-    {replace, check_object_fields(Path, maps:to_list(Fields), Obj, #{})}.
+    Coerced = coerce_object(Obj),
+    {replace, check_object_fields(Path, maps:to_list(Fields), Coerced, #{})}.
+
+
 
 check_object_fields(Path, [], Obj, Result) ->
     case maps:size(Obj) of
@@ -360,9 +363,11 @@ coerce_object(Obj) when is_map(Obj) ->
     
 coerce_object_(Obj) when is_map(Obj) ->
     Elems = maps:to_list(Obj),
-    maps:from_list([{graphql_ast:name(K), coerce_object_(V)} || {K, V} <- Elems]);
+    maps:from_list([{coerce_name(K), coerce_object_(V)} || {K, V} <- Elems]);
 coerce_object_(Other) -> Other.
 
+coerce_name(B) when is_binary(B) -> B;
+coerce_name(Name) -> graphql_ast:name(Name).
 
 %% -- AST MANIPULATION -------------------------
 

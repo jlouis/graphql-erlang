@@ -16,7 +16,7 @@
           name,
           color,
           inventory = ordsets:new(),
-          stats = #stats{},
+          stats = [],
           hitpoints,
           plush_factor = 0.0,
           properties = [],
@@ -277,7 +277,7 @@ inject_monster() ->
             resolve => fun(_, #monster { plush_factor = F }, _) -> {ok, F} end,
             description => "How much of a plush animal the monster is (cuteness)" },
           stats => #{
-            type => 'Stats',
+            type => ['Stats'],
             resolve => fun(_, #monster { stats = S}, _) -> {ok, S} end,
             description => "The stats of the monster"
            },
@@ -313,7 +313,7 @@ inject_monster() ->
                                  default => [],
                                  description => "The properties of the monster" },
                                stats => #{
-                                 type => 'StatsInput',
+                                 type => ['StatsInput'],
                                  description => "The monster stats"
                                 }
                               },
@@ -613,21 +613,11 @@ mut_int_monster(_Ctx, none, #{ <<"input">> := Input }) ->
        <<"properties">> := Props,
        <<"plushFactor">> := PF
     } = Input,
-    S = case Stats of
-            null -> #stats{};
-            #{ <<"attack">> := Attack,
-               <<"shellScripting">> := SHScript,
-               <<"yell">> := Yell } ->
-                #stats{
-                   attack = Attack,
-                   shell_scripting = SHScript,
-                   yell = Yell
-                  }
-        end,
+    Ss = input_stats(Stats),
     {atomic, Monster} = insert(#monster {
     	properties = Props,
     	plush_factor = PF,
-    	stats = S,
+    	stats = Ss,
     	name = N,
     	color = C,
     	hitpoints = HP,
@@ -635,6 +625,17 @@ mut_int_monster(_Ctx, none, #{ <<"input">> := Input }) ->
     {ok, #{
         <<"clientMutationId">> => MID,
         <<"monster">> => Monster } }.
+
+input_stats(null) -> [];
+input_stats([]) -> [];
+input_stats([#{ <<"attack">> := Attack,
+                <<"shellScripting">> := SHScript,
+                <<"yell">> := Yell } | Next]) ->
+    S = #stats {
+      attack = Attack,
+      shell_scripting = SHScript,
+      yell = Yell },
+    [S | input_stats(Next)].
 
 mut_int_item(_Ctx, none, #{ <<"input">> := Input }) ->
     #{ <<"clientMutationId">> := MID,
