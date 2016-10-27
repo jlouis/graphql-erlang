@@ -153,17 +153,19 @@ resolve_frag(Ctx, Frag, SObj) ->
 
 resolve_obj(Path, Ctx, Cur, Fields, SObj, SoFar) ->
     case resolve_obj_fold(Path, Ctx, Cur, Fields, SObj, SoFar, [], []) of
-        {Acc, Errs} ->
-            {maps:from_list(Acc), Errs}
+        {ok, Acc, Errs} ->
+            {maps:from_list(Acc), Errs};
+        {error, Errs} ->
+            {null, Errs}
     end.
     
 resolve_obj_fold(_Path, _Ctx, _Cur, [], _SObj, _SoFar, Acc, Errs) ->
-    {Acc, Errs};
+    {ok, Acc, Errs};
 resolve_obj_fold(Path, Ctx, Cur, [F | Next], SObj, SoFar, Acc, Errs) ->
     case resolve_obj_([F | Path], Ctx, Cur, F, SObj, SoFar) of
         skip ->
             resolve_obj_fold(Path, Ctx, Cur, Next, SObj, SoFar, Acc, Errs);
-        {ok, Alias, Result} ->
+        {ok, Alias, Es, Result} ->
             resolve_obj_fold(
                 Path,
                 Ctx,
@@ -172,17 +174,9 @@ resolve_obj_fold(Path, Ctx, Cur, [F | Next], SObj, SoFar, Acc, Errs) ->
                 SObj,
                 SoFar#{ Alias => true},
                 [{Alias, Result} | Acc],
-                Errs);
-        {field_error, Alias, Es} ->
-            resolve_obj_fold(
-                Path,
-                Ctx,
-                Cur,
-                Next,
-                SObj,
-                SoFar#{ Alias => true },
-                [{Alias, null} | Acc],
                 Es ++ Errs);
+        {object_error, Es} ->
+            {error, Es ++ Errs};
         {add_fields, FragFields} ->
             resolve_obj_fold(Path, Ctx, Cur, FragFields ++ Next, SObj, SoFar, Acc, Errs)
     end.
@@ -200,7 +194,7 @@ resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema_obj = FObj } 
         false ->
             case maps:get(Name, SFields, not_found) of
                 not_found when Name == <<"__typename">> ->
-                    {ok, Alias, resolve_typename(SObj)};
+                    {ok, Alias, [], resolve_typename(SObj)};
                 not_found ->
                     throw({execute, {unknown_field, Name, line(F)}});
                 #schema_field { ty = Ty, resolve = RF } ->
@@ -209,21 +203,31 @@ resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema_obj = FObj } 
                     case Fun(Ctx#{ field => Name, object_type => OID }, Cur, Args) of
                         {error, Reason} ->
                             Error = format_error(Path, Ctx, Name, OID, Reason),
-                            {field_error, Alias, [Error]};
+                            handle_null(Ty, Alias, [Error], null);
                         {ok, null} ->
-                            %% Failure to retrieve a result cuts the computation at this node
-                            {ok, Alias, null};
+                            handle_null(Ty, Alias, [], null);
                         {ok, Result} ->
-                            case handle_type(Path, Ctx, Result, Ty, SSet, FObj) of
-                                {Materialized, []} ->
-                                    {ok, Alias, Materialized};
-                                {_, Errs} ->
-                                    {field_error, Alias, Errs}
-                            end;
-                       Wrong ->
+                            %%ok = coerce_type(Ty, FObj),
+                             {Materialized, Errs} = handle_type(Path, Ctx, Result, Ty, SSet, FObj),
+                             handle_null(Ty, Alias, Errs, Materialized);
+                     Wrong ->
                            exit({wrong_resolver_function_return, Fun, Alias, Wrong})
                    end
             end
+    end.
+
+handle_null({non_null, _}, Alias, _, null) ->
+    {object_error, [{context_non_null, Alias}]};
+handle_null(_, Alias, [], Val) ->
+    {ok, Alias, [], Val};
+handle_null(_, Alias, Errs, Val) ->
+    {ok, Alias, Errs, Val}.
+
+coerce_type(X, X) -> ok;
+coerce_type(X, Obj) when is_binary(X) ->
+    case graphql_schema:id(Obj) of
+        X -> ok;
+        Y -> {X, '/=', Y}
     end.
 
 handle_type(Path, Ctx, Result, Ty, SSet, FObj) ->

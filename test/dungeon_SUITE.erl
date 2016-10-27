@@ -53,6 +53,7 @@ groups() ->
                  fragment_over_union_interface,
                  integer_in_float_context,
                  scalar_as_expression_coerce,
+                 non_null_field,
                  simple_field_merge]},
 
     Errors = {errors, [],
@@ -250,7 +251,6 @@ nested_input_object(Config) ->
                                                             <<"yell">> := <<"...">> }]}}}} =
              run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
     true = (PF - 0.01) < 0.00001,
-    %% Expected = run(Config, <<"IntroduceMonsterFatExpr">>, #{ <<"input">> => Input}),
     ok.
     
 integer_in_float_context(Config) ->
@@ -280,9 +280,34 @@ integer_in_float_context(Config) ->
                                                             <<"yell">> := <<"...">> }]}}}} =
              run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
     true = (PF - 1.0) < 0.00001,
-    %% Expected = run(Config, <<"IntroduceMonsterFatExpr">>, #{ <<"input">> => Input}),
     ok.
 
+non_null_field(Config) ->
+    Input = #{
+      <<"clientMutationId">> => <<"123">>,
+      <<"name">> => <<"Brown Slime">>,
+      <<"color">> => <<"#B7411E">>,
+      <<"hitpoints">> => 7001,
+      <<"mood">> => <<"TRANQUIL">>,
+      <<"plushFactor">> => 1,
+      <<"stats">> => [#{
+        <<"attack">> => 13,
+        <<"shellScripting">> => 5,
+        <<"yell">> => <<"...">> }]},
+    #{ data :=
+                      #{<<"introduceMonster">> := #{<<"clientMutationId">> := <<"123">>,
+                                                    <<"monster">> :=
+                                                        #{ <<"color">> := <<"#B7411E">>,
+                                                           <<"hitpoints">> := 7001,
+                                                           <<"mood">> := <<"TRANQUIL">>,
+                                                           <<"name">> := <<"Brown Slime">>,
+                                                           <<"id">> := _,
+                                                           <<"plushFactor">> := PF,
+                                                           <<"stats">> := [null] }}}} =
+             run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
+    true = (PF - 1.0) < 0.00001,
+    ok.
+  
 scalar_as_expression_coerce(Config) ->
     ct:log("When inputtting a scalar as an expression, it must coerce"),
     #{ data :=
