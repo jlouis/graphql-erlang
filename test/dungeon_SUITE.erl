@@ -54,6 +54,7 @@ groups() ->
                  integer_in_float_context,
                  scalar_as_expression_coerce,
                  non_null_field,
+                 complex_modifiers,
                  simple_field_merge]},
 
     Errors = {errors, [],
@@ -280,6 +281,58 @@ integer_in_float_context(Config) ->
                                                             <<"yell">> := <<"...">> }]}}}} =
              run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
     true = (PF - 1.0) < 0.00001,
+    ok.
+
+complex_modifiers(Config) ->
+    Input = #{
+      <<"clientMutationId">> => <<"123">>,
+      <<"name">> => <<"Two-Headed Ogre">>,
+      <<"color">> => <<"#2887C8">>,
+      <<"hitpoints">> => 9002,
+      <<"mood">> => <<"AGGRESSIVE">>,
+      <<"plushFactor">> => 0.2,
+      <<"stats">> => [
+        %% Head ONE!
+        #{
+          <<"attack">> => 13,
+          <<"shellScripting">> => 5,
+          <<"yell">> => <<"I'M READY">> },
+        %% Head TWO!
+        #{
+          <<"attack">> => 7,
+          <<"shellScripting">> => 17,
+          <<"yell">> => <<"I'M NOT READY!">> } ]},
+    #{ data :=
+                      #{<<"introduceMonster">> := #{
+                          <<"monster">> := #{
+                            <<"id">> := MonsterID } } } } =
+             run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
+    
+    %% Standard Query
+    #{ data :=
+        #{ <<"monster">> := #{
+            <<"stats">> := [
+                null,
+                #{
+                  <<"attack">> := 7,
+                  <<"shellScripting">> := 17,
+                  <<"yell">> := <<"I'M NOT READY!">> } ]  }}} =
+            run(Config, <<"MonsterStatsZero">>, #{ <<"id">> => MonsterID }),
+    %% When the list is non-null, there is a null-value in there and so the whole monster
+    %% is invalid:
+    #{ data :=
+        #{ <<"monster">> := null }} =
+            run(Config, <<"MonsterStatsOne">>, #{ <<"id">> => MonsterID }),
+    %% When the inner-object is non-null, it is removed from the list, but the other
+    %% object is still there
+    #{ data :=
+        #{ <<"monster">> := #{
+            <<"stats">> := [
+                #{
+                  <<"attack">> := 7,
+                  <<"shellScripting">> := 17,
+                  <<"yell">> := <<"I'M NOT READY!">> } ]  }}} =
+            run(Config, <<"MonsterStatsTwo">>, #{ <<"id">> => MonsterID }),
     ok.
 
 non_null_field(Config) ->

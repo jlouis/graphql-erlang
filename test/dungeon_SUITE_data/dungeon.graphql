@@ -40,6 +40,30 @@ query FragmentOverUnion1($id: Id!) {
   }
 }
 
+query MonsterStatsZero($id: Id!) {
+  monster(id: $id) {
+      stats {
+          attack shellScripting yell
+      }
+  }
+}
+
+query MonsterStatsOne($id: Id!) {
+  monster(id: $id) {
+    statsVariantOne {
+      attack shellScripting yell
+    }
+  }
+}
+
+query MonsterStatsTwo($id: Id!) {
+  monster(id: $id) {
+    statsVariantTwo {
+       attack shellScripting yell
+    }
+  }
+}
+
 query FragmentOverUnion2($id: Id!) {
   monster(id: $id) {
     ...UnionThingFragment
