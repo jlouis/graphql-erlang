@@ -303,7 +303,7 @@ non_null_field(Config) ->
                                                            <<"name">> := <<"Brown Slime">>,
                                                            <<"id">> := _,
                                                            <<"plushFactor">> := PF,
-                                                           <<"stats">> := []}}}} =
+                                                           <<"stats">> := [null] }}}} =
              run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
     true = (PF - 1.0) < 0.00001,
     ok.

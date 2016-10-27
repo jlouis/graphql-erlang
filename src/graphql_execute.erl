@@ -310,9 +310,7 @@ output_coerce_type(UserDefined) when is_binary(UserDefined) ->
 %% into a coherent whole.
     
 handle_list(Path, Ctx, Result, FObj, SSet) when is_list(Result) ->
-    {L, Errs} = handle_list(Path, 0, Ctx, Result, FObj, SSet, [], []),
-    Res = {[R || R <- L, R /= null], Errs},
-    Res.
+    handle_list(Path, 0, Ctx, Result, FObj, SSet, [], []).
 
 handle_list(_Path, _K, _Ctx, [], _FObj, _SSet, Acc, Errs) ->
     {lists:reverse(Acc), Errs};
