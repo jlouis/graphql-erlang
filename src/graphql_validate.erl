@@ -1,6 +1,7 @@
 -module(graphql_validate).
 
 -include("graphql_internal.hrl").
+-include("graphql_schema.hrl").
 
 -export([x/1]).
 
@@ -8,7 +9,27 @@
 x(AST) -> 
     ok = unique_operations(AST),
     ok = no_fragment_cycles(AST),
+    ok = variables_are_input_objects(AST),
     ok.
+
+variables_are_input_objects({document, Ops}) ->
+    Operations = [O || O = #op{} <- Ops],
+    variables_are_input_objects(Operations);
+variables_are_input_objects([]) -> ok;
+variables_are_input_objects([#op { id = ID, vardefs = Defs } | Next]) ->
+    case vardefs_are_input_objects(Defs) of
+        ok -> variables_are_input_objects(Next);
+        {wrong_type, VarID} ->
+            err({wrong_input_type, graphql_ast:name(ID), VarID})
+    end.
+
+vardefs_are_input_objects([]) -> ok;
+vardefs_are_input_objects([#vardef { id = ID, ty = Ty } | Next]) ->
+    case polarity(Ty) of
+        '+' -> vardefs_are_input_objects(Next);
+        '*' -> vardefs_are_input_objects(Next);
+        '-' -> {wrong_type, ID}
+    end.
 
 unique_operations({document, Ops}) ->
     OpIDs = [graphql_ast:name(ID) || #op{ id = ID } <- Ops],
@@ -47,6 +68,20 @@ uniq(L) -> uniq_(L).
 uniq_([_]) -> ok;
 uniq_([X,X | _Xs]) -> err({not_unique, X});
 uniq_([_, X | Xs]) -> uniq([X | Xs]).
+
+%% Type polarity. Types are moded according to this scheme.
+polarity({non_null, T}) -> polarity(T);
+polarity({list, T}) -> polarity(T);
+polarity(#input_object_type{}) -> '+';
+polarity(#object_type{}) -> '-';
+polarity(#interface_type{}) -> '-';
+polarity(#union_type{}) -> '-';
+polarity(#enum_type{}) -> '*';
+polarity(#scalar_type{}) -> '*';
+polarity({scalar, _}) -> '*';
+polarity({name, _, N}) ->
+    T = graphql_schema:lookup(N),
+    polarity(T).
 
 %% Errors
 err(Reason) -> exit({validate, Reason}).
