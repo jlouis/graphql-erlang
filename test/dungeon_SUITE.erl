@@ -321,17 +321,19 @@ complex_modifiers(Config) ->
     %% When the list is non-null, there is a null-value in there and so the whole monster
     %% is invalid:
     #{ data :=
-        #{ <<"monster">> := null }} =
+          #{ <<"monster">> := #{
+            <<"statsVariantOne">> := [
+                null,
+                #{
+                  <<"attack">> := 7,
+                  <<"shellScripting">> := 17,
+                  <<"yell">> := <<"I'M NOT READY!">> } ]  }}} =
             run(Config, <<"MonsterStatsOne">>, #{ <<"id">> => MonsterID }),
     %% When the inner-object is non-null, it is removed from the list, but the other
     %% object is still there
     #{ data :=
         #{ <<"monster">> := #{
-            <<"stats">> := [
-                #{
-                  <<"attack">> := 7,
-                  <<"shellScripting">> := 17,
-                  <<"yell">> := <<"I'M NOT READY!">> } ]  }}} =
+            <<"statsVariantTwo">> := null  }}} =
             run(Config, <<"MonsterStatsTwo">>, #{ <<"id">> => MonsterID }),
     ok.
 
