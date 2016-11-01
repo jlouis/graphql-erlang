@@ -482,7 +482,7 @@ schema_test(Config) ->
                     <<"body">> := <<"This is a post">>,
                     <<"id">> := <<"1">>,
                     <<"isPublished">> := true,
-                    <<"keywords">> := [<<"foo">>,<<"bar">>],
+                    <<"keywords">> := [<<"foo">>,<<"bar">>, null, null, null],
                     <<"title">> := <<"My article number 1">>
                 }
             },

@@ -201,53 +201,85 @@ resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema_obj = FObj } 
                 #schema_field { ty = Ty, resolve = RF } ->
                     Fun = resolver_function(RF),
                     Args = resolve_args(Ctx, F),
-                    case Fun(Ctx#{ field => Name, object_type => OID }, Cur, Args) of
-                        {error, Reason} ->
-                            Error = format_error(Path, Ctx, Name, OID, Reason),
-                            handle_null(Ty, Alias, [Error], null);
-                        {ok, null} ->
-                            handle_null(Ty, Alias, [], null);
-                        {ok, Result} ->
-                            %%ok = coerce_type(Ty, FObj),
-                             {Materialized, Errs} = handle_type(Path, Ctx, Result, Ty, SSet, FObj),
-                             handle_null(Ty, Alias, Errs, Materialized);
-                     Wrong ->
+                    RVal = 
+                      try Fun(Ctx#{ field => Name, object_type => OID }, Cur, Args) of
+                        {error, Reason} -> {error, Reason};
+                        {ok, Result} -> {ok, Result};
+                        Wrong ->
                            exit({wrong_resolver_function_return, Fun, Alias, Wrong})
+                    catch
+                       Cl:Err ->
+                           lager:warning("Resolver function error: ~p stacktrace: ~p", [{Cl,Err}, erlang:get_stacktrace()]),
+                           {error, resolver_crash}
+                     end,
+                   case complete_value(Path, Ctx, RVal, Ty, SSet, FObj) of
+                       {ok, CompletedResult} ->
+                           {ok, Alias, [], CompletedResult};
+                       {error, Error} ->
+                           {object_error, [Error]}
                    end
             end
     end.
 
-handle_null({non_null, _}, Alias, _, null) ->
-    {object_error, [{context_non_null, Alias}]};
-handle_null(_, Alias, [], Val) ->
-    {ok, Alias, [], Val};
-handle_null(_, Alias, Errs, Val) ->
-    {ok, Alias, Errs, Val}.
+%% -- VALUE COMPLETION --------------------------------------
 
-coerce_type(X, X) -> ok;
-coerce_type(X, Obj) when is_binary(X) ->
-    case graphql_schema:id(Obj) of
-        X -> ok;
-        Y -> {X, '/=', Y}
-    end.
-
-handle_type(Path, Ctx, Result, Ty, SSet, FObj) ->
-    case graphql_ast:resolve_type(Ty) of
+complete_value(_Path, _Ctx, {error, Reason}, _Ty, _SSet, _FObj) ->
+    {error, Reason};
+complete_value(Path, Ctx, {ok, Result}, Ty, SSet, FObj) ->
+    case Ty of
+        {non_null, InnerTy} ->
+            case complete_value(Path, Ctx, {ok, Result}, InnerTy, SSet, FObj) of
+                {error, Reason} ->
+                    {error, Reason};
+                {ok, null} ->
+                    {error, null_value};
+                {ok, CompletedResult} ->
+                    {ok, CompletedResult}
+            end;
+        _SomeTy when Result == null ->
+            {ok, null};
+        {list, _} when not is_list(Result) ->
+            {error, not_list};
+        {list, InnerTy} ->
+            case complete_value_list(Path, Ctx, Result, InnerTy, SSet, FObj) of
+                {ok, L} -> {ok, L};
+                {error, Reason} ->
+                    lager:warning("Throwing away error: ~p", [{error, Reason}]),
+                    {ok, null}
+            end;
         {scalar, Scalar} ->
             SType = output_coerce_type(Scalar),
-            handle(Path, Ctx, Result, SType, SSet);
-        {list, {scalar, Scalar}} when is_list(Result) ->
-            SType = output_coerce_type(Scalar),
-            Coerced = [handle(Path, Ctx, R, SType, SSet) || R <- Result],
-            {Vals, Errs} = lists:unzip(Coerced),
-            {[V || V <- Vals, V /= null], lists:concat(Errs)};
-        {list, {scalar, _}} ->
-            {null, [non_list_type]};
-        {list, _T} ->
-            handle_list(Path, Ctx, Result, FObj, SSet);
+            case handle(Path, Ctx, Result, SType, SSet) of
+                {Val, []} -> {ok, Val};
+                {error, Reason} ->
+                     lager:warning("Should propagate the following error: ~p", [{error, Reason}]),
+                     {ok, null}
+            end;
         _T ->
-            handle(Path, Ctx, Result, FObj, SSet)
+            case handle(Path, Ctx, Result, FObj, SSet) of
+                {error, Reason} ->
+                    lager:warning("Should propagate the following error: ~p", [{error, Reason}]),
+                    {ok, null};
+                {V, []} -> {ok, V};
+                {V, Errs} ->
+                    lager:warning("Throwing away errors: ~p", [Errs]),
+                    {ok, V}
+            end
     end.
+                
+complete_value_list(Path, Ctx, Results, Ty, SSet, FObj) ->
+    Completed = [complete_value(Path, Ctx, {ok, R}, Ty, SSet, FObj) || R <- Results],
+    case complete_list_value_result(Completed) of
+        {error, Reason} -> {error, Reason};
+        L -> {ok, L}
+    end.
+    
+complete_list_value_result([]) -> [];
+complete_list_value_result([{ok, V} | Vals]) ->
+    [V | complete_list_value_result(Vals)];
+complete_list_value_result([{error, Reason} | _]) ->
+    {error, Reason}.
+
 
 %% -- FUNCTION RESOLVERS ---------------------------------
 
@@ -305,20 +337,6 @@ output_coerce_type(UserDefined) when is_binary(UserDefined) ->
         not_found -> not_found
     end.
 
-%% -- MATERIALIZATION ------------------------------------------
-
-%% The materialization step collects underlying values and collects them together
-%% into a coherent whole.
-    
-handle_list(Path, Ctx, Result, FObj, SSet) when is_list(Result) ->
-    handle_list(Path, 0, Ctx, Result, FObj, SSet, [], []).
-
-handle_list(_Path, _K, _Ctx, [], _FObj, _SSet, Acc, Errs) ->
-    {lists:reverse(Acc), Errs};
-handle_list(Path, K, Ctx, [R | RS], FObj, SSet, Acc, Errs) ->
-    {MRes, Es} = handle([K | Path], Ctx, R, FObj, SSet),
-    handle_list(Path, K+1, Ctx, RS, FObj, SSet, [MRes | Acc], Es ++ Errs).
-    
 %% -- LOWER LEVEL RESOLVERS ----------------
 
 resolve_args(Ctx, #field { args = As }) ->
@@ -410,24 +428,6 @@ alias(#field { alias = Alias }) -> name(Alias).
 
 line({name, L, _}) -> L;
 line(#field { id = ID }) -> line(ID).
-
-%% -- ERROR FORMATTING --------------------
-format_error(Path, #{ error_formatter := EFMod }, Name, OID, Reason) ->
-    try EFMod:format_error(graphql_err:path(Path), Name, OID, Reason) of
-        {ok, Err} -> [Err];
-        {error, Err} ->
-            lager:warning("Unable to format error ~p due to ~p", [Reason, {error, Err}]),
-            []
-    catch
-        Class:Error ->
-            lager:error("Error formatter crash: ~p:~p .. ~p",
-                [Class, Error, erlang:get_stacktrace()]),
-            []
-    end;
-format_error(Path, #{}, Name, OID, Reason) ->
-    lager:warning("Handler crash ~p (~p:~p) with no error_formatter: ~p",
-        [graphql_err:path(Path), OID, Name, Reason]),
-    [].
 
 %% -- ERROR HANDLING --
 err(Path, Reason) ->
