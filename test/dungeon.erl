@@ -290,6 +290,10 @@ inject_monster() ->
             type => ['Stats!'],
             description => "Monster stats where the inner object is modified by non-null",
             resolve => fun(_, #monster{ stats = S}, _) -> {ok, S} end },
+          statsVariantThree => #{
+            type => {non_null, ['Stats!']},
+            description => "Monster stats where the inner object is modified by non-null",
+            resolve => fun(_, #monster{ stats = S}, _) -> {ok, S} end },
           properties => #{
             type => ['Property'],
             resolve => fun(_, #monster { properties = Props }, _) -> {ok, Props} end,

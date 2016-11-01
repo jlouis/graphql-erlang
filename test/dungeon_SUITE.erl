@@ -318,8 +318,8 @@ complex_modifiers(Config) ->
                   <<"shellScripting">> := 17,
                   <<"yell">> := <<"I'M NOT READY!">> } ]  }}} =
             run(Config, <<"MonsterStatsZero">>, #{ <<"id">> => MonsterID }),
-    %% When the list is non-null, there is a null-value in there and so the whole monster
-    %% is invalid:
+    %% When the list is non-null, but there are the possibility of a null-value in the list
+    %% and the list is correctly being rendered, then render the list as we expect.
     #{ data :=
           #{ <<"monster">> := #{
             <<"statsVariantOne">> := [
@@ -329,12 +329,16 @@ complex_modifiers(Config) ->
                   <<"shellScripting">> := 17,
                   <<"yell">> := <<"I'M NOT READY!">> } ]  }}} =
             run(Config, <<"MonsterStatsOne">>, #{ <<"id">> => MonsterID }),
-    %% When the inner-object is non-null, it is removed from the list, but the other
-    %% object is still there
+    %% When the list must not contain null values, then an error in the list means the whole
+    %% list becomes null, and this is a valid value. So return the list itself as the value 'null'
     #{ data :=
         #{ <<"monster">> := #{
             <<"statsVariantTwo">> := null  }}} =
             run(Config, <<"MonsterStatsTwo">>, #{ <<"id">> => MonsterID }),
+    %% If the list may not be null, make sure the error propagates to the wrapper object.
+    #{ data :=
+        #{ <<"monster">> := null }} =
+            run(Config, <<"MonsterStatsThree">>, #{ <<"id">> => MonsterID }),
     ok.
 
 non_null_field(Config) ->

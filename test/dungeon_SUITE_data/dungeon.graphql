@@ -64,6 +64,14 @@ query MonsterStatsTwo($id: Id!) {
   }
 }
 
+query MonsterStatsThree($id: Id!) {
+  monster(id: $id) {
+     statsVariantThree {
+         attack shellScripting yell
+     }
+  }
+}
+
 query FragmentOverUnion2($id: Id!) {
   monster(id: $id) {
     ...UnionThingFragment
