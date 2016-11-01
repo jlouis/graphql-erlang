@@ -51,7 +51,7 @@ find_operation(N, [#op { id = ID } = O | Next]) ->
     end.
 
 root(Path, Ctx, #op { selection_set = SSet, schema = Schema } = Op) ->
-    handle([Op | Path], Ctx, none, Schema, SSet).
+    handle([graphql_ast:id(Op) | Path], Ctx, none, Schema, SSet).
 
 %% -- RETURNING RESULTS -------------------------------
 
@@ -66,7 +66,7 @@ return(_Ctx, {Res, Errs}) when is_map(Res) ->
 
 %% -- Product objects / vector types
 handle(Path, Ctx, Cur, #object_type {} = Obj, SSet) ->
-    resolve_obj([Obj | Path], Ctx, Cur, SSet, Obj, #{});
+    resolve_obj([graphql_schema:id(Obj) | Path], Ctx, Cur, SSet, Obj, #{});
 handle(Path, Ctx, Cur, #interface_type { id = IFaceID, resolve_type = R }, SSet) ->
     handle_abstract_type(Path, Ctx, Cur, IFaceID, R, SSet);
 handle(Path, Ctx, Cur, #union_type { id = UnionID, resolve_type = R}, SSet) ->
@@ -75,7 +75,8 @@ handle(Path, Ctx, Cur, #union_type { id = UnionID, resolve_type = R}, SSet) ->
 handle(Path, _Ctx, Cur, #scalar_type { id = ID, output_coerce = Coerce }, []) ->
     try Coerce(Cur) of
         {ok, Result} -> {Result, []};
-        {error, Reason} -> err(Path, {output_coerce, ID, Cur, Reason})
+        {error, Reason} ->
+            err(Path, {output_coerce, ID, Cur, Reason})
     catch
         Class:Error ->
             err(Path, {coerce, ID, Cur, {Class,Error}})
@@ -88,7 +89,7 @@ handle_abstract_type(Path, Ctx, Cur, ID, R, SSet) ->
     try R(Cur) of
         {ok, Ty} ->
           #object_type{} = Obj = graphql_schema:get(binarize(Ty)),
-          resolve_obj([Obj | Path], Ctx, Cur, SSet, Obj, #{});
+          resolve_obj([graphql_schema:id(Obj) | Path], Ctx, Cur, SSet, Obj, #{});
         {error, Reason} ->
             throw(err(Path, {unresolved_type, ID, Reason}))
     catch
@@ -162,7 +163,7 @@ resolve_obj(Path, Ctx, Cur, Fields, SObj, SoFar) ->
 resolve_obj_fold(_Path, _Ctx, _Cur, [], _SObj, _SoFar, Acc, Errs) ->
     {ok, Acc, Errs};
 resolve_obj_fold(Path, Ctx, Cur, [F | Next], SObj, SoFar, Acc, Errs) ->
-    case resolve_obj_([F | Path], Ctx, Cur, F, SObj, SoFar) of
+    case resolve_obj_([graphql_ast:id(F) | Path], Ctx, Cur, F, SObj, SoFar) of
         skip ->
             resolve_obj_fold(Path, Ctx, Cur, Next, SObj, SoFar, Acc, Errs);
         {ok, Alias, Es, Result} ->

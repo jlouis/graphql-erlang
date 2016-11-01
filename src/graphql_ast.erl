@@ -5,7 +5,7 @@
 
 -export([resolve_type/1, unwrap_to_base_type/1]).
 -export([unwrap_type/1]).
--export([name/1]).
+-export([name/1, id/1]).
 
 -spec resolve_type(graphql_type()) -> tycond().
 resolve_type({scalar, Sc}) -> {scalar, Sc};
@@ -35,4 +35,9 @@ unwrap_type(Ty) ->
 name('ROOT') -> <<"ROOT">>;
 name({name, _Line, X}) -> X;
 name({var, N}) -> name(N).
+
+id(#op { id = ID }) -> ID;
+id(#field { id = ID }) -> ID;
+id(#frag_spread { id = ID }) -> ID;
+id(#frag { id = ID }) -> ID.
 
