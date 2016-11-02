@@ -38,6 +38,9 @@ err_msg({type_mismatch, #{ id := ID, document := Doc, schema := Sch }}) ->
       format_ty(Doc), ") but the schema expects type (", format_ty(Sch), ")"];
 err_msg({type_mismatch, #{ schema := Sch }}) ->
     ["Type mismatch, expected (", format_ty(Sch), ")"];
+err_msg({enum_not_found, Ty, Val}) ->
+    X = io_lib:format("The value ~p is not a valid enum value for type ", [Val]),
+    [X, format_ty(Ty)];
 err_msg({param_mismatch, Ty, _}) ->
     ["Parameter is not of type ", format_ty(Ty)];
 err_msg({unknown_enum_type, Val}) ->

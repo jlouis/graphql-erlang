@@ -1,0 +1,17 @@
+mutation IMonster {
+    introduceMonster(input:
+    { clientMutationId: "123",
+      name: "Green Slime", 
+      color: "#1be215",
+      hitpoints: 9001,
+      mood: AGGRESSIF,
+      stats: {
+        attack: 7,
+        shellScripting: 5,
+        yell: "..."
+      }
+    }) {
+      clientMutationId,
+      monster { id }
+    }
+}    

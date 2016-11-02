@@ -93,6 +93,8 @@ check_param(Path, #enum_type { id = Ty }, V) when is_binary(V) ->
     case graphql_schema:lookup_enum_type(V) of
         #enum_type { id = Ty, repr = Repr } ->
             {replace, enum_representation(Repr, V)};
+        not_found ->
+            graphql_err:abort(Path, {enum_not_found, Ty, V});
         OtherTy ->
             graphql_err:abort(Path, {param_mismatch, {enum, Ty, OtherTy}})
     end;

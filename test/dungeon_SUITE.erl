@@ -62,7 +62,8 @@ groups() ->
                missing_fragment,
                quoted_input_error,
                input_coerce_error_exception,
-               input_coerce_error
+               input_coerce_error,
+               invalid_enums
                ]},
     [Dungeon, Errors].
 
@@ -450,6 +451,46 @@ quoted_input_error(Config) ->
     {error, {_Line, graphql_parser, _}} =
         run(Config, "quoted_input.graphql", <<"IMonster">>, #{}).
 
+invalid_enums(Config) ->
+    Input = #{
+      <<"clientMutationId">> => <<"MUTID">>,
+      <<"name">> => <<"rat">>,
+      <<"color">> => <<"#aaaaaa">>,
+      <<"hitpoints">> => 3,
+      <<"mood">> => <<"AGGRESSIF">>
+     },
+    #{
+        errors := #{
+            key := {enum_not_found,<<"Mood">>,<<"AGGRESSIF">>},
+            message := <<"The value <<\"AGGRESSIF\">> is not a valid enum value for type Mood">>,
+            path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}} =
+                run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input }),
+    #{
+        errors := #{
+            key := {enum_not_found,<<"Mood">>,<<>>},
+            message := <<"The value <<>> is not a valid enum value for type Mood">>,
+            path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}} =
+                run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input#{ <<"mood">> => <<"">> }}),
+    #{
+        errors := #{
+            key := {enum_not_found,<<"Mood">>,<<>>},
+            message := <<"The value <<>> is not a valid enum value for type Mood">>,
+            path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}} =
+                run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input#{ <<"mood">> => <<>> }}),
+    #{
+        errors := #{
+            key := {enum_not_found,<<"Mood">>,<<"AGGRESSIF">>},
+            message := <<"The value <<\"AGGRESSIF\">> is not a valid enum value for type Mood">>,
+            path := [<<"document">>,<<"IMonster">>,<<"introduceMonster">>, <<"mood">>]}} =
+                run(Config, "invalid_enum_1.graphql", <<"IMonster">>, #{}),
+    #{
+        errors := #{
+            key := {enum_not_found,<<"Mood">>,<<>>},
+            message := <<"The value <<>> is not a valid enum value for type Mood">>,
+            path := [<<"document">>,<<"IMonster">>,<<"introduceMonster">>, <<"mood">>]}} =
+                run(Config, "invalid_enum_2.graphql", <<"IMonster">>, #{}),
+    ok.
+      
 input_coerce_error(Config) ->
     Input = #{
       <<"clientMutationId">> => <<"MUTID">>,
