@@ -213,72 +213,83 @@ resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema_obj = FObj } 
                            {error, resolver_crash}
                      end,
                    case complete_value(Path, Ctx, RVal, Ty, SSet, FObj) of
-                       {ok, CompletedResult} ->
-                           {ok, Alias, [], CompletedResult};
-                       {error, Error} ->
-                           {object_error, [Error]}
+                       {ok, CompletedResult, Errs} ->
+                           {ok, Alias, Errs, CompletedResult};
+                       {error, Errors} ->
+                           {object_error, Errors}
                    end
             end
     end.
 
 %% -- VALUE COMPLETION --------------------------------------
 
-complete_value(_Path, _Ctx, {error, Reason}, _Ty, _SSet, _FObj) ->
-    {error, Reason};
+complete_value(Path, _Ctx, {error, Reason}, _Ty, _SSet, _FObj) ->
+    err(Path, Reason);
 complete_value(Path, Ctx, {ok, Result}, Ty, SSet, FObj) ->
     case Ty of
         {non_null, InnerTy} ->
             case complete_value(Path, Ctx, {ok, Result}, InnerTy, SSet, FObj) of
                 {error, Reason} ->
-                    {error, Reason};
-                {ok, null} ->
-                    {error, null_value};
-                {ok, CompletedResult} ->
-                    {ok, CompletedResult}
+                    %% Rule: Along a path, there is at most one error, so if the underlying
+                    %% object is at fault, don't care too much about this level, just pass
+                    %% on the error
+                    err(Path, Reason);
+                {ok, null, InnerErrs} ->
+                    err(Path, null_value, InnerErrs);
+                {ok, CompletedResult, Errs} ->
+                    {ok, CompletedResult, Errs}
             end;
         _SomeTy when Result == null ->
-            {ok, null};
+            {ok, null, []};
         {list, _} when not is_list(Result) ->
-            {error, not_list};
+            err(Path, not_a_list);
         {list, InnerTy} ->
             case complete_value_list(Path, Ctx, Result, InnerTy, SSet, FObj) of
-                {ok, L} -> {ok, L};
-                {error, Reason} ->
-                    lager:warning("Throwing away error: ~p", [{error, Reason}]),
-                    {ok, null}
+                {ok, L, IE} ->
+                    %% There might have been errors in the inner processing, but all of
+                    %% those were errors we could handle by returning null values for
+                    %% them.
+                    {ok, L, IE};
+                {error, Reasons} ->
+                    %% At least one of the things inside could not be handled. Since we
+                    %% return at most one error per field, we just take that first error we
+                    %% run into and report that. We can extend this later to handle more
+                    %% than one error, if necessary.
+                    {ok, null, Reasons}
             end;
         {scalar, Scalar} ->
             SType = output_coerce_type(Scalar),
             case handle(Path, Ctx, Result, SType, SSet) of
-                {Val, []} -> {ok, Val};
                 {error, Reason} ->
-                     lager:warning("Should propagate the following error: ~p", [{error, Reason}]),
-                     {ok, null}
+                     {ok, null, [{Path, Reason}]};
+                {Val, Errs} -> {ok, Val, Errs}
             end;
         _T ->
             case handle(Path, Ctx, Result, FObj, SSet) of
                 {error, Reason} ->
-                    lager:warning("Should propagate the following error: ~p", [{error, Reason}]),
-                    {ok, null};
-                {V, []} -> {ok, V};
-                {V, Errs} ->
-                    lager:warning("Throwing away errors: ~p", [Errs]),
-                    {ok, V}
+                    {ok, null, [{Path, Reason}]};
+                {V, Errs} -> {ok, V, Errs}
             end
     end.
-                
+
 complete_value_list(Path, Ctx, Results, Ty, SSet, FObj) ->
     Completed = [complete_value(Path, Ctx, {ok, R}, Ty, SSet, FObj) || R <- Results],
-    case complete_list_value_result(Completed) of
-        {error, Reason} -> {error, Reason};
-        L -> {ok, L}
+    case complete_list_value_result(0, Completed) of
+        {error, K, Reason} ->
+            err([K | Path], Reason);
+        L ->
+            {Vals, Errs} = lists:unzip(L),
+            Len = length(Completed),
+            Len = length(Vals),
+            {ok, Vals, lists:concat(Errs)}
     end.
-    
-complete_list_value_result([]) -> [];
-complete_list_value_result([{ok, V} | Vals]) ->
-    [V | complete_list_value_result(Vals)];
-complete_list_value_result([{error, Reason} | _]) ->
-    {error, Reason}.
+
+
+complete_list_value_result(_K, []) -> [];
+complete_list_value_result(K, [{ok, V, Es} | Vals]) ->
+    [{V, Es} | complete_list_value_result(K+1, Vals)];
+complete_list_value_result(K, [{error, Reason} | _]) ->
+    {error, K, Reason}.
 
 
 %% -- FUNCTION RESOLVERS ---------------------------------
@@ -430,8 +441,12 @@ line({name, L, _}) -> L;
 line(#field { id = ID }) -> line(ID).
 
 %% -- ERROR HANDLING --
-err(Path, Reason) ->
-    {error, Path, Reason}.
+
+err(Path, Reason) -> err(Path, Reason, []).
+
+err(Path, Reason, More) when is_list(More) ->
+    {error, [{Path, Reason} | More]}.
+
 
 %% -- CONTEXT CANONICALIZATION ------------
 canon_context(#{ params := Params } = Ctx) ->
