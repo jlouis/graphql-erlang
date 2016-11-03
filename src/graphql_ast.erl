@@ -35,7 +35,7 @@ unwrap_to_base_type({list, Ty}) -> unwrap_to_base_type(Ty).
 
 -spec unwrap_type(graphql_type()) -> tycond().
 unwrap_type(Ty) ->
-    unwrap_to_base_type(resolve_type(Ty)).
+    unwrap_to_base_type(Ty).
 
 -spec name('ROOT' | name()) -> binary().
 name('ROOT') -> <<"ROOT">>;
