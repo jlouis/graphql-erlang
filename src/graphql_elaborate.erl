@@ -4,7 +4,7 @@
 -include("graphql_internal.hrl").
 
 -export([x/1]).
--export([mk_varenv/2, mk_funenv/1]).
+-export([mk_varenv/1, mk_funenv/1]).
 
 -spec x(graphql:ast()) -> graphql:ast().
 x(Doc) -> document(Doc).
@@ -21,38 +21,11 @@ operation_(Path, #op{} = O) -> op(Path, O).
 %% -- VARIABLE ENVIRONMENTS -----------------------
 
 %% -- VARENV -------------------------------------
-mk_varenv(Defs) -> mk_varenv([], Defs).
+mk_varenv(VDefs) ->
+    maps:from_list([varenv_coerce(Def) || Def <- VDefs]).
 
-mk_varenv(Path, VDefs) ->
-    maps:from_list([varenv_coerce(Path, Def) || Def <- VDefs]).
-
-varenv_coerce(Path, #vardef { id = Var, ty = T } = VarDef) ->
-    case varenv_ty(T) of
-        {ok, Type} ->
-            {graphql_ast:name(Var), VarDef#vardef { ty = Type }};
-        {error, Reason} ->
-            graphql_err:abort(Path, Reason)
-    end.
-
-varenv_ty({scalar, X}) -> {ok, {scalar, X}};
-varenv_ty({list, T}) ->
-    case varenv_ty(T) of
-        {ok, Ty} -> {ok, {list, Ty}};
-        {error, Reason} -> {error, Reason}
-    end;
-varenv_ty({non_null, T}) ->
-    case varenv_ty(T) of
-        {ok, Ty} -> {ok, {non_null, Ty}};
-        {error, Reason} -> {error, Reason}
-    end;
-varenv_ty(T) ->
-    N = graphql_ast:name(T),
-    case graphql_schema:lookup(N) of
-        not_found -> {error, {unknown_type, N}};
-        #enum_type{} = Enum -> {ok, Enum};
-        #scalar_type{} = Scalar -> {ok, Scalar};
-        #input_object_type{} = IOType -> {ok, IOType}
-    end.
+varenv_coerce(#vardef { id = Var } = VarDef) ->
+    {graphql_ast:name(Var), VarDef}.
 
 %% -- MK OF FUNENV ------------------------------
 
@@ -99,23 +72,33 @@ op(Path, #op { vardefs = VDefs } = Op) ->
     end.
 
 vdef(#vardef { ty = Ty }) ->
-    case graphql_ast:unwrap_type(Ty) of
-        {scalar, X} when
-            X == int;
-            X == string;
-            X == bool;
-            X == id -> builtin;
-        TyName when is_binary(TyName) ->
-            case graphql_schema:lookup(TyName) of
-                not_found -> not_found;
-                Obj -> Obj
-            end
+    try vdef_type(Ty) of
+        V -> V
+    catch
+        throw:Err -> Err
+    end.
+    
+vdef_type({non_null, Ty}) ->
+    {non_null, vdef_type(Ty)};
+vdef_type({list, Ty}) ->
+    {list, vdef_type(Ty)};
+vdef_type({scalar, S}) -> {scalar, S};
+vdef_type({name, _, N}) ->
+    vdef_type(N);
+vdef_type(N) when is_binary(N) ->
+    case graphql_schema:lookup(N) of
+        not_found -> throw(not_found);
+        #enum_type{} = Enum -> Enum;
+        #scalar_type{} = Scalar -> Scalar;
+        #input_object_type{} = IOType -> IOType;
+        _Obj -> throw({invalid_input_type, N})
     end.
 
 var_defs(Path, VDefs) ->
     [case vdef(V) of
         not_found -> graphql_err:abort(Path, {type_not_found, V});
-        Obj -> V#vardef { schema = Obj }
+        {invalid_input_type, T} -> graphql_err:abort(Path, {not_input_type, T});
+        Ty -> V#vardef { ty = Ty }
       end || V <- VDefs].
 
 root(Path, #op { ty = T } = Op) ->

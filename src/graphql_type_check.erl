@@ -186,7 +186,7 @@ tc_frag(Ctx, Path, #frag {selection_set = SSet} = Frag) ->
 %% -- OPERATIONS -------------------------------
 
 tc_op(Ctx, Path, #op { vardefs = VDefs, selection_set = SSet} = Op) ->
-    VarEnv = graphql_elaborate:mk_varenv([Op | Path], VDefs),
+    VarEnv = graphql_elaborate:mk_varenv(VDefs),
     Op#op { selection_set = tc_sset(Ctx#{ varenv => VarEnv }, [id(Op) | Path], SSet) }.
 
 %% -- SELECTION SETS ------------------------------------
