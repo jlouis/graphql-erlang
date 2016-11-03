@@ -126,25 +126,32 @@ field(Path, #field { id = ID, args = Args, selection_set = SSet } = F, Fields) -
     Name = graphql_ast:name(ID),
     case maps:get(Name, Fields, not_found) of
         not_found when Name == <<"__typename">> ->
-            F#field { schema = {introspection, typename}, schema_obj = {scalar, string} };
+            F#field { schema = {introspection, typename} };
         not_found ->
             graphql_err:abort(Path, {unknown_field, Name});
-        #schema_field{ ty = Ty, args = SArgs } = SchemaTy ->
-            case graphql_ast:unwrap_type(Ty) of
-                {scalar, STy} ->
-                    F#field {
-                      args = field_args([F | Path], Args, SArgs),
-                      schema = SchemaTy,
-                      schema_obj = {scalar, STy} };
-                T when is_binary(T) ->
-                    {Obj, SSet2} = field_lookup([F | Path], T, SSet),
-                    F#field {
-                      args = field_args([F | Path], Args, SArgs),
-                      schema = SchemaTy,
-                      schema_obj = Obj,
-                      selection_set = SSet2 }
-            end
+        #schema_field{ ty = Ty, args = SArgs } = SF ->
+            Type = field_type(Ty),
+            SSet2 = field_lookup([F|Path], Type, SSet),
+            F#field {
+                args = field_args([F | Path], Args, SArgs),
+                schema = SF#schema_field{ ty = Type },
+                selection_set = SSet2 }
      end.
+
+field_type({non_null, Ty}) -> {non_null, field_type(Ty)};
+field_type({list, Ty}) -> {list, field_type(Ty)};
+field_type({scalar, S}) -> {scalar, S};
+field_type(B) when is_binary(B) ->
+    case graphql_schema:lookup(B) of
+        %% Non-polar
+        #enum_type{} = Enum -> Enum;
+        #scalar_type{} = Scalar -> Scalar;
+
+        %% Output/Neg-polar
+        #object_type{} = OT -> OT;
+        #interface_type{} = IFace -> IFace;
+        #union_type{} = Union -> Union
+    end.
 
 field_args(Path, Args, SArgs) ->
     [field_arg(Path, K, V, SArgs) || {K,V} <- Args].
@@ -167,28 +174,32 @@ field_arg_type(Ty) when is_binary(Ty) ->
         #input_object_type{} = IOType -> IOType
     end.
 
-field_lookup(Path, Ty, SSet) ->
-    case graphql_schema:lookup(Ty) of
-        not_found ->
-            graphql_err:abort(Path, {entity_not_found, Ty});
-        #scalar_type{} when SSet /= [] ->
-            graphql_err:abort(Path, fields_on_scalar);
-        #scalar_type{} = Scalar ->
-            %% Written like this for coherence, we could skip it since SSet == []
-            {Scalar, sset(Path, SSet, #{})};
-        #object_type{} when SSet == [] ->
-            graphql_err:abort(Path, fieldless_object);
-        #object_type{ fields = Fields } = Obj ->
-            {Obj, sset(Path, SSet, Fields)};
-        #interface_type{} when SSet == [] ->
-            graphql_err:abort(Path, fieldless_interface);
-        #interface_type{ fields = Fields } = IFace ->
-            {IFace, sset(Path, SSet, Fields)};
-        #union_type{} = Union ->
-            %% Any field lookup on a union will fail as a result of this
-            {Union, sset(Path, SSet, #{})};
-        #enum_type{} = Enum when SSet == [] ->
-            {Enum, []};
-        #enum_type{} ->
-            graphql_err:abort(Path, {selection_set_on_enum, Ty})
-    end.
+
+field_lookup(Path, {non_null, Obj}, SSet) ->
+    field_lookup(Path, Obj, SSet);
+field_lookup(Path, {list, Obj}, SSet) ->
+    field_lookup(Path, Obj, SSet);
+field_lookup(Path, not_found, _SSet) ->
+    graphql_err:abort(Path, entity_not_found);
+field_lookup(_Path, {scalar, _}, []) ->
+    [];
+field_lookup(Path, {scalar, _}, [_|_]) ->
+    graphql_err:abort(Path, selection_on_scalar);
+field_lookup(Path, #scalar_type{}, [_|_]) ->
+    graphql_err:abort(Path, selection_on_scalar);
+field_lookup(Path, #scalar_type{}, SSet) ->
+    sset(Path, SSet, #{});
+field_lookup(Path, #object_type{}, []) ->
+    graphql_err:abort(Path, fieldless_object);
+field_lookup(Path, #object_type{ fields = Fields }, SSet) ->
+    sset(Path, SSet, Fields);
+field_lookup(Path, #interface_type{}, []) ->
+    graphql_err:abort(Path, fieldless_interface);
+field_lookup(Path, #interface_type{ fields = Fields }, SSet) ->
+    sset(Path, SSet, Fields);
+field_lookup(Path, #union_type{}, SSet) ->
+    sset(Path, SSet, #{});
+field_lookup(_Path, #enum_type{}, []) ->
+    [];
+field_lookup(Path, #enum_type{}, _SSet) ->
+    graphql_err:abort(Path, selection_set_on_enum).

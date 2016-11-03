@@ -31,8 +31,7 @@
 	directives = [] :: [any()],
 	selection_set = [] :: [any()],
 	alias = undefined :: undefined | name(),
-	schema = undefined :: 'undefined' | any(),
-	schema_obj :: 'scalar' | any()
+	schema :: any()
 }).
 -type field() :: #field{}.
 

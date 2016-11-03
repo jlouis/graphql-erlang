@@ -186,7 +186,7 @@ resolve_obj_(_Path, Ctx, _Cur, #frag {} = Frag, SObj, _SoFar) ->
     resolve_frag(Ctx, Frag, SObj);
 resolve_obj_(_Path, Ctx, _Cur, #frag_spread {} = NamedSpread, SObj, _SoFar) ->
     resolve_frag(Ctx, NamedSpread, SObj);
-resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema_obj = FObj } = F,
+resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema = SF } = F,
 	#object_type { id = OID, fields = SFields } = SObj, SoFar) ->
     Name = name(F),
     Alias = alias(F),
@@ -212,6 +212,7 @@ resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema_obj = FObj } 
                            lager:warning("Resolver function error: ~p stacktrace: ~p", [{Cl,Err}, erlang:get_stacktrace()]),
                            {error, resolver_crash}
                      end,
+                   #schema_field { ty = FObj } = SF,
                    case complete_value(Path, Ctx, RVal, Ty, SSet, FObj) of
                        {ok, CompletedResult, Errs} ->
                            {ok, Alias, Errs, CompletedResult};
@@ -265,7 +266,7 @@ complete_value(Path, Ctx, {ok, Result}, Ty, SSet, FObj) ->
                 {Val, Errs} -> {ok, Val, Errs}
             end;
         _T ->
-            case handle(Path, Ctx, Result, FObj, SSet) of
+            case handle(Path, Ctx, Result, graphql_ast:unwrap_type(FObj), SSet) of
                 {error, Reason} ->
                     {ok, null, [{Path, Reason}]};
                 {V, Errs} -> {ok, V, Errs}

@@ -15,6 +15,9 @@ resolve_type(B) when is_binary(B) -> B;
 resolve_type(#scalar_type{} = Ty) -> Ty;
 resolve_type(#enum_type{} = Ty) -> Ty;
 resolve_type(#input_object_type{} = Ty) -> Ty;
+resolve_type(#object_type{} = Ty) -> Ty;
+resolve_type(#interface_type{} = Ty) -> Ty;
+resolve_type(#union_type{} = Ty) -> Ty;
 resolve_type({name, _, N}) -> N.
 
 -spec unwrap_to_base_type(graphql_type()) -> tycond().
@@ -23,6 +26,9 @@ unwrap_to_base_type({name, _, N}) -> N;
 unwrap_to_base_type(#enum_type{} = Ty) -> Ty;
 unwrap_to_base_type(#input_object_type{} = Ty) -> Ty;
 unwrap_to_base_type(#scalar_type{} = Ty) -> Ty;
+unwrap_to_base_type(#object_type{} = Ty) -> Ty;
+unwrap_to_base_type(#interface_type{} = Ty) -> Ty;
+unwrap_to_base_type(#union_type{} = Ty) -> Ty;
 unwrap_to_base_type(Ty) when is_binary(Ty) -> Ty;
 unwrap_to_base_type({non_null, Ty}) -> unwrap_to_base_type(Ty);
 unwrap_to_base_type({list, Ty}) -> unwrap_to_base_type(Ty).
