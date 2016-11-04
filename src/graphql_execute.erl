@@ -225,7 +225,7 @@ resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema = SF } = F,
 %% -- VALUE COMPLETION --------------------------------------
 
 complete_value(Path, _Ctx, {error, Reason}, _Ty, _SSet, _FObj) ->
-    err(Path, Reason);
+    {ok, null, [#{ path => Path, reason => Reason }]};
 complete_value(Path, Ctx, {ok, Result}, Ty, SSet, FObj) ->
     case Ty of
         {non_null, InnerTy} ->
