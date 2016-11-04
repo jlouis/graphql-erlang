@@ -42,8 +42,14 @@ name('ROOT') -> <<"ROOT">>;
 name({name, _Line, X}) -> X;
 name({var, N}) -> name(N).
 
-id(#op { id = ID }) -> ID;
-id(#field { id = ID }) -> ID;
-id(#frag_spread { id = ID }) -> ID;
-id(#frag { id = ID }) -> ID.
+id(E) ->
+    case id_(E) of
+        {name, _, N} -> N;
+        B when is_binary(B) -> B
+    end.
+
+id_(#op { id = ID }) -> ID;
+id_(#field { id = ID }) -> ID;
+id_(#frag_spread { id = ID }) -> ID;
+id_(#frag { id = ID }) -> ID.
 
