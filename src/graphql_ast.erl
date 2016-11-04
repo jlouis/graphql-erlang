@@ -46,7 +46,8 @@ id(E) ->
     case id_(E) of
         {name, _, N} -> N;
         B when is_binary(B) -> B;
-        '...' -> <<"...">>
+        '...' -> <<"...">>;
+        'ROOT' -> <<"ROOT">>
     end.
 
 id_(#op { id = ID }) -> ID;

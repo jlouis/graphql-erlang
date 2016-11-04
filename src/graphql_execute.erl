@@ -446,7 +446,7 @@ line(#field { id = ID }) -> line(ID).
 err(Path, Reason) -> err(Path, Reason, []).
 
 err(Path, Reason, More) when is_list(More) ->
-    {error, [{Path, Reason} | More]}.
+    {error, [#{ path => Path, reason => Reason} | More]}.
 
 
 %% -- CONTEXT CANONICALIZATION ------------
