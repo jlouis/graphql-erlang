@@ -12,36 +12,17 @@ x(X) -> x(#{ params => #{} }, X).
 -spec x(term(), graphql:ast()) -> #{ atom() => graphql:json() }.
 x(Ctx, X) ->
     Canon = canon_context(Ctx),
-    document(Canon, X).
+    execute_request(Canon, X).
 
-document(Ctx, {document, Operations}) ->
-    {Fragments, Ops} = lists:partition(fun (#frag {}) -> true;(_) -> false end, Operations),
-    operations(Ctx#{ fragments => fragments(Fragments) }, Ops).
-
-%% -- FRAGMENTS -------------------------------
-fragments(Frags) ->
-    lists:foldl(fun(#frag { id = ID } = Frag, St) ->
-        St#{ name(ID) => Frag }
-    end,
-    #{},
-    Frags).
-
-%% -- TOP LEVEL HANDLING ------------------------------
-operations(#{ operation_name := undefined } = Ctx, [Op]) ->
-    return(Ctx, root([undefined], Ctx, Op));
-operations(#{ operation_name := undefined }, _) ->
-    throw(more_than_one_operation);
-operations(#{ operation_name := OpName } = Ctx, Ops) ->
-    case find_operation(OpName, Ops) of
-        not_found ->
-           throw({operation_not_found, OpName});
-        Op ->
-           return(Ctx, root([OpName], Ctx, Op))
-    end;
-operations(Ctx, [Op]) ->
-    %% No operation name given and there is only a single operation in the
-    %% document. Run that operation.
-    return(Ctx, root([Op], Ctx, Op)).
+execute_request(Ctx, {document, Operations}) ->
+    {Frags, Ops} = lists:partition(fun (#frag {}) -> true;(_) -> false end, Operations),
+    Ctx2 = Ctx#{ fragments => fragments(Frags) },
+    case get_operation(Ctx2, Ops) of
+        {ok, Op} ->
+            return(Ctx2, root([], Ctx2, Op));
+        {error, Reason} ->
+            throw(Reason)
+    end.
 
 find_operation(_N, []) -> not_found;
 find_operation(N, [#op { id = ID } = O | Next]) ->
@@ -53,6 +34,21 @@ find_operation(N, [#op { id = ID } = O | Next]) ->
 root(Path, Ctx, #op { selection_set = SSet, schema = Schema } = Op) ->
     handle([graphql_ast:id(Op) | Path], Ctx, none, Schema, SSet).
 
+get_operation(#{ operation_name := undefined }, [Op]) ->
+    {ok, Op};
+get_operation(#{ operation_name := undefined }, _) ->
+    {error, more_than_one_operation};
+get_operation(#{ operation_name := OpName }, Ops) ->
+    case find_operation(OpName, Ops) of
+        not_found ->
+            {error, {operation_not_found, OpName}};
+        Op ->
+            {ok, Op}
+    end;
+get_operation(#{} = Ctx, Ops) ->
+    get_operation(Ctx#{ operation_name => undefined }, Ops).
+
+
 %% -- RETURNING RESULTS -------------------------------
 
 return(_Ctx, {Res, Errs}) when is_map(Res) ->
@@ -61,6 +57,15 @@ return(_Ctx, {Res, Errs}) when is_map(Res) ->
         Errs -> #{ errors => Errs }
     end,
     Map#{ data => Res }.
+
+
+%% -- FRAGMENTS -------------------------------
+fragments(Frags) ->
+    lists:foldl(fun(#frag { id = ID } = Frag, St) ->
+        St#{ name(ID) => Frag }
+    end,
+    #{},
+    Frags).
 
 %% -- GENERIC HANDLING --------------------------------
 
