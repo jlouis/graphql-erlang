@@ -137,15 +137,15 @@ does_fragment_type_apply(
           #union_type { types = Types } -> lists:member(ID, Types)
       end.
 
-execute_field(Path, Ctx, Type, Value, [F|_] = Fields, #schema_field { ty = Ty, resolve = RF}) ->
+execute_field(Path, Ctx, ObjType, Value, [F|_] = Fields, #schema_field { ty = FieldType, resolve = RF}) ->
     Name = name(F),
     Args = resolve_args(Ctx, F),
     Fun = resolver_function(RF),
-    ResolvedValue = resolve_field_value(Ctx, Type, Value, Name, Fun, Args),
-    complete_value([Name|Path], Ctx, Ty, Fields, ResolvedValue).
+    ResolvedValue = resolve_field_value(Ctx, ObjType, Value, Name, Fun, Args),
+    complete_value([Name|Path], Ctx, FieldType, Fields, ResolvedValue).
     
-resolve_field_value(Ctx, #schema_field { ty = Ty }, Value, Name, Fun, Args) ->
-    try Fun(Ctx#{ field => Name, object_type => Ty }, Value, Args) of
+resolve_field_value(Ctx, ObjectType, Value, Name, Fun, Args) ->
+    try Fun(Ctx#{ field => Name, object_type => ObjectType }, Value, Args) of
         {error, Reason} -> {error, Reason};
         {ok, Result} -> {ok, Result};
         Wrong ->
