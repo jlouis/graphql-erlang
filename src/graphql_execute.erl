@@ -162,6 +162,9 @@ complete_value(Path, Ctx, Ty, Fields, {ok, {enum, Value}}) ->
     complete_value(Path, Ctx, Ty, Fields, {ok, Value});
 complete_value(Path, Ctx, {scalar, Scalar}, Fields, {ok, Value}) ->
     complete_value(Path, Ctx, output_coerce_type(Scalar), Fields, {ok, Value});
+complete_value(Path, Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
+    SchemaType = graphql_schema:get(Ty),
+    complete_value(Path, Ctx, SchemaType, Fields, {ok, Value});
 complete_value(Path, Ctx, Ty, Fields, {ok, Value}) ->
     case Ty of
         {non_null, InnerTy} ->
