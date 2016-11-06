@@ -229,7 +229,7 @@ resolve_abstract_type(Resolver, Value) ->
     try Resolver(Value) of
         {ok, Ty} ->
             Obj = #object_type{} = graphql_schema:get(binarize(Ty)),
-            Obj;
+            {ok, Obj};
         {error, Reason} ->
             {error, Reason}
     catch
