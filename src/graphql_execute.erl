@@ -199,7 +199,7 @@ complete_value(Path, Ctx, Ty, Fields, {ok, Value}) ->
             end;
         #scalar_type { id = ID, output_coerce = OCoerce } ->
             try OCoerce(Value) of
-                {ok, Result} -> {Result, []};
+                {ok, Result} -> {ok, Result, []};
                 {error, Reason} ->
                     err(Path, {output_coerce, ID, Value, Reason})
             catch
@@ -207,12 +207,12 @@ complete_value(Path, Ctx, Ty, Fields, {ok, Value}) ->
                     lager:warning("Output coercer crash: ~p, stack: ~p", [{Cl,Err}, erlang:get_stacktrace()]),
                     err(Path, {coerce_crash, ID, Value, {Cl, Err}})
             end;
+        %% TODO: Coercion handling for enumerated values!
         #enum_type {} when is_binary(Value) ->
-            %% TODO: Coerce this
-            {Value, []};
+            {ok, Value, []};
         #enum_type { values = Values } when is_integer(Value) ->
             #enum_value { val = Result } = maps:get(Value, Values),
-            {Result, []};
+            {ok, Result, []};
         #interface_type{ resolve_type = Resolver } ->
             {ok, ResolvedType} = resolve_abstract_type(Resolver, Value),
             complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
@@ -221,7 +221,8 @@ complete_value(Path, Ctx, Ty, Fields, {ok, Value}) ->
             complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
         #object_type{} ->
             SubSelectionSet = merge_selection_sets(Fields),
-            execute_sset(Path, Ctx, SubSelectionSet, Ty, Value)
+            {Result, Errs} = execute_sset(Path, Ctx, SubSelectionSet, Ty, Value),
+            {ok, Result, Errs}
     end.
 
 resolve_abstract_type(Resolver, Value) ->
