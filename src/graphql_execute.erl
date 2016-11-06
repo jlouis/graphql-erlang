@@ -131,8 +131,8 @@ does_fragment_type_apply(
   #object_type { id = ID, interfaces = Implements },
   #frag { schema = FTy }) ->
       case FTy of
-          #object_type { id = OID } when OID =:= ID -> yes;
-          #object_type {} -> no;
+          #object_type { id = OID } when OID =:= ID -> true;
+          #object_type {} -> false;
           #interface_type { id = IFaceID } -> lists:member(IFaceID, Implements);
           #union_type { types = Types } -> lists:member(ID, Types)
       end.
