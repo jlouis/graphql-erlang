@@ -113,9 +113,9 @@ collect_fields(Path, #{ fragments := Frags } = Ctx, Type, [S|SS], Visited, Group
             end;
         #frag{ selection_set = FragmentSSet } = Fragment ->
             case does_fragment_type_apply(Type, Fragment) of
-                true ->
-                    collect_fields(Path, Ctx, Type, SS, Visited, Grouped);
                 false ->
+                    collect_fields(Path, Ctx, Type, SS, Visited, Grouped);
+                true ->
                     FragGrouped = collect_fields(['...' | Path], Ctx, Type, FragmentSSet, Visited),
                     Grouped2 = collect_groups(FragGrouped, Grouped),
                     collect_fields(Path, Ctx, Type, SS, Visited, Grouped2)
