@@ -14,57 +14,68 @@ x(Ctx, X) ->
     Canon = canon_context(Ctx),
     execute_request(Canon, X).
 
-execute_request(Ctx, {document, Operations}) ->
+execute_request(InitialCtx, {document, Operations}) ->
     {Frags, Ops} = lists:partition(fun (#frag {}) -> true;(_) -> false end, Operations),
-    Ctx2 = Ctx#{ fragments => fragments(Frags) },
-    case get_operation(Ctx2, Ops) of
+    Ctx = InitialCtx#{ fragments => fragments(Frags) },
+    case get_operation(Ctx, Ops) of
         {ok, #op { ty = {query, _} } = Op } ->
-            execute_query(Ctx2, Op);
+            execute_query(Ctx, Op);
+        {ok, #op { ty = undefined } = Op } ->
+            execute_query(Ctx, Op);
         {ok, #op { ty = {mutation, _} } = Op } ->
             execute_mutation(Ctx, Op);
         {error, Reason} ->
             throw(Reason)
     end.
 
+complete_top_level(Res, []) -> #{ data => Res };
+complete_top_level(Res, Errs) -> #{ data => Res, errors => Errs }.
+
 execute_query(Ctx, #op { selection_set = SSet,
                           schema = QType } = Op) ->
     #object_type{} = QType,
     {Res, Errs} =
         execute_sset([graphql_ast:id(Op)], Ctx, SSet, QType, none),
-    #{ data => Res, errors => Errs }.
-
+    complete_top_level(Res, Errs).
+    
 execute_mutation(Ctx, #op { selection_set = SSet,
                              schema = QType } = Op) ->
     #object_type{} = QType,
     {Res, Errs} =
         execute_sset([graphql_ast:id(Op)], Ctx, SSet, QType, none),
-    #{ data => Res, errors => Errs }.
+    complete_top_level(Res, Errs).
 
 execute_sset(Path, Ctx, SSet, Type, Value) ->
     GroupedFields = collect_fields(Path, Ctx, Type, SSet),
-    F = fun ({ResKey, [FieldName|_] = Fields}, Results) ->
-                case lookup_field(FieldName, Type) of
-                    null ->
-                        Results;
-                    not_found ->
-                        Results;
-                    FieldType ->
-                        ResVal = execute_field(
-                                   [ResKey|Path],
-                                   Ctx, 
-                                   Type,
-                                   Value,
-                                   Fields,
-                                   FieldType),
-                        [{ResKey, ResVal} | Results]
-                end
-        end,
-    lists:reverse(
-      lists:foldl(F, [], GroupedFields)).
+    execute_sset(Path, Ctx, GroupedFields, Type, Value, [], []).
+    
+    
+execute_sset(_Path, _Ctx, [], _Type, _Value, Map, Errs) ->
+    {maps:from_list(lists:reverse(Map)), Errs};
+execute_sset(Path, Ctx, [{Key, [F|_] = Fields} | Next], Type, Value, Map, Errs) ->
+    case lookup_field(F, Type) of
+        null -> execute_sset(Path, Ctx, Next, Type, Value, Map, Errs);
+        not_found -> execute_sset(Path, Ctx, Next, Type, Value, Map, Errs);
+        typename ->
+            execute_sset(Path, Ctx, Next, Type, Value, [{Key, typename(Type)} | Map], Errs);
+        FieldType ->
+            case execute_field([Key | Path], Ctx, Type, Value, Fields, FieldType) of
+                {ok, Result, FieldErrs} ->
+                    execute_sset(Path, Ctx, Next, Type, Value, [{Key, Result} | Map], FieldErrs ++ Errs);
+                {error, Errors} ->
+                    {null, Errors}
+            end
+    end.
+    
+typename(#object_type { id = ID }) -> ID.
 
-lookup_field(N, #object_type { fields = FS }) ->
+lookup_field(#field { id = ID }, Obj) ->
+    lookup_field_name(name(ID), Obj).
+
+lookup_field_name(<<"__typename">>, _) -> typename;
+lookup_field_name(N, #object_type { fields = FS }) ->
     maps:get(N, FS, not_found);
-lookup_field(N, #interface_type { fields = FS }) ->
+lookup_field_name(N, #interface_type { fields = FS }) ->
     maps:get(N, FS, not_found).
 
 collect_fields(Path, Ctx, Type, SSet) -> collect_fields(Path, Ctx, Type, SSet, #{}).
