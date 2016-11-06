@@ -27,15 +27,15 @@ init_per_group(_Group, Config) ->
 end_per_group(_Group, _Config) ->
     ok.
 
-init_per_testcase(disabled, Config) ->
+init_per_testcase(x, Config) ->
     {ok, _} = dbg:tracer(),
     dbg:p(all, c),
-    dbg:tpl(graphql_type_check, check_param, '_', cx),
+    dbg:tpl(graphql_execute, does_fragment_type_apply, '_', cx),
     Config;
 init_per_testcase(_Case, Config) ->
     Config.
 
-end_per_testcase(disabled, Config) ->
+end_per_testcase(x, Config) ->
     dbg:stop_clear(),
     ok;
 end_per_testcase(_Case, _Config) ->

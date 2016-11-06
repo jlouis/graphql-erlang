@@ -49,15 +49,15 @@ init_per_testcase(v_5_4_2_3_1, _Config) ->
     {skip, needs_more_validation};
 init_per_testcase(enum_no_incorrect_internal_value, _Config) ->
     {skip, no_output_validation_yet};
-init_per_testcase(disabled, Config) ->
+init_per_testcase(x, Config) ->
     {ok, _} = dbg:tracer(),
     dbg:p(all, c),
-    dbg:tpl(graphql_execute, object, '_', cx),
+    dbg:tpl(graphql_execute, lookup_field, '_', cx),
     Config;
 init_per_testcase(_Case, Config) ->
     Config.
 
-end_per_testcase(disabled, Config) ->
+end_per_testcase(x, Config) ->
     dbg:stop_clear(),
     ok;
 end_per_testcase(_Case, _Config) ->
