@@ -18,223 +18,143 @@ execute_request(Ctx, {document, Operations}) ->
     {Frags, Ops} = lists:partition(fun (#frag {}) -> true;(_) -> false end, Operations),
     Ctx2 = Ctx#{ fragments => fragments(Frags) },
     case get_operation(Ctx2, Ops) of
-        {ok, Op} ->
-            return(Ctx2, root([], Ctx2, Op));
+        {ok, #op { ty = {query, _} } = Op } ->
+            execute_query(Ctx2, Op);
+        {ok, #op { ty = {mutation, _} } = Op } ->
+            execute_mutation(Ctx, Op);
         {error, Reason} ->
             throw(Reason)
     end.
 
-find_operation(_N, []) -> not_found;
-find_operation(N, [#op { id = ID } = O | Next]) ->
-    case name(ID) of
-        N -> O;
-        _ -> find_operation(N, Next)
-    end.
+execute_query(Ctx, #op { selection_set = SSet,
+                          schema = QType } = Op) ->
+    #object_type{} = QType,
+    {Res, Errs} =
+        execute_sset([graphql_ast:id(Op)], Ctx, SSet, QType, none),
+    #{ data => Res, errors => Errs }.
 
-root(Path, Ctx, #op { selection_set = SSet, schema = Schema } = Op) ->
-    handle([graphql_ast:id(Op) | Path], Ctx, none, Schema, SSet).
+execute_mutation(Ctx, #op { selection_set = SSet,
+                             schema = QType } = Op) ->
+    #object_type{} = QType,
+    {Res, Errs} =
+        execute_sset([graphql_ast:id(Op)], Ctx, SSet, QType, none),
+    #{ data => Res, errors => Errs }.
 
-get_operation(#{ operation_name := undefined }, [Op]) ->
-    {ok, Op};
-get_operation(#{ operation_name := undefined }, _) ->
-    {error, more_than_one_operation};
-get_operation(#{ operation_name := OpName }, Ops) ->
-    case find_operation(OpName, Ops) of
-        not_found ->
-            {error, {operation_not_found, OpName}};
-        Op ->
-            {ok, Op}
-    end;
-get_operation(#{} = Ctx, Ops) ->
-    get_operation(Ctx#{ operation_name => undefined }, Ops).
+execute_sset(Path, Ctx, SSet, Type, Value) ->
+    GroupedFields = collect_fields(Path, Ctx, Type, SSet),
+    F = fun ({ResKey, [FieldName|_] = Fields}, Results) ->
+                case lookup_field(FieldName, Type) of
+                    null ->
+                        Results;
+                    not_found ->
+                        Results;
+                    FieldType ->
+                        ResVal = execute_field(
+                                   [ResKey|Path],
+                                   Ctx, 
+                                   Type,
+                                   Value,
+                                   Fields,
+                                   FieldType),
+                        [{ResKey, ResVal} | Results]
+                end
+        end,
+    lists:reverse(
+      lists:foldl(F, [], GroupedFields)).
 
+lookup_field(N, #object_type { fields = FS }) ->
+    maps:get(N, FS, not_found);
+lookup_field(N, #interface_type { fields = FS }) ->
+    maps:get(N, FS, not_found).
 
-%% -- RETURNING RESULTS -------------------------------
+collect_fields(Path, Ctx, Type, SSet) -> collect_fields(Path, Ctx, Type, SSet, #{}).
 
-return(_Ctx, {Res, Errs}) when is_map(Res) ->
-    Map = case Errs of
-        [] -> #{};
-        Errs -> #{ errors => Errs }
-    end,
-    Map#{ data => Res }.
-
-
-%% -- FRAGMENTS -------------------------------
-fragments(Frags) ->
-    lists:foldl(fun(#frag { id = ID } = Frag, St) ->
-        St#{ name(ID) => Frag }
-    end,
-    #{},
-    Frags).
-
-%% -- GENERIC HANDLING --------------------------------
-
-%% -- Product objects / vector types
-handle(Path, Ctx, Cur, #object_type {} = Obj, SSet) ->
-    resolve_obj([graphql_schema:id(Obj) | Path], Ctx, Cur, SSet, Obj, #{});
-handle(Path, Ctx, Cur, #interface_type { id = IFaceID, resolve_type = R }, SSet) ->
-    handle_abstract_type(Path, Ctx, Cur, IFaceID, R, SSet);
-handle(Path, Ctx, Cur, #union_type { id = UnionID, resolve_type = R}, SSet) ->
-    handle_abstract_type(Path, Ctx, Cur, UnionID, R, SSet);
-%% -- Scalars / scalar types
-handle(Path, _Ctx, Cur, #scalar_type { id = ID, output_coerce = Coerce }, []) ->
-    try Coerce(Cur) of
-        {ok, Result} -> {Result, []};
-        {error, Reason} ->
-            err(Path, {output_coerce, ID, Cur, Reason})
-    catch
-        Class:Error ->
-            err(Path, {coerce, ID, Cur, {Class,Error}})
-    end;
-handle(_Path, Ctx, Cur, #enum_type {} = Enum, SSet) ->
-    resolve_enum(Ctx, Cur, SSet, Enum).
-
-%% Helper for calling the type resolver in an interface or union
-handle_abstract_type(Path, Ctx, Cur, ID, R, SSet) ->
-    try R(Cur) of
-        {ok, Ty} ->
-          #object_type{} = Obj = graphql_schema:get(binarize(Ty)),
-          resolve_obj([graphql_schema:id(Obj) | Path], Ctx, Cur, SSet, Obj, #{});
-        {error, Reason} ->
-            throw(err(Path, {unresolved_type, ID, Reason}))
-    catch
-        Class:Err ->
-            throw(err(Path, {resolver_crash, ID, Cur, {Class, Err}}))
-    end.
-
-%% -- ENUM HANDLING ------------------------------------
-
-resolve_enum(_Ctx, Val, [], #enum_type {}) when is_binary(Val) ->
-    {Val, []};
-resolve_enum(Ctx, {enum, Val}, [], EnumType) when is_binary(Val) ->
-    resolve_enum(Ctx, Val, [], EnumType);
-resolve_enum(_Ctx, Val, [], #enum_type { values = Vals }) when is_integer(Val) ->
-    #enum_value { val = Res } = maps:get(Val, Vals),
-    {Res, []}.
-
-%% -- FRAGMENT HANDLING -----------------------------------
-
-%% fragment_match/3 will try to match a fragment against a type
-%%
-%%
-fragment_match(_Ctx,
-	#frag { schema = SchemaTy } = Frag,
-	#object_type { id = ID, interfaces = Implements }) ->
-    case SchemaTy of
-        #object_type{ id = OID } ->
-            %% Objects need a perfect match
-            case OID =:= ID of
-                true -> {match, Frag};
-                false -> nomatch
+collect_fields(Path, Ctx, Type, SSet, Visited) -> collect_fields(Path, Ctx, Type, SSet, Visited, orddict:new()).
+   
+collect_fields(_Path, _Ctx, _Type, [], _Visited, Grouped) ->
+    Grouped;
+collect_fields(Path, #{ fragments := Frags } = Ctx, Type, [S|SS], Visited, Grouped) ->
+    case S of
+        #field {} = F ->
+            ResponseKey = alias(F),
+            Grouped2 = orddict:append(ResponseKey, S, Grouped),
+            collect_fields(Path, Ctx, Type, SS, Visited, Grouped2);
+        #frag_spread{ id = ID } ->
+            Name = name(ID),
+            %% TODO: Lift this to a function by itself called collect_view_fragment...
+            case maps:is_key(Name, Visited) of
+                true ->
+                    collect_fields(Path, Ctx, Type, SS, Visited, Grouped);
+                false ->
+                    case maps:get(Name, Frags, not_found) of
+                        not_found ->
+                            collect_fields(Path, Ctx, Type, SS, Visited#{ Name => true }, Grouped);
+                        #frag{ selection_set = FragmentSSet } = Fragment ->
+                            case does_fragment_type_apply(Type, Fragment) of
+                                false ->
+                                    collect_fields(Path, Ctx, Type, SS, Visited#{ Name => true }, Grouped);
+                                true ->
+                                    FragGrouped = collect_fields([Name|Path], Ctx, Type, FragmentSSet, Visited),
+                                    Grouped2 = collect_groups(FragGrouped, Grouped),
+                                    collect_fields(Path, Ctx, Type, SS, Visited#{ Name => true }, Grouped2)
+                            end
+                    end
             end;
-        #interface_type { id = IFaceID } ->
-            %% Interfaces must be implemented by the concrete object
-            case lists:member(IFaceID, Implements) of
-                true -> {match, Frag};
-                false -> nomatch
-            end;
-        #union_type{ types = Types } ->
-            %% Unions match if they match one of the implementing types
-            case lists:member(ID, Types) of
-                true -> {match, Frag};
-                false -> nomatch
-            end
-    end;
-fragment_match(#{ fragments := Fragments } = Ctx, #frag_spread { id = FragID }, Obj) ->
-    %% Matching a fragment requires an environment lookup, otherwise it's
-    %% the same as for inline fragments.
-    Frag = maps:get(name(FragID), Fragments),
-    fragment_match(Ctx, Frag, Obj).
-
-resolve_frag(Ctx, Frag, SObj) ->
-    case fragment_match(Ctx, Frag, SObj) of
-        {match, #frag { selection_set = FragFields }} ->
-            {add_fields, FragFields};
-        nomatch ->
-            skip
+        #frag{ selection_set = FragmentSSet } = Fragment ->
+            case does_fragment_type_apply(Type, Fragment) of
+                true ->
+                    collect_fields(Path, Ctx, Type, SS, Visited, Grouped);
+                false ->
+                    FragGrouped = collect_fields(['...' | Path], Ctx, Type, FragmentSSet, Visited),
+                    Grouped2 = collect_groups(FragGrouped, Grouped),
+                    collect_fields(Path, Ctx, Type, SS, Visited, Grouped2)
+            end            
     end.
 
+collect_groups([], Grouped) -> Grouped;
+collect_groups([{Key, Group}|Next], Grouped) ->
+    App = orddict:append_list(Key, Group, Grouped),
+    collect_groups(Next, App).
 
-%% -- OBJECT HANDLING --------------------------------
+does_fragment_type_apply(
+  #object_type { id = ID, interfaces = Implements },
+  #frag { schema = FTy }) ->
+      case FTy of
+          #object_type { id = OID } when OID =:= ID -> yes;
+          #object_type {} -> no;
+          #interface_type { id = IFaceID } -> lists:member(IFaceID, Implements);
+          #union_type { types = Types } -> lists:member(ID, Types)
+      end.
 
-resolve_obj(Path, Ctx, Cur, Fields, SObj, SoFar) ->
-    case resolve_obj_fold(Path, Ctx, Cur, Fields, SObj, SoFar, [], []) of
-        {ok, Acc, Errs} ->
-            {maps:from_list(Acc), Errs};
-        {error, Errs} ->
-            {null, Errs}
-    end.
-    
-resolve_obj_fold(_Path, _Ctx, _Cur, [], _SObj, _SoFar, Acc, Errs) ->
-    {ok, Acc, Errs};
-resolve_obj_fold(Path, Ctx, Cur, [F | Next], SObj, SoFar, Acc, Errs) ->
-    case resolve_obj_([graphql_ast:id(F) | Path], Ctx, Cur, F, SObj, SoFar) of
-        skip ->
-            resolve_obj_fold(Path, Ctx, Cur, Next, SObj, SoFar, Acc, Errs);
-        {ok, Alias, Es, Result} ->
-            resolve_obj_fold(
-                Path,
-                Ctx,
-                Cur,
-                Next,
-                SObj,
-                SoFar#{ Alias => true},
-                [{Alias, Result} | Acc],
-                Es ++ Errs);
-        {object_error, Es} ->
-            {error, Es ++ Errs};
-        {add_fields, FragFields} ->
-            resolve_obj_fold(Path, Ctx, Cur, FragFields ++ Next, SObj, SoFar, Acc, Errs)
-    end.
-
-resolve_obj_(_Path, Ctx, _Cur, #frag {} = Frag, SObj, _SoFar) ->
-    resolve_frag(Ctx, Frag, SObj);
-resolve_obj_(_Path, Ctx, _Cur, #frag_spread {} = NamedSpread, SObj, _SoFar) ->
-    resolve_frag(Ctx, NamedSpread, SObj);
-resolve_obj_(Path, Ctx, Cur, #field { selection_set = SSet, schema = SF } = F,
-	#object_type { id = OID, fields = SFields } = SObj, SoFar) ->
+execute_field(Path, Ctx, Type, Value, [F|_] = Fields, #schema_field { ty = Ty, resolve = RF}) ->
     Name = name(F),
-    Alias = alias(F),
-    case maps:is_key(Alias, SoFar) of
-        true -> skip; %% Already rendered this entry, skip it
-        false ->
-            case maps:get(Name, SFields, not_found) of
-                not_found when Name == <<"__typename">> ->
-                    {ok, Alias, [], resolve_typename(SObj)};
-                not_found ->
-                    throw({execute, {unknown_field, Name, line(F)}});
-                #schema_field { ty = Ty, resolve = RF } ->
-                    Fun = resolver_function(RF),
-                    Args = resolve_args(Ctx, F),
-                    RVal = 
-                      try Fun(Ctx#{ field => Name, object_type => OID }, Cur, Args) of
-                        {error, Reason} -> {error, Reason};
-                        {ok, Result} -> {ok, Result};
-                        Wrong ->
-                           exit({wrong_resolver_function_return, Fun, Alias, Wrong})
-                    catch
-                       Cl:Err ->
-                           lager:warning("Resolver function error: ~p stacktrace: ~p", [{Cl,Err}, erlang:get_stacktrace()]),
-                           {error, resolver_crash}
-                     end,
-                   #schema_field { ty = FObj } = SF,
-                   case complete_value(Path, Ctx, RVal, Ty, SSet, FObj) of
-                       {ok, CompletedResult, Errs} ->
-                           {ok, Alias, Errs, CompletedResult};
-                       {error, Errors} ->
-                           {object_error, Errors}
-                   end
-            end
+    Args = resolve_args(Ctx, F),
+    Fun = resolver_function(RF),
+    ResolvedValue = resolve_field_value(Ctx, Type, Value, Name, Fun, Args),
+    complete_value([Name|Path], Ctx, Ty, Fields, ResolvedValue).
+    
+resolve_field_value(Ctx, #schema_field { ty = Ty }, Value, Name, Fun, Args) ->
+    try Fun(Ctx#{ field => Name, object_type => Ty }, Value, Args) of
+        {error, Reason} -> {error, Reason};
+        {ok, Result} -> {ok, Result};
+        Wrong ->
+            {error, {wrong_resolver_return, Fun, Name, Wrong}}
+    catch
+        Cl:Err ->
+            lager:warning("Resolver function error: ~p stacktrace: ~p", [{Cl,Err}, erlang:get_stacktrace()]),
+            {error, resolver_crash}
     end.
 
-%% -- VALUE COMPLETION --------------------------------------
-
-complete_value(Path, _Ctx, {error, Reason}, _Ty, _SSet, _FObj) ->
+complete_value(Path, _Ctx, _Ty, _Fields, {error, Reason}) ->
     {ok, null, [#{ path => Path, reason => Reason }]};
-complete_value(Path, Ctx, {ok, Result}, Ty, SSet, FObj) ->
+complete_value(Path, Ctx, Ty, Fields, {ok, {enum, Value}}) ->
+    complete_value(Path, Ctx, Ty, Fields, {ok, Value});
+complete_value(Path, Ctx, {scalar, Scalar}, Fields, {ok, Value}) ->
+    complete_value(Path, Ctx, output_coerce_type(Scalar), Fields, {ok, Value});
+complete_value(Path, Ctx, Ty, Fields, {ok, Value}) ->
     case Ty of
         {non_null, InnerTy} ->
-            case complete_value(Path, Ctx, {ok, Result}, InnerTy, SSet, FObj) of
+            case complete_value(Path, Ctx, InnerTy, Fields, {ok, Value}) of
                 {error, Reason} ->
                     %% Rule: Along a path, there is at most one error, so if the underlying
                     %% object is at fault, don't care too much about this level, just pass
@@ -245,12 +165,12 @@ complete_value(Path, Ctx, {ok, Result}, Ty, SSet, FObj) ->
                 {ok, CompletedResult, Errs} ->
                     {ok, CompletedResult, Errs}
             end;
-        _SomeTy when Result == null ->
+        _SomeTy when Value == null ->
             {ok, null, []};
-        {list, _} when not is_list(Result) ->
+        {list, _} when not is_list(Value) ->
             err(Path, not_a_list);
         {list, InnerTy} ->
-            case complete_value_list(Path, Ctx, Result, InnerTy, SSet, FObj) of
+            case complete_value_list(Path, Ctx, InnerTy, Fields, Value) of
                 {ok, L, IE} ->
                     %% There might have been errors in the inner processing, but all of
                     %% those were errors we could handle by returning null values for
@@ -263,23 +183,48 @@ complete_value(Path, Ctx, {ok, Result}, Ty, SSet, FObj) ->
                     %% than one error, if necessary.
                     {ok, null, Reasons}
             end;
-        {scalar, Scalar} ->
-            SType = output_coerce_type(Scalar),
-            case handle(Path, Ctx, Result, SType, SSet) of
+        #scalar_type { id = ID, output_coerce = OCoerce } ->
+            try OCoerce(Value) of
+                {ok, Result} -> {Result, []};
                 {error, Reason} ->
-                     {ok, null, [{Path, Reason}]};
-                {Val, Errs} -> {ok, Val, Errs}
+                    err(Path, {output_coerce, ID, Value, Reason})
+            catch
+                Cl:Err ->
+                    lager:warning("Output coercer crash: ~p, stack: ~p", [{Cl,Err}, erlang:get_stacktrace()]),
+                    err(Path, {coerce_crash, ID, Value, {Cl, Err}})
             end;
-        _T ->
-            case handle(Path, Ctx, Result, graphql_ast:unwrap_type(FObj), SSet) of
-                {error, Reason} ->
-                    {ok, null, [{Path, Reason}]};
-                {V, Errs} -> {ok, V, Errs}
-            end
+        #enum_type {} when is_binary(Value) ->
+            %% TODO: Coerce this
+            {Value, []};
+        #enum_type { values = Values } when is_integer(Value) ->
+            #enum_value { val = Result } = maps:get(Value, Values),
+            {Result, []};
+        #interface_type{ resolve_type = Resolver } ->
+            {ok, ResolvedType} = resolve_abstract_type(Resolver, Value),
+            complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
+        #union_type{ resolve_type = Resolver } ->
+            {ok, ResolvedType} = resolve_abstract_type(Resolver, Value),
+            complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
+        #object_type{} ->
+            SubSelectionSet = merge_selection_sets(Fields),
+            execute_sset(Path, Ctx, SubSelectionSet, Ty, Value)
     end.
 
-complete_value_list(Path, Ctx, Results, Ty, SSet, FObj) ->
-    Completed = [complete_value(Path, Ctx, {ok, R}, Ty, SSet, FObj) || R <- Results],
+resolve_abstract_type(Resolver, Value) ->
+    try Resolver(Value) of
+        {ok, Ty} ->
+            Obj = #object_type{} = graphql_schema:get(binarize(Ty)),
+            Obj;
+        {error, Reason} ->
+            {error, Reason}
+    catch
+       Cl:Err ->
+           lager:warning("Resolve_type crashed: ~p", [erlang:get_stacktrace()]),
+           {error, {resolve_type_crash, {Cl,Err}}}
+    end.
+            
+complete_value_list(Path, Ctx, Ty, Fields, Results) ->
+    Completed = [complete_value(Path, Ctx, Ty, Fields, {ok, R}) || R <- Results],
     case complete_list_value_result(0, Completed) of
         {error, K, Reason} ->
             err([K | Path], Reason);
@@ -297,6 +242,43 @@ complete_list_value_result(K, [{ok, V, Es} | Vals]) ->
 complete_list_value_result(K, [{error, Reason} | _]) ->
     {error, K, Reason}.
 
+find_operation(_N, []) -> not_found;
+find_operation(N, [#op { id = ID } = O | Next]) ->
+    case name(ID) of
+        N -> O;
+        _ -> find_operation(N, Next)
+    end.
+
+merge_selection_sets(Fields) ->
+    F = fun
+        (#field { selection_set = [] }, Acc) -> Acc;
+        (#field { selection_set = SS }, Acc) -> [SS|Acc]
+    end,
+    lists:concat(
+        lists:foldl(F, [], Fields)).
+
+get_operation(#{ operation_name := undefined }, [Op]) ->
+    {ok, Op};
+get_operation(#{ operation_name := undefined }, _) ->
+    {error, more_than_one_operation};
+get_operation(#{ operation_name := OpName }, Ops) ->
+    case find_operation(OpName, Ops) of
+        not_found ->
+            {error, {operation_not_found, OpName}};
+        Op ->
+            {ok, Op}
+    end;
+get_operation(#{} = Ctx, Ops) ->
+    get_operation(Ctx#{ operation_name => undefined }, Ops).
+
+
+%% -- FRAGMENTS -------------------------------
+fragments(Frags) ->
+    lists:foldl(fun(#frag { id = ID } = Frag, St) ->
+        St#{ name(ID) => Frag }
+    end,
+    #{},
+    Frags).
 
 %% -- FUNCTION RESOLVERS ---------------------------------
 
@@ -434,17 +416,12 @@ value_object(Ctx, FieldEnv, [{K, Val} | Rest]) ->
 
 %% -- AST MANIPULATION ----------------
 
-resolve_typename(#object_type { id = ID }) -> ID.
-
 name(N) when is_binary(N) -> N;
 name({name, _, N}) -> N;
 name(#field { id = ID }) -> name(ID).
 
 alias(#field { alias = undefined, id = ID }) -> name(ID);
 alias(#field { alias = Alias }) -> name(Alias).
-
-line({name, L, _}) -> L;
-line(#field { id = ID }) -> line(ID).
 
 %% -- ERROR HANDLING --
 
