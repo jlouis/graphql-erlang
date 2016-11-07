@@ -100,6 +100,27 @@ query TestFieldMerge($id: Id!) {
   }
 }
 
+query TestNestedFieldMerge($id: Id!) {
+  monster(id: $id) {
+    id
+    hitpoints
+    ...MonsterFragmentNested1
+    ...MonsterFragmentNested2
+    stats {
+        yell
+    }
+  }
+}
+
+fragment MonsterFragmentNested1 on Monster {
+    hitpoints
+    stats { attack }
+}
+
+fragment MonsterFragmentNested2 on Monster {
+    stats { shellScripting }
+}
+
 ## MUTATIONS
 mutation IntroduceMonster($input: IntroduceMonsterInput!) {
   introduceMonster(input: $input) {

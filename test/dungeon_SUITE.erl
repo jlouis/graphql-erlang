@@ -43,7 +43,8 @@ end_per_testcase(_Case, _Config) ->
 
 groups() ->
     Dungeon = {dungeon, [],
-               [ unions,
+               [
+                 unions,
                  union_errors,
                  scalar_output_coercion,
                  populate,
@@ -55,7 +56,9 @@ groups() ->
                  scalar_as_expression_coerce,
                  non_null_field,
                  complex_modifiers,
-                 simple_field_merge]},
+                 simple_field_merge,
+                 nested_field_merge
+                 ]},
 
     Errors = {errors, [],
               [unknown_variable,
@@ -417,6 +420,20 @@ simple_field_merge(Config) ->
     		<<"id">> => ID,
     		<<"hitpoints">> => 10 }}},
     Expected = run(Config, <<"TestFieldMerge">>, #{ <<"id">> => ID }),
+    ok.
+
+nested_field_merge(Config) ->
+    ID = base64:encode(<<"monster:1">>),
+    #{ data := #{
+      <<"monster">> := #{
+          <<"id">> := ID,
+          <<"hitpoints">> := 10,
+          <<"stats">> := [#{
+              <<"attack">> := 3,
+              <<"shellScripting">> := 3,
+              <<"yell">> := <<"HELO">> }]
+    }}} = Res = run(Config, <<"TestNestedFieldMerge">>, #{ <<"id">> => ID }),
+    ct:pal("~p", [jsx:encode(Res)]),
     ok.
 
 unknown_variable(Config) ->
