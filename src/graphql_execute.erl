@@ -132,7 +132,7 @@ does_fragment_type_apply(
           #union_type { types = Types } -> lists:member(ID, Types)
       end.
 
-execute_field(Path, Ctx, ObjType, Value, [F|_] = Fields, #schema_field { ty = FieldType, resolve = RF}) ->
+execute_field(Path, Ctx, ObjType, Value, [F|_] = Fields, #schema_field { resolve = RF}) ->
     Name = name(F),
     #schema_field { ty = ElaboratedTy } = field_type(F),
     Args = resolve_args(Ctx, F),
