@@ -91,7 +91,12 @@ populate() ->
                 mnesia:write(#sequence { id = room, count = 0 })
         end,
     {atomic, _} = mnesia:transaction(Fun),
-    {atomic, _} = insert(#monster { name = <<"goblin">>, color = {65, 146, 75}, hitpoints = 10, mood = <<"DODGY">> }),
+    {atomic, _} = insert(#monster {
+        name = <<"goblin">>,
+        color = {65, 146, 75},
+        hitpoints = 10,
+        mood = <<"DODGY">>,
+        stats = [#stats{}] }),
    ok.
 
 inject_error() ->

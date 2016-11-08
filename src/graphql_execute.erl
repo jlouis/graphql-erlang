@@ -132,12 +132,13 @@ does_fragment_type_apply(
           #union_type { types = Types } -> lists:member(ID, Types)
       end.
 
-execute_field(Path, Ctx, ObjType, Value, [F|_] = Fields, #schema_field { ty = FieldType, resolve = RF}) ->
+execute_field(Path, Ctx, ObjType, Value, [F|_] = Fields, #schema_field { resolve = RF}) ->
     Name = name(F),
+    #schema_field { ty = ElaboratedTy } = field_type(F),
     Args = resolve_args(Ctx, F),
     Fun = resolver_function(RF),
     ResolvedValue = resolve_field_value(Ctx, ObjType, Value, Name, Fun, Args),
-    complete_value([Name|Path], Ctx, FieldType, Fields, ResolvedValue).
+    complete_value([Name|Path], Ctx, ElaboratedTy, Fields, ResolvedValue).
     
 resolve_field_value(Ctx, ObjectType, Value, Name, Fun, Args) ->
     try Fun(Ctx#{ field => Name, object_type => ObjectType }, Value, Args) of
@@ -158,6 +159,7 @@ complete_value(Path, Ctx, Ty, Fields, {ok, {enum, Value}}) ->
 complete_value(Path, Ctx, {scalar, Scalar}, Fields, {ok, Value}) ->
     complete_value(Path, Ctx, output_coerce_type(Scalar), Fields, {ok, Value});
 complete_value(Path, Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
+    lager:warning("Looking up type in executor: ~p", [Ty]),
     SchemaType = graphql_schema:get(Ty),
     complete_value(Path, Ctx, SchemaType, Fields, {ok, Value});
 complete_value(Path, Ctx, Ty, Fields, {ok, Value}) ->
@@ -433,6 +435,8 @@ name(#field { id = ID }) -> name(ID).
 
 alias(#field { alias = undefined, id = ID }) -> name(ID);
 alias(#field { alias = Alias }) -> name(Alias).
+
+field_type(#field { schema = SF }) -> SF.
 
 %% -- ERROR HANDLING --
 
