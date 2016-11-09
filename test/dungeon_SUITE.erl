@@ -48,6 +48,7 @@ groups() ->
                  union_errors,
                  scalar_output_coercion,
                  populate,
+                 default_query,
                  direct_input,
                  nested_input_object,
                  inline_fragment,
@@ -86,6 +87,17 @@ run(Config, Q, Params) ->
 run(Config, File, Q, Params) ->
     {ok, Doc} = read_doc(Config, File),
     th:x(Config, Doc, Q, Params).
+
+default_query(Config) ->
+    Goblin = base64:encode(<<"monster:1">>),
+    #{ data := #{ <<"goblin">> := #{ <<"id">> := Goblin, <<"name">> := <<"goblin">>, <<"hitpoints">> := 10 }}} =
+        run(Config, <<"GoblinQuery">>, #{}),
+    #{ data := #{ <<"goblin">> := #{ <<"id">> := Goblin, <<"name">> := <<"goblin">>, <<"stats">> := [#{ <<"attack">> := 3 }] }}} =
+        run(Config, <<"MinGoblin">>, #{<<"minAttack">> => 0 }),
+    #{ data := #{ <<"goblin">> := #{ <<"id">> := Goblin, <<"name">> := <<"goblin">>, <<"stats">> := [] }}} =
+        run(Config, <<"MinGoblin">>, #{<<"minAttack">> => 30 }),
+    
+    ok.
 
 unions(Config) ->
     ct:log("Initial query on the schema"),
@@ -237,7 +249,6 @@ nested_input_object(Config) ->
       <<"hitpoints">> => 9001,
       <<"mood">> => <<"TRANQUIL">>,
       <<"stats">> => [#{
-        <<"attack">> => 7,
         <<"shellScripting">> => 5,
         <<"yell">> => <<"...">> }]
       },

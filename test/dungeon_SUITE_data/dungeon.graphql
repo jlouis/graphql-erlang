@@ -1,10 +1,20 @@
 ## QUERIES
 
-query GoblinQuery($id : Id!) {
+query GoblinQuery($id : Id! = "bW9uc3Rlcjox") {
   goblin: monster(id: $id) {
     id
     name
     hitpoints
+  }
+}
+
+query MinGoblin($id : Id! = "bW9uc3Rlcjox", $minAttack : int!) {
+  goblin: monster(id: $id) {
+    id
+    name
+    stats(minAttack: $minAttack) {
+        attack
+    }
   }
 }
 
