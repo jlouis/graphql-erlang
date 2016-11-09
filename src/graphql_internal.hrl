@@ -53,7 +53,7 @@
 -record(vardef, {
 	id :: name(),
 	ty :: graphql_type(),
-	default = undefined :: undefined | value()
+	default = null :: value()
 }).
 
 -record(directive, {

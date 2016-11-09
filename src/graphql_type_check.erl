@@ -74,7 +74,7 @@ tc_params(Path, TyVarEnv, InitialParams) ->
       end,
     maps:fold(F, InitialParams, (TyVarEnv)).
 
-tc_param(Path, K, #vardef { ty = {non_null, _} }, not_found) ->
+tc_param(Path, K, #vardef { ty = {non_null, _}, default = null }, not_found) ->
     graphql_err:abort([K | Path], missing_non_null_param);
 tc_param(_Path, _K, #vardef { default = Default }, not_found) ->
     {replace, Default};
@@ -136,10 +136,10 @@ check_object_fields(Path, [], Obj, Result) ->
 check_object_fields(Path, [{Name, #schema_arg { ty = Ty, default = Def }} | Next], Obj, Result) ->
     Val = case maps:get(Name, Obj, not_found) of
         not_found ->
-            case Ty of
-                {non_null, _} ->
+            case {Def, Ty} of
+                {null, {non_null, _}} ->
                     graphql_err:abort([Name | Path], missing_non_null_param);
-                _ ->
+                {Def, _} ->
                     Def
             end;
         V ->
@@ -256,7 +256,7 @@ tc_args_(Ctx, Path, Args, [{Name, #schema_arg { ty = STy }} = SArg | Next], Acc)
 
 %% Search a list of arguments for the next argument. Handle non-null values
 %% correctly as we are conducting the search
-find_arg(Args, {Key, #schema_arg { ty = {non_null, _}}}) ->
+find_arg(Args, {Key, #schema_arg { ty = {non_null, _}, default = null}}) ->
     case lists:keytake(Key, 1, Args) of
         false ->
             {error, missing_non_null_param};
