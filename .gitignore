@@ -1,5 +1,29 @@
-_build
+#GraphQL specific
 /src/graphql_parser.erl
 /src/graphql_scanner.erl
-log/*
 /test/*.json
+
+# Nixed from https://github.com/shopgun/erlang-project-template/blob/master/files/gitignore
+*.beam
+*.o
+*.plt
+*.swo
+*.swp
+.erlang.cookie
+.eunit
+.rebar
+.rebar3
+_*
+_build
+_deps
+_plugins
+_rel
+_tdeps
+doc
+ebin
+erl_crash.dump
+log
+logs
+rebar3.crashdump
+*.DS_Store
+compile_commands.json
