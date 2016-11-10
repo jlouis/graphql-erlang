@@ -30,9 +30,9 @@ rest_init(Req, {priv_file, _App, _Location} = PF) ->
     rest_init(Req, #{ index_location => PF });
 rest_init(Req, State) when is_map(State) ->
     {Method, Req2} = cowboy_req:method(Req),
-    {Viewer, Req3} = cowboy_req:meta(gryphon_user, Req2),
+    {AuthSubject, Req3} = cowboy_req:meta(moose_token, Req2),
     {ReqID, Req4} = cowboy_req:meta(gryphon_req_id, Req3),
-    {ok, Req4, State#{ method => Method, viewer => Viewer, req_id => ReqID }}.
+    {ok, Req4, State#{ method => Method, auth_subject => AuthSubject, req_id => ReqID }}.
     
 -spec allowed_methods(any(), any()) -> any().
 allowed_methods(Req, State) ->
@@ -110,7 +110,7 @@ from_graphql(Req, State) ->
 
 run(undefined, _, _, Req, State) ->
     err(400, no_query_supplied, Req, State);
-run(Doc, OpName, Vars, Req, #{ viewer := Viewer, req_id := ReqID } = State) ->
+run(Doc, OpName, Vars, Req, #{ auth_subject := AuthSubject, req_id := ReqID } = State) ->
     case graphql:parse(Doc) of
        {ok, AST} ->
           try
@@ -124,7 +124,7 @@ run(Doc, OpName, Vars, Req, #{ viewer := Viewer, req_id := ReqID } = State) ->
                      params => Coerced,
                      operation_name => OpName,
                      req_id => ReqID,
-                     viewer => Viewer },
+                     auth_subject => AuthSubject },
                  AST2),
              Req2 = cowboy_req:set_resp_body(encode_json(Response), Req),
              {ok, Reply} = cowboy_req:reply(200, Req2),
