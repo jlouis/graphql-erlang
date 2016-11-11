@@ -203,4 +203,11 @@ decode_json_map(Data) when is_binary(Data) ->
 
 %% @private
 encode_json(Data) ->
-    jsx:encode(Data, []).
+    try jsx:encode(Data, [])
+    catch error:badarg ->
+        error_logger:info_msg("~p crashed while trying to encode the graphql:execute/2 result to JSON:~n~p~n", [?MODULE, Data]),
+        jsx:encode(#{data => null,
+                     errors => [ #{ message => <<"Request handler crashed while trying to encode Response">>,
+                                    type => <<"internal_error">>}]
+                    })
+    end.
