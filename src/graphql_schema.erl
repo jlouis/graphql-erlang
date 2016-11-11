@@ -53,6 +53,7 @@ insert(S, #{ canonicalize := true }) ->
             end
     catch
         Class:Reason ->
+            lager:warning("Schema canonicalization error: ~p", [erlang:get_stacktrace()]),
             {error, {schema_canonicalize, {Class, Reason}}}
     end;
 insert(S, #{}) ->

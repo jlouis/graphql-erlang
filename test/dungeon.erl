@@ -163,6 +163,7 @@ inject_monster() ->
                fields => #{
                  attack => #{
                    type => 'int!',
+                   default => 7,
                    description => "The attack value of the monster"
                   },
                  yell => #{
@@ -285,12 +286,20 @@ inject_monster() ->
             description => "How much of a plush animal the monster is (cuteness)" },
           stats => #{
             type => ['Stats'],
-            resolve => fun(_, #monster { stats = S}, _) -> {ok, S} end,
+            args => #{
+                minAttack => #{
+                	type => 'int!',
+                	default => 0,
+                	description => "The minimum attack value for the stats" } },
+            resolve => fun (_, #monster{ stats = SS }, #{ <<"minAttack">> := Min }) ->
+                ct:pal("Stats: ~p, Min: ~p", [SS, Min]),
+                {ok, [S || S <- SS, S#stats.attack >= Min]}
+             end,
             description => "The stats of the monster" },
           statsVariantOne => #{
             type => {non_null, ['Stats']},
             description => "Monster stats, modified by non-null",
-            resolve => fun(_, #monster{ stats = S }, _) -> {ok, S} end},
+            resolve => fun(_, #monster{ stats = S}, _) -> {ok, S} end },
           statsVariantTwo => #{
             type => ['Stats!'],
             description => "Monster stats where the inner object is modified by non-null",

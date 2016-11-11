@@ -72,7 +72,7 @@ VariableDefinitionList -> VariableDefinition : ['$1'].
 VariableDefinitionList -> VariableDefinition VariableDefinitionList : ['$1'|'$2'].
 
 VariableDefinition -> Variable ':' Type :
-    #vardef { id = '$1', ty = '$3', default = undefined }.
+    #vardef { id = '$1', ty = '$3', default = null }.
 VariableDefinition -> Variable ':' Type DefaultValue :
     #vardef { id = '$1', ty = '$3', default = '$4' }.
 
