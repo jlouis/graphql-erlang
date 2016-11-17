@@ -58,7 +58,8 @@ groups() ->
                  non_null_field,
                  complex_modifiers,
                  simple_field_merge,
-                 nested_field_merge
+                 nested_field_merge,
+                 multiple_monsters
                  ]},
 
     Errors = {errors, [],
@@ -402,6 +403,20 @@ scalar_as_expression_coerce(Config) ->
     true = (PF - 0.01) < 0.00001,
     ok.
 
+multiple_monsters(Config) ->
+    ID1 = base64:encode(<<"monster:1">>),
+    ID2 = base64:encode(<<"monster:2">>),
+    #{ data := #{
+        <<"monsters">> := [
+            #{ <<"id">> := ID1 }, #{ <<"id">> := ID2 } ]
+     }} = run(Config, <<"MultipleMonsters">>, #{ <<"ids">> => [ID1, ID2] }),
+    #{ data := #{
+        <<"monsters">> := [
+            #{ <<"id">> := ID1 }, #{ <<"id">> := ID2 } ]
+     }} = run(Config, <<"MultipleMonstersExpr">>, #{}),
+     
+     ok.
+        
 inline_fragment(Config) ->
     ID = base64:encode(<<"monster:1">>),
     Expected = #{ data => #{

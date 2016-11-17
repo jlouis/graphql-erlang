@@ -542,6 +542,22 @@ inject() ->
     				args => #{
     					id => #{ type => 'id!', description => "The Monster ID to retrieve" }
     				}},
+    			monsters => #{
+    				type => ['Monster'],
+    				description => "Request more than a single monster",
+    				resolve => fun(Ctx, none, #{ <<"ids">> := InputIDs }) ->
+    				    {ok, [begin
+    				        {monster, _} = OID = unwrap(ID),
+    				        {ok, M} = dirty_load(OID),
+    				        M
+    				     end || ID <- InputIDs]}
+    				end,
+    				args => #{
+    				    ids => #{
+    				        type => ['id!'],
+    				        description => "The monster IDs to retrieve" }
+    				}
+    		         },
     			thing => #{
     				type => 'Thing',
     				description => "Request a thing",

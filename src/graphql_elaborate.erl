@@ -166,6 +166,7 @@ field_arg(Path, K, V, SArgs) ->
     end.
 
 field_arg_type({non_null, Ty}) -> {non_null, field_arg_type(Ty)};
+field_arg_type({list, Ty}) -> {list, field_arg_type(Ty)};
 field_arg_type({scalar, _} = Ty) -> Ty;
 field_arg_type(Ty) when is_binary(Ty) ->
     case graphql_schema:lookup(Ty) of

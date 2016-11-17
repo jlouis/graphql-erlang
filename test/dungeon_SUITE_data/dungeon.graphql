@@ -31,6 +31,18 @@ query ScalarOutputCoercion($id : Id!) {
   }
 }
 
+query MultipleMonsters($ids : [Id!]) {
+    monsters(ids: $ids) {
+        id
+    }
+}
+
+query MultipleMonstersExpr {
+    monsters(ids: ["bW9uc3Rlcjox", "bW9uc3Rlcjoy"]) {
+        id
+    }
+}
+
 query InlineFragmentTest($id : Id!) {
   thing(id: $id) {
     ... on Monster {
