@@ -324,7 +324,6 @@ value_type(_Ctx, Path, {scalar, Tag}, V) ->
     end;
 value_type(_Ctx, _Path, _, {name, N, _}) -> N;
 value_type(_Ctx, _Path, Ty, S) when is_binary(S) ->
-    ct:pal("Ty: ~p", [Ty]),
     {scalar, string, S};
 value_type(_Ctx, _Path, _, I) when is_integer(I) -> {scalar, int, I};
 value_type(_Ctx, _Path, _, F) when is_float(F) -> {scalar, float, F};
