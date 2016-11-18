@@ -320,7 +320,7 @@ value_type(_Ctx, Path, {scalar, Tag}, V) ->
             graphql_err:abort(Path, {invalid_scalar_type, V})
     end;
 value_type(_Ctx, _Path, _, {name, N, _}) -> N;
-value_type(_Ctx, _Path, Ty, S) when is_binary(S) ->
+value_type(_Ctx, _Path, _, S) when is_binary(S) ->
     {scalar, string, S};
 value_type(_Ctx, _Path, _, I) when is_integer(I) -> {scalar, int, I};
 value_type(_Ctx, _Path, _, F) when is_float(F) -> {scalar, float, F};
@@ -328,7 +328,7 @@ value_type(_Ctx, _Path, _, true) -> {scalar, bool, true};
 value_type(_Ctx, _Path, _, false) -> {scalar, bool, false};
 value_type(_Ctx, _Path, _, Obj) when is_map(Obj) -> coerce_object(Obj).
 
-refl_list(Path, [], _T, Result) ->
+refl_list(_Path, [], _T, Result) ->
     {replace, lists:reverse(Result)};
 refl_list(Path, [A|As], T, Acc) ->
     case refl(Path, A, T) of
@@ -336,7 +336,7 @@ refl_list(Path, [A|As], T, Acc) ->
             refl_list(Path, As, T, [A|Acc]);
         {replace, V} ->
             refl_list(Path, As, T, [V|Acc]);
-        {error, Reason} ->
+        {error, _Reason} ->
             {error, {list, T}}
    end.
 
