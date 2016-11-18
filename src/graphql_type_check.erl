@@ -211,9 +211,6 @@ tc_field(Ctx, Path, #frag { id = '...', selection_set = SSet} = InlineFrag) ->
 tc_field(_Ctx, _Path, #field { schema = {introspection, typename} } = F) ->
     F;
 tc_field(Ctx, Path, #field { args = Args,
-                             schema = #schema_field { ty = {scalar, _}, args = SArgs } } = F) ->
-    F#field { args = tc_args(Ctx, [F | Path], Args, SArgs)};
-tc_field(Ctx, Path, #field { args = Args,
                              selection_set = SSet,
                              schema = #schema_field { args = SArgs }} = F) ->
     F#field { args = tc_args(Ctx, [F | Path], Args, SArgs),
