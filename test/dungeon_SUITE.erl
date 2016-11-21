@@ -1,5 +1,6 @@
 -module(dungeon_SUITE).
 -include_lib("common_test/include/ct.hrl").
+
 -compile(export_all).
 
 suite() ->
@@ -35,7 +36,7 @@ init_per_testcase(x, Config) ->
 init_per_testcase(_Case, Config) ->
     Config.
 
-end_per_testcase(x, Config) ->
+end_per_testcase(x, _Config) ->
     dbg:stop_clear(),
     ok;
 end_per_testcase(_Case, _Config) ->

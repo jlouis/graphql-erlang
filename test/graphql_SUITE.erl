@@ -57,7 +57,7 @@ init_per_testcase(x, Config) ->
 init_per_testcase(_Case, Config) ->
     Config.
 
-end_per_testcase(x, Config) ->
+end_per_testcase(x, _Config) ->
     dbg:stop_clear(),
     ok;
 end_per_testcase(_Case, _Config) ->
