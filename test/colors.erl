@@ -54,7 +54,7 @@ inject() ->
         				color => #{ type => 'Color', description => "" }
         			},
         			resolve => fun
-        			    (_, V, #{ <<"color">> := {enum, C} }) -> {ok, C};
+        			    (_, _V, #{ <<"color">> := {enum, C} }) -> {ok, C};
         			    (_, _V, #{}) -> {error, cannot_resolve_color}
         			end
         		}

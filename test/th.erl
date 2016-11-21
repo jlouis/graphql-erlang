@@ -67,7 +67,7 @@ v(Q) ->
             try
                Elab = graphql:elaborate(AST),
                {ok, #{
-                   ast := AST2,
+                   ast := _AST2,
                    fun_env := _FunEnv }} = graphql:type_check(Elab),
                ok = graphql:validate(AST),
                true
@@ -81,9 +81,9 @@ v(Q) ->
             false
     end.
 
-track_ets() ->
-    ets:new(graphql_SUITE_track, [named_table, public, {keypos, 1}]),
-    ok.
+%track_ets() ->
+%    ets:new(graphql_SUITE_track, [named_table, public, {keypos, 1}]),
+%    ok.
 
 track_new() ->
     T = erlang:monotonic_time(),

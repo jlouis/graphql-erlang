@@ -60,12 +60,12 @@ insert(Input) ->
           end,
     mnesia:transaction(Fun).
 
-update(Record) ->
-    mnesia:transaction(
-      fun() ->
-        ok = mnesia:write(Record),
-        Record
-      end).
+%update(Record) ->
+%    mnesia:transaction(
+%      fun() ->
+%        ok = mnesia:write(Record),
+%        Record
+%      end).
  
 load({room, ID}) ->
     load_txn(qlc:q([R || R <- mnesia:table(room), R#room.id == ID]));
@@ -129,7 +129,7 @@ inject_color() ->
     Color = {scalar, #{
     	id => 'Color',
     	description => "Represents a color in the system",
-    	input_coerce => fun (<<"#", R1, R2, G1, G2, B1, B2>> = X) ->
+    	input_coerce => fun (<<"#", R1, R2, G1, G2, B1, B2>> = _X) ->
                                 ct:pal("Input coercer called~n"),
                                 Red = binary_to_integer(<<R1, R2>>, 16),
                                 Green = binary_to_integer(<<G1, G2>>, 16),
@@ -237,7 +237,7 @@ inject_monster() ->
     	fields => #{
           id => #{
             type => 'id!',
-            resolve => fun(Ctx, #monster{ id = ID }, _) -> wrap({monster, ID}) end,
+            resolve => fun(_Ctx, #monster{ id = ID }, _) -> wrap({monster, ID}) end,
             description => "Unique identifiers of monsters" },
           name => #{
             type => 'string!',
@@ -534,22 +534,38 @@ inject() ->
     				type => 'Monster',
     				description => "Request a thing",
     				resolve =>
-    				    fun(Ctx, none, #{ <<"id">> := InputID }) ->
+    				    fun(_Ctx, none, #{ <<"id">> := InputID }) ->
     				        case unwrap(InputID) of
-    				            {monster, ID} = OID -> dirty_load(OID)
+    				            {monster, _ID} = OID -> dirty_load(OID)
     				        end
     				    end,
     				args => #{
     					id => #{ type => 'id!', description => "The Monster ID to retrieve" }
     				}},
+    			monsters => #{
+    				type => ['Monster'],
+    				description => "Request more than a single monster",
+    				resolve => fun(_Ctx, none, #{ <<"ids">> := InputIDs }) ->
+    				    {ok, [begin
+    				        {monster, _} = OID = unwrap(ID),
+    				        {ok, M} = dirty_load(OID),
+    				        M
+    				     end || ID <- InputIDs]}
+    				end,
+    				args => #{
+    				    ids => #{
+    				        type => ['id!'],
+    				        description => "The monster IDs to retrieve" }
+    				}
+    		         },
     			thing => #{
     				type => 'Thing',
     				description => "Request a thing",
     				resolve =>
-    				    fun(Ctx, none, #{ <<"id">> := InputID }) ->
+    				    fun(_Ctx, none, #{ <<"id">> := InputID }) ->
     				        case unwrap(InputID) of
-    				            {monster, ID} = OID -> dirty_load(OID);
-    				            {item, ID} = OID -> dirty_load(OID)
+    				            {monster, _ID} = OID -> dirty_load(OID);
+    				            {item, _ID} = OID -> dirty_load(OID)
     				        end
     				    end,
     				args => #{
@@ -559,9 +575,9 @@ inject() ->
     				type => 'Room',
     				description => "Request a particular room",
     				resolve =>
-    				  fun(Ctx, none, #{ <<"id">> := InputID }) ->
+    				  fun(_Ctx, none, #{ <<"id">> := InputID }) ->
     				    case unwrap(InputID) of
-    				        {room, ID} = OID -> dirty_load(OID);
+    				        {room, _ID} = OID -> dirty_load(OID);
     				        _ -> null
     				    end
     				  end,

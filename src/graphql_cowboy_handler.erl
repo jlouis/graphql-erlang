@@ -164,10 +164,10 @@ format_err({parser_error, {Line, graphql_scanner, Description}}) ->
         line => Line,
         message => iolist_to_binary(io_lib:format("~s", [Description])) }];
 
-format_err({parser_error, {Line, graphql_parser, _Description} = E}) ->
+format_err({parser_error, {Line, graphql_parser, Description}}) ->
     [#{ type => graphql_parser_error,
         line => Line,
-        message => iolist_to_binary(graphql_parser:format_error(E)) }];
+        message => iolist_to_binary(graphql_parser:format_error(Description)) }];
 
 format_err(invalid_input_variables) ->
     [#{ type => invalid_input_variables }];

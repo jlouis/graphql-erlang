@@ -211,9 +211,6 @@ tc_field(Ctx, Path, #frag { id = '...', selection_set = SSet} = InlineFrag) ->
 tc_field(_Ctx, _Path, #field { schema = {introspection, typename} } = F) ->
     F;
 tc_field(Ctx, Path, #field { args = Args,
-                             schema = #schema_field { ty = {scalar, _}, args = SArgs } } = F) ->
-    F#field { args = tc_args(Ctx, [F | Path], Args, SArgs)};
-tc_field(Ctx, Path, #field { args = Args,
                              selection_set = SSet,
                              schema = #schema_field { args = SArgs }} = F) ->
     F#field { args = tc_args(Ctx, [F | Path], Args, SArgs),
@@ -239,7 +236,7 @@ tc_args_(Ctx, Path, Args, [{Name, #schema_arg { ty = STy }} = SArg | Next], Acc)
         {error, Reason} ->
             graphql_err:abort([Name | Path], Reason);
         {ok, {_, #{ type := Ty, value := Val}} = A, NextArgs} ->
-            ValueType = value_type(Ctx, Path, graphql_ast:unwrap_type(Ty), Val),
+            ValueType = value_type(Ctx, Path, Ty, Val),
             SchemaType = schema_type(STy),
             case refl(Path, ValueType, SchemaType) of
                 ok ->
@@ -297,6 +294,10 @@ schema_type(Tag) ->
             exit({schema_not_found, Tag})
     end.
 
+value_type(Ctx, Path, {non_null, Ty}, V) ->
+    {non_null, value_type(Ctx, Path, Ty, V)};
+value_type(Ctx, Path, {list, Ty}, Vals) when is_list(Vals) ->
+    {list, [value_type(Ctx, Path, Ty, T) || T <- Vals]};
 value_type(#{ varenv := VE }, Path, _, {var, ID}) ->
     Name = graphql_ast:name(ID),
     case maps:get(Name, VE, not_found) of
@@ -312,30 +313,41 @@ value_type(_Ctx, Path, _, {enum, N}) ->
         not_found -> graphql_err:abort(Path, {unknown_enum, N});
         #enum_type {} = Enum -> Enum
     end;
-value_type(_Ctx, _Path, {scalar, Tag}, V) ->
+value_type(_Ctx, Path, {scalar, Tag}, V) ->
     case valid_scalar_value(V) of
         true -> {scalar, Tag, V};
-        false -> value_type(_Ctx, _Path, undefined, V)
+        false ->
+            graphql_err:abort(Path, {invalid_scalar_type, V})
     end;
 value_type(_Ctx, _Path, _, {name, N, _}) -> N;
-value_type(_Ctx, _Path, _, S) when is_binary(S) -> {scalar, string, S};
+value_type(_Ctx, _Path, _, S) when is_binary(S) ->
+    {scalar, string, S};
 value_type(_Ctx, _Path, _, I) when is_integer(I) -> {scalar, int, I};
 value_type(_Ctx, _Path, _, F) when is_float(F) -> {scalar, float, F};
 value_type(_Ctx, _Path, _, true) -> {scalar, bool, true};
 value_type(_Ctx, _Path, _, false) -> {scalar, bool, false};
-value_type(_Ctx, _Path, _, Obj) when is_map(Obj) -> coerce_object(Obj);
-value_type(Ctx, Path, {list, Ty}, {list, Ts}) when is_list(Ts) ->
-    {list, [value_type(Ctx, Path, Ty, T) || T <- Ts]}.
+value_type(_Ctx, _Path, _, Obj) when is_map(Obj) -> coerce_object(Obj).
+
+refl_list(_Path, [], _T, Result) ->
+    {replace, lists:reverse(Result)};
+refl_list(Path, [A|As], T, Acc) ->
+    case refl(Path, A, T) of
+        ok ->
+            refl_list(Path, As, T, [A|Acc]);
+        {replace, V} ->
+            refl_list(Path, As, T, [V|Acc]);
+        {error, _Reason} ->
+            {error, {list, T}}
+   end.
 
 %% EQ Match:
 refl(_Path, X, X) -> ok;
 %% Compound:
-refl(_Path, null, {non_null, _}) -> {error, non_null};
 refl(Path, {list, As}, {list, T}) ->
-    case lists:all(fun(X) -> refl(Path, X, T) == ok end, As) of
-        true -> ok;
-        false -> {error, {list, T}}
-    end;
+    refl_list(Path, As, T, []);
+refl(Path, {non_null, ValueType}, {non_null, SchemaType}) ->
+    refl(Path, ValueType, SchemaType);
+refl(_Path, null, {non_null, _}) -> {error, non_null};
 refl(_Path, null, _T) -> ok;
 refl(Path, {non_null, A}, T) -> refl(Path, A, T);
 refl(Path, A, {non_null, T}) -> refl(Path, A, T);
