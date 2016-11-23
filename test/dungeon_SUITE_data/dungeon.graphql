@@ -43,6 +43,12 @@ query MultipleMonstersExpr {
     }
 }
 
+query MultipleMonstersExprMissing {
+    monsters(ids: ["bW9uc3Rlcjox", "bW9uc3RlcjoxMDAw", "bW9uc3Rlcjoy"]) {
+        id
+    }
+}
+
 query InlineFragmentTest($id : Id!) {
   thing(id: $id) {
     ... on Monster {

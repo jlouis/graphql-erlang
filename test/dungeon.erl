@@ -543,8 +543,7 @@ inject() ->
     				resolve => fun(_Ctx, none, #{ <<"ids">> := InputIDs }) ->
     				    {ok, [begin
     				        {monster, _} = OID = unwrap(ID),
-    				        {ok, M} = dirty_load(OID),
-                            {ok, M}
+    				        dirty_load(OID)
     				     end || ID <- InputIDs]}
     				end,
     				args => #{

@@ -407,17 +407,36 @@ scalar_as_expression_coerce(Config) ->
 multiple_monsters(Config) ->
     ID1 = base64:encode(<<"monster:1">>),
     ID2 = base64:encode(<<"monster:2">>),
+    ID1000 = base64:encode(<<"monster:1000">>),
+
     #{ data := #{
         <<"monsters">> := [
             #{ <<"id">> := ID1 }, #{ <<"id">> := ID2 } ]
      }} = run(Config, <<"MultipleMonsters">>, #{ <<"ids">> => [ID1, ID2] }),
+
     #{ data := #{
         <<"monsters">> := [
             #{ <<"id">> := ID1 }, #{ <<"id">> := ID2 } ]
      }} = run(Config, <<"MultipleMonstersExpr">>, #{}),
-     
+
+    #{ data := #{
+        <<"monsters">> := [
+            #{ <<"id">> := ID1 }, #{ <<"id">> := ID2 } , null ]},
+       errors := [
+           #{path := [<<"monsters">>, <<"MultipleMonsters">>],
+             reason := not_found}]
+     } = run(Config, <<"MultipleMonsters">>, #{ <<"ids">> => [ID1, ID2, ID1000] }),
+
+    #{ data := #{
+        <<"monsters">> := [
+            #{ <<"id">> := ID1 }, null, #{ <<"id">> := ID2 } ]},
+       errors := [
+           #{path := [<<"monsters">>, <<"MultipleMonstersExprMissing">>],
+             reason := not_found}]
+     } = run(Config, <<"MultipleMonstersExprMissing">>, #{}),
+
      ok.
-        
+
 inline_fragment(Config) ->
     ID = base64:encode(<<"monster:1">>),
     Expected = #{ data => #{
