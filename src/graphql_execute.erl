@@ -160,8 +160,11 @@ complete_value(Path, Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
     lager:warning("Looking up type in executor: ~p", [Ty]),
     SchemaType = graphql_schema:get(Ty),
     complete_value(Path, Ctx, SchemaType, Fields, {ok, Value});
-complete_value(Path, Ctx, {non_null, InnerTy}, Fields, Val) ->
-    case complete_value(Path, Ctx, InnerTy, Fields, Val) of
+complete_value(Path, Ctx, {non_null, InnerTy}, Fields, Result) ->
+    %% Note we handle arbitrary results in this case. This makes sure errors
+    %% factor through the non-null handler here and that handles
+    %% nested {error, Reason} tuples correctly
+    case complete_value(Path, Ctx, InnerTy, Fields, Result) of
         {error, Reason} ->
             %% Rule: Along a path, there is at most one error, so if the underlying
             %% object is at fault, don't care too much about this level, just pass
@@ -172,43 +175,42 @@ complete_value(Path, Ctx, {non_null, InnerTy}, Fields, Val) ->
         {ok, _C, _E} = V ->
             V
     end;
+complete_value(_Path, _Ctx, _Ty, _Fields, {ok, null}) ->
+    {ok, null, []};
+complete_value(Path, _Ctx, {list, _}, _Fields, {ok, V}) when not is_list(V) ->
+    err(Path, not_a_list);
+complete_value(Path, Ctx, {list, InnerTy}, Fields, {ok, Value}) ->
+    complete_value_list(Path, Ctx, InnerTy, Fields, Value);
+complete_value(Path, _Ctx, #scalar_type { id = ID, output_coerce = OCoerce }, _Fields, {ok, Value}) ->
+    try OCoerce(Value) of
+        {ok, Result} -> {ok, Result, []};
+        {error, Reason} ->
+            err(Path, {output_coerce, ID, Value, Reason})
+    catch
+        Cl:Err ->
+            lager:warning("Output coercer crash: ~p, stack: ~p", [{Cl,Err}, erlang:get_stacktrace()]),
+            err(Path, {coerce_crash, ID, Value, {Cl, Err}})
+    end;
+complete_value(_Path, _Ctx, #enum_type {}, _Fields, {ok, Value}) when is_binary(Value) ->
+    %% TODO: Coercion handling for enumerated values!
+    {ok, Value, []};
+complete_value(_Path, _Ctx, #enum_type { values = Values }, _Fields, {ok, Value}) when is_integer(Value) ->
+    %% TODO: Coercion handling for enumerated values!
+    #enum_value { val = Result } = maps:get(Value, Values),
+    {ok, Result, []};
+complete_value(Path, Ctx, #interface_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
+    {ok, ResolvedType} = resolve_abstract_type(Resolver, Value),
+    complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
+complete_value(Path, Ctx, #union_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
+    {ok, ResolvedType} = resolve_abstract_type(Resolver, Value),
+    complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
+
+complete_value(Path, Ctx, #object_type{} = Ty, Fields, {ok, Value}) ->
+    SubSelectionSet = merge_selection_sets(Fields),
+    {Result, Errs} = execute_sset(Path, Ctx, SubSelectionSet, Ty, Value),
+    {ok, Result, Errs};
 complete_value(Path, _Ctx, _Ty, _Fields, {error, Reason}) ->
-    {ok, null, [#{ path => Path, reason => Reason }]};
-complete_value(Path, Ctx, Ty, Fields, {ok, Value}) ->
-    case Ty of
-        _SomeTy when Value == null ->
-            {ok, null, []};
-        {list, _} when not is_list(Value) ->
-            err(Path, not_a_list);
-        {list, InnerTy} ->
-            complete_value_list(Path, Ctx, InnerTy, Fields, Value);
-        #scalar_type { id = ID, output_coerce = OCoerce } ->
-            try OCoerce(Value) of
-                {ok, Result} -> {ok, Result, []};
-                {error, Reason} ->
-                    err(Path, {output_coerce, ID, Value, Reason})
-            catch
-                Cl:Err ->
-                    lager:warning("Output coercer crash: ~p, stack: ~p", [{Cl,Err}, erlang:get_stacktrace()]),
-                    err(Path, {coerce_crash, ID, Value, {Cl, Err}})
-            end;
-        %% TODO: Coercion handling for enumerated values!
-        #enum_type {} when is_binary(Value) ->
-            {ok, Value, []};
-        #enum_type { values = Values } when is_integer(Value) ->
-            #enum_value { val = Result } = maps:get(Value, Values),
-            {ok, Result, []};
-        #interface_type{ resolve_type = Resolver } ->
-            {ok, ResolvedType} = resolve_abstract_type(Resolver, Value),
-            complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
-        #union_type{ resolve_type = Resolver } ->
-            {ok, ResolvedType} = resolve_abstract_type(Resolver, Value),
-            complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
-        #object_type{} ->
-            SubSelectionSet = merge_selection_sets(Fields),
-            {Result, Errs} = execute_sset(Path, Ctx, SubSelectionSet, Ty, Value),
-            {ok, Result, Errs}
-    end.
+    {ok, null, [#{ path => Path, reason => Reason }]}.
 
 resolve_abstract_type(Resolver, Value) ->
     try Resolver(Value) of
