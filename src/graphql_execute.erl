@@ -29,7 +29,8 @@ execute_request(InitialCtx, {document, Operations}) ->
     end.
 
 complete_top_level(Res, []) -> #{ data => Res };
-complete_top_level(Res, Errs) -> #{ data => Res, errors => Errs }.
+complete_top_level(Res, Errs) ->
+    #{ data => Res, errors => Errs}.
 
 execute_query(Ctx, #op { selection_set = SSet,
                           schema = QType } = Op) ->

@@ -202,7 +202,16 @@ decode_json_map(Data) when is_binary(Data) ->
     end.
 
 %% @private
+encode_json(#{ errors := Errs0 } = Data) ->
+    %%% TODO remove this hack - we can't rely on gryphon_err:format/1 unless
+    %%%      gryphon_common is in our app(.src) See also
+    %%%     https://trello.com/c/PCqjmhwb
+    Errs = [ E#{reason => convert_tuple(R)} || #{reason := R} = E <- Errs0 ],
+    encode_json_(Data#{errors => Errs});
 encode_json(Data) ->
+    encode_json_(Data).
+
+encode_json_(Data) ->
     try jsx:encode(Data, [])
     catch error:badarg ->
         error_logger:info_msg("~p crashed while trying to encode the graphql:execute/2 result to JSON:~n~p~n~nStacktrace:~n~p~n", [?MODULE, Data, erlang:get_stacktrace()]),
@@ -211,3 +220,8 @@ encode_json(Data) ->
                                     type => <<"internal_error">>}]
                     })
     end.
+
+convert_tuple(R) when is_tuple(R) ->
+    gryphon_err:format(R);
+convert_tuple(V) ->
+    V.
