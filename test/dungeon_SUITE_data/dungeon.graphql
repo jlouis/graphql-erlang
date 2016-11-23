@@ -49,11 +49,12 @@ query MultipleMonstersExprMissing {
     }
 }
 
-query MultipleMonstersNonNull($ids : [Id!]) {
-    monsters_nonnull(ids: $ids) {
+query MultipleRooms($ids : [Id!]) {
+    rooms(ids: $ids) {
         id
     }
 }
+
 
 query InlineFragmentTest($id : Id!) {
   thing(id: $id) {

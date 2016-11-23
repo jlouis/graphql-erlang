@@ -185,8 +185,19 @@ complete_value(Path, Ctx, Ty, Fields, {ok, Value}) ->
                 {ok, L, IE} ->
                     %% There might have been errors in the inner processing, but all of
                     %% those were errors we could handle by returning null values for
-                    %% them.
-                    {ok, L, IE};
+                    %% them - except if the inner type is a non_null
+                    case InnerTy of
+                        {non_null, _} ->
+                            case lists:member(null,L) of
+                                true ->
+                                    {error, Errors} = err(Path, null_value, IE),
+                                    {ok, null, Errors};
+                                false ->
+                                    {ok, L, IE}
+                            end;
+                        _ ->
+                            {ok, L, IE}
+                    end;
                 {error, Reasons} ->
                     %% At least one of the things inside could not be handled. Since we
                     %% return at most one error per field, we just take that first error we
@@ -258,7 +269,6 @@ complete_list_value_result(Completed) ->
 
 index([]) -> [];
 index(L) -> lists:zip(lists:seq(0, length(L)-1), L).
-
 
 find_operation(_N, []) -> not_found;
 find_operation(N, [#op { id = ID } = O | Next]) ->

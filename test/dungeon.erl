@@ -552,21 +552,6 @@ inject() ->
     				        description => "The monster IDs to retrieve" }
     				}
     		         },
-				monsters_nonnull => #{
-    				type => ['Monster!'],
-    				description => "Request more than a single monster",
-    				resolve => fun(_Ctx, none, #{ <<"ids">> := InputIDs }) ->
-    				    {ok, [begin
-    				        {monster, _} = OID = unwrap(ID),
-    				        dirty_load(OID)
-    				     end || ID <- InputIDs]}
-    				end,
-    				args => #{
-    				    ids => #{
-    				        type => ['id!'],
-    				        description => "The monster IDs to retrieve" }
-    				}
-    		         },
 
     			thing => #{
     				type => 'Thing',
@@ -593,7 +578,22 @@ inject() ->
     				  end,
     				args => #{
     					id => #{ type => 'id!', description => "The Room ID to retrieve" }
-    				}}
+    				}},
+				rooms => #{
+    				type => ['Room!'],
+    				description => "Request multiple rooms, that can't be null",
+    				resolve => fun(_Ctx, none, #{ <<"ids">> := InputIDs }) ->
+    				    {ok, [begin
+    				        {room, _ID} = OID = unwrap(ID),
+    				        dirty_load(OID)
+    				     end || ID <- InputIDs]}
+    				end,
+    				args => #{
+    				    ids => #{
+    				        type => ['id!'],
+    				        description => "The IDs of the Rooms to retrieve" }
+    				}
+    		         }
     	}}},
     	ok = graphql:insert_schema_definition(QueryRoot),
     	

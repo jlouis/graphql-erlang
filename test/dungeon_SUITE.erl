@@ -60,7 +60,7 @@ groups() ->
                  complex_modifiers,
                  simple_field_merge,
                  nested_field_merge,
-                 multiple_monsters
+                 multiple_monsters_and_rooms
                  ]},
 
     Errors = {errors, [],
@@ -404,7 +404,7 @@ scalar_as_expression_coerce(Config) ->
     true = (PF - 0.01) < 0.00001,
     ok.
 
-multiple_monsters(Config) ->
+multiple_monsters_and_rooms(Config) ->
     ID1 = base64:encode(<<"monster:1">>),
     ID2 = base64:encode(<<"monster:2">>),
     ID1000 = base64:encode(<<"monster:1000">>),
@@ -436,6 +436,20 @@ multiple_monsters(Config) ->
                   #{path := [3, <<"monsters">>, <<"MultipleMonstersExprMissing">>],
                     reason := not_found}]
      } = run(Config, <<"MultipleMonstersExprMissing">>, #{}),
+
+     Room1 = base64:encode(<<"room:1">>),
+
+     #{ data := #{
+        <<"rooms">> := [#{<<"id">> := Room1}]}
+      } = run(Config, <<"MultipleRooms">>, #{ <<"ids">> => [Room1]}),
+
+     #{ data := #{
+        <<"rooms">> := null
+         },
+        errors := [
+                   #{path := [<<"rooms">>,<<"MultipleRooms">>], reason := null_value},
+                   #{path := [1,<<"rooms">>,<<"MultipleRooms">>],reason := not_found}]
+      } = run(Config, <<"MultipleRooms">>, #{ <<"ids">> => [Room1, base64:encode(<<"room:2">>)]}),
 
      ok.
 
