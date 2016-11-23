@@ -552,6 +552,22 @@ inject() ->
     				        description => "The monster IDs to retrieve" }
     				}
     		         },
+				monsters_nonnull => #{
+    				type => ['Monster!'],
+    				description => "Request more than a single monster",
+    				resolve => fun(_Ctx, none, #{ <<"ids">> := InputIDs }) ->
+    				    {ok, [begin
+    				        {monster, _} = OID = unwrap(ID),
+    				        dirty_load(OID)
+    				     end || ID <- InputIDs]}
+    				end,
+    				args => #{
+    				    ids => #{
+    				        type => ['id!'],
+    				        description => "The monster IDs to retrieve" }
+    				}
+    		         },
+
     			thing => #{
     				type => 'Thing',
     				description => "Request a thing",
