@@ -234,9 +234,9 @@ resolve_abstract_type(Resolver, Value) ->
            lager:warning("Resolve_type crashed: ~p", [erlang:get_stacktrace()]),
            {error, {resolve_type_crash, {Cl,Err}}}
     end.
-            
+
 complete_value_list(Path, Ctx, Ty, Fields, Results) ->
-    Completed = [complete_value(Path, Ctx, Ty, Fields, {ok, R}) || R <- Results],
+    Completed = [complete_value(Path, Ctx, Ty, Fields, R) || R <- Results],
     case complete_list_value_result(0, Completed) of
         {error, K, Reason} ->
             err([K | Path], Reason);
@@ -308,6 +308,7 @@ default_resolver(#{ field := Field}, Cur, _Args) ->
         {'$lazy', F} when is_function(F, 0) -> F();
         not_found ->
             {error, not_found};
+        V when is_list(V) -> {ok, [ {ok, R} || R <- V ]};
         V -> {ok, V}
     end.
 
