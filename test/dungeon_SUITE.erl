@@ -423,16 +423,18 @@ multiple_monsters(Config) ->
         <<"monsters">> := [
             #{ <<"id">> := ID1 }, #{ <<"id">> := ID2 } , null ]},
        errors := [
-           #{path := [<<"monsters">>, <<"MultipleMonsters">>],
+           #{path := [2, <<"monsters">>, <<"MultipleMonsters">>],
              reason := not_found}]
      } = run(Config, <<"MultipleMonsters">>, #{ <<"ids">> => [ID1, ID2, ID1000] }),
 
     #{ data := #{
         <<"monsters">> := [
-            #{ <<"id">> := ID1 }, null, #{ <<"id">> := ID2 } ]},
+            #{ <<"id">> := ID1 }, null, #{ <<"id">> := ID2 }, null ]},
        errors := [
-           #{path := [<<"monsters">>, <<"MultipleMonstersExprMissing">>],
-             reason := not_found}]
+                  #{path := [1, <<"monsters">>, <<"MultipleMonstersExprMissing">>],
+                    reason := not_found},
+                  #{path := [3, <<"monsters">>, <<"MultipleMonstersExprMissing">>],
+                    reason := not_found}]
      } = run(Config, <<"MultipleMonstersExprMissing">>, #{}),
 
      ok.

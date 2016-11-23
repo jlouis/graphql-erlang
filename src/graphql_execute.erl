@@ -173,8 +173,8 @@ complete_value(Path, Ctx, Ty, Fields, {ok, Value}) ->
                     err(Path, Reason);
                 {ok, null, InnerErrs} ->
                     err(Path, null_value, InnerErrs);
-                {ok, CompletedResult, Errs} ->
-                    {ok, CompletedResult, Errs}
+                {ok, _C, _E} = V ->
+                    V
             end;
         _SomeTy when Value == null ->
             {ok, null, []};
@@ -236,23 +236,29 @@ resolve_abstract_type(Resolver, Value) ->
     end.
 
 complete_value_list(Path, Ctx, Ty, Fields, Results) ->
-    Completed = [complete_value(Path, Ctx, Ty, Fields, R) || R <- Results],
-    case complete_list_value_result(0, Completed) of
-        {error, K, Reason} ->
-            err([K | Path], Reason);
-        L ->
+    IndexedResults = index(Results),
+    Completed = [{I, complete_value([I | Path], Ctx, Ty, Fields, R)} || {I, R} <- IndexedResults],
+    case complete_list_value_result(Completed) of
+        {error, Reasons} ->
+            {error, [begin {_, [Emap]} = err([I | Path], R, []), Emap end || {I, R} <- Reasons]};
+        {ok, L} ->
             {Vals, Errs} = lists:unzip(L),
             Len = length(Completed),
             Len = length(Vals),
             {ok, Vals, lists:concat(Errs)}
     end.
 
+complete_list_value_result([]) ->
+    {ok, []};
+complete_list_value_result(Completed) ->
+    case lists:partition(fun ({_, {error, _}}) -> true; (_) -> false end, Completed) of
+        {[], Vals} -> {ok, [{V, Es} || {_, {ok, V, Es}} <- Vals]};
+        {Errs, _} -> {error, [{I, R}|| {I, {error, R}} <- Errs]}
+    end.
 
-complete_list_value_result(_K, []) -> [];
-complete_list_value_result(K, [{ok, V, Es} | Vals]) ->
-    [{V, Es} | complete_list_value_result(K+1, Vals)];
-complete_list_value_result(K, [{error, Reason} | _]) ->
-    {error, K, Reason}.
+index([]) -> [];
+index(L) -> lists:zip(lists:seq(0, length(L)-1), L).
+
 
 find_operation(_N, []) -> not_found;
 find_operation(N, [#op { id = ID } = O | Next]) ->
