@@ -37,7 +37,7 @@ execute_query(Ctx, #op { selection_set = SSet,
     {Res, Errs} =
         execute_sset([graphql_ast:id(Op)], Ctx, SSet, QType, none),
     complete_top_level(Res, Errs).
-    
+
 execute_mutation(Ctx, #op { selection_set = SSet,
                              schema = QType } = Op) ->
     #object_type{} = QType,
@@ -48,8 +48,7 @@ execute_mutation(Ctx, #op { selection_set = SSet,
 execute_sset(Path, Ctx, SSet, Type, Value) ->
     GroupedFields = collect_fields(Path, Ctx, Type, SSet),
     execute_sset(Path, Ctx, GroupedFields, Type, Value, [], []).
-    
-    
+
 execute_sset(_Path, _Ctx, [], _Type, _Value, Map, Errs) ->
     {maps:from_list(lists:reverse(Map)), Errs};
 execute_sset(Path, Ctx, [{Key, [F|_] = Fields} | Next], Type, Value, Map, Errs) ->
@@ -66,7 +65,7 @@ execute_sset(Path, Ctx, [{Key, [F|_] = Fields} | Next], Type, Value, Map, Errs) 
                     {null, Errors}
             end
     end.
-    
+
 typename(#object_type { id = ID }) -> ID.
 
 lookup_field(#field { id = ID }, Obj) ->
@@ -80,8 +79,8 @@ lookup_field_name(N, #interface_type { fields = FS }) ->
 
 collect_fields(Path, Ctx, Type, SSet) -> collect_fields(Path, Ctx, Type, SSet, #{}).
 
-collect_fields(Path, Ctx, Type, SSet, Visited) -> collect_fields(Path, Ctx, Type, SSet, Visited, orddict:new()).
-   
+collect_fields(Path, Ctx, Type, SSet, Visited) ->
+    collect_fields(Path, Ctx, Type, SSet, Visited, orddict:new()).
 collect_fields(_Path, _Ctx, _Type, [], _Visited, Grouped) ->
     Grouped;
 collect_fields(Path, Ctx, Type, [#field{} = S |SS], Visited, Grouped) ->
@@ -110,11 +109,11 @@ collect_fields(Path, Ctx, Type, [S |SS], Visited, Grouped) ->
                 false ->
                     collect_fields(Path, Ctx, Type, SS, Visited, Grouped);
                 true ->
-                    FragGrouped = 
+                    FragGrouped =
                         collect_fields([name(FragID) | Path], Ctx, Type, FragmentSSet, Visited),
                     Grouped2 = collect_groups(FragGrouped, Grouped),
                     collect_fields(Path, Ctx, Type, SS, Visited, Grouped2)
-            end            
+            end
     end.
 
 collect_groups([], Grouped) -> Grouped;
@@ -139,7 +138,7 @@ execute_field(Path, Ctx, ObjType, Value, [F|_] = Fields, #schema_field { resolve
     Fun = resolver_function(RF),
     ResolvedValue = resolve_field_value(Ctx, ObjType, Value, Name, Fun, Args),
     complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue).
-    
+
 resolve_field_value(Ctx, ObjectType, Value, Name, Fun, Args) ->
     try Fun(Ctx#{ field => Name, object_type => ObjectType }, Value, Args) of
         {error, Reason} -> {error, Reason};
@@ -352,7 +351,7 @@ output_coerce_type(UserDefined) when is_binary(UserDefined) ->
 
 resolve_args(Ctx, #field { args = As }) ->
     resolve_args_(Ctx, As, #{}).
-    
+
 resolve_args_(_Ctx, [], Acc) -> Acc;
 resolve_args_(Ctx, [{ID, Val} | As], Acc) ->
     K = name(ID),
@@ -449,11 +448,11 @@ err(Path, Reason, More) when is_list(More) ->
 %% -- CONTEXT CANONICALIZATION ------------
 canon_context(#{ params := Params } = Ctx) ->
      Ctx#{ params := canon_params(Params) }.
-     
+
 canon_params(Ps) ->
      KVs = maps:to_list(Ps),
      maps:from_list([{binarize(K), V} || {K, V} <- KVs]).
-     
+
 binarize(A) when is_atom(A) -> atom_to_binary(A, utf8);
 binarize(B) when is_binary(B) -> B;
 binarize(L) when is_list(L) -> list_to_binary(L).

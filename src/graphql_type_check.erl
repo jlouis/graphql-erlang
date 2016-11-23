@@ -36,7 +36,7 @@ tc(Ctx, Path, Clauses) ->
 
 tc_clauses(Ctx, Path, Cs) ->
     [tc_clause(Ctx, Path, C) || C <- Cs].
-    
+
 tc_clause(Ctx, Path, #frag{} = Frag) -> tc_frag(Ctx, Path, Frag);
 tc_clause(Ctx, Path, #op{} = Op) -> tc_op(Ctx, Path, Op).
 
@@ -65,7 +65,7 @@ x_params(FunEnv, OpName, Params) ->
     end.
 
 tc_params(Path, TyVarEnv, InitialParams) ->
-    F = 
+    F =
       fun(K, V0, PS) ->
         case tc_param(Path, K, V0, maps:get(K, PS, not_found)) of
             ok -> PS;
@@ -80,7 +80,7 @@ tc_param(_Path, _K, #vardef { default = Default }, not_found) ->
     {replace, Default};
 tc_param(Path, K, #vardef { ty = Ty }, Val) ->
     check_param([K | Path], Ty, Val).
-    
+
 %% When checking params, the top level has been elaborated by the
 %% elaborator, but the levels under it has not. So we have a case where
 %% we need to look up underlying types and check them.
@@ -215,7 +215,7 @@ tc_field(Ctx, Path, #field { args = Args,
                              schema = #schema_field { args = SArgs }} = F) ->
     F#field { args = tc_args(Ctx, [F | Path], Args, SArgs),
               selection_set = tc_sset(Ctx, [F | Path], SSet) }.
-            
+
 %% -- ARGS -------------------------------------
 tc_args(Ctx, Path, Args, Schema) ->
     NArgs = names(Args),
@@ -227,7 +227,7 @@ tc_args(Ctx, Path, Args, Schema) ->
     end.
 
 names(Args) -> [{graphql_ast:name(K), V} || {K, V} <- Args].
-     
+
 tc_args_(_Ctx, _Path, [], [], Acc) -> Acc;
 tc_args_(_Ctx, Path, [_|_] = Args, [], _Acc) ->
     graphql_err:abort(Path, {excess_args, Args});
@@ -347,7 +347,7 @@ refl(Path, {list, As}, {list, T}) ->
     refl_list(Path, As, T, []);
 refl(Path, {non_null, ValueType}, {non_null, SchemaType}) ->
     refl(Path, ValueType, SchemaType);
-refl(_Path, null, {non_null, _}) -> {error, non_null};
+refl(_Path, kull, {non_null, _}) -> {error, non_null};
 refl(_Path, null, _T) -> ok;
 refl(Path, {non_null, A}, T) -> refl(Path, A, T);
 refl(Path, A, {non_null, T}) -> refl(Path, A, T);
@@ -370,7 +370,7 @@ refl(_Path, A, T) -> {error, A, T}.
 
 coerce_object(Obj) when is_map(Obj) ->
     coerce_object_(Obj).
-    
+
 coerce_object_(Obj) when is_map(Obj) ->
     Elems = maps:to_list(Obj),
     maps:from_list([{coerce_name(K), coerce_object_(V)} || {K, V} <- Elems]);
