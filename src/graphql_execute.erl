@@ -152,8 +152,6 @@ resolve_field_value(Ctx, ObjectType, Value, Name, Fun, Args) ->
             {error, resolver_crash}
     end.
 
-complete_value(Path, _Ctx, _Ty, _Fields, {error, Reason}) ->
-    {ok, null, [#{ path => Path, reason => Reason }]};
 complete_value(Path, Ctx, Ty, Fields, {ok, {enum, Value}}) ->
     complete_value(Path, Ctx, Ty, Fields, {ok, Value});
 complete_value(Path, Ctx, {scalar, Scalar}, Fields, {ok, Value}) ->
@@ -162,49 +160,28 @@ complete_value(Path, Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
     lager:warning("Looking up type in executor: ~p", [Ty]),
     SchemaType = graphql_schema:get(Ty),
     complete_value(Path, Ctx, SchemaType, Fields, {ok, Value});
+complete_value(Path, Ctx, {non_null, InnerTy}, Fields, Val) ->
+    case complete_value(Path, Ctx, InnerTy, Fields, Val) of
+        {error, Reason} ->
+            %% Rule: Along a path, there is at most one error, so if the underlying
+            %% object is at fault, don't care too much about this level, just pass
+            %% on the error
+            err(Path, Reason);
+        {ok, null, InnerErrs} ->
+            err(Path, null_value, InnerErrs);
+        {ok, _C, _E} = V ->
+            V
+    end;
+complete_value(Path, _Ctx, _Ty, _Fields, {error, Reason}) ->
+    {ok, null, [#{ path => Path, reason => Reason }]};
 complete_value(Path, Ctx, Ty, Fields, {ok, Value}) ->
     case Ty of
-        {non_null, InnerTy} ->
-            case complete_value(Path, Ctx, InnerTy, Fields, {ok, Value}) of
-                {error, Reason} ->
-                    %% Rule: Along a path, there is at most one error, so if the underlying
-                    %% object is at fault, don't care too much about this level, just pass
-                    %% on the error
-                    err(Path, Reason);
-                {ok, null, InnerErrs} ->
-                    err(Path, null_value, InnerErrs);
-                {ok, _C, _E} = V ->
-                    V
-            end;
         _SomeTy when Value == null ->
             {ok, null, []};
         {list, _} when not is_list(Value) ->
             err(Path, not_a_list);
         {list, InnerTy} ->
-            case complete_value_list(Path, Ctx, InnerTy, Fields, Value) of
-                {ok, L, IE} ->
-                    %% There might have been errors in the inner processing, but all of
-                    %% those were errors we could handle by returning null values for
-                    %% them - except if the inner type is a non_null
-                    case InnerTy of
-                        {non_null, _} ->
-                            case lists:member(null,L) of
-                                true ->
-                                    {error, Errors} = err(Path, null_value, IE),
-                                    {ok, null, Errors};
-                                false ->
-                                    {ok, L, IE}
-                            end;
-                        _ ->
-                            {ok, L, IE}
-                    end;
-                {error, Reasons} ->
-                    %% At least one of the things inside could not be handled. Since we
-                    %% return at most one error per field, we just take that first error we
-                    %% run into and report that. We can extend this later to handle more
-                    %% than one error, if necessary.
-                    {ok, null, Reasons}
-            end;
+            complete_value_list(Path, Ctx, InnerTy, Fields, Value);
         #scalar_type { id = ID, output_coerce = OCoerce } ->
             try OCoerce(Value) of
                 {ok, Result} -> {ok, Result, []};
@@ -251,7 +228,7 @@ complete_value_list(Path, Ctx, Ty, Fields, Results) ->
     Completed = [{I, complete_value([I | Path], Ctx, Ty, Fields, R)} || {I, R} <- IndexedResults],
     case complete_list_value_result(Completed) of
         {error, Reasons} ->
-            {error, [begin {_, [Emap]} = err([I | Path], R, []), Emap end || {I, R} <- Reasons]};
+            {ok, null, Reasons};
         {ok, L} ->
             {Vals, Errs} = lists:unzip(L),
             Len = length(Completed),
@@ -259,12 +236,15 @@ complete_value_list(Path, Ctx, Ty, Fields, Results) ->
             {ok, Vals, lists:concat(Errs)}
     end.
 
-complete_list_value_result([]) ->
-    {ok, []};
 complete_list_value_result(Completed) ->
-    case lists:partition(fun ({_, {error, _}}) -> true; (_) -> false end, Completed) of
+    case lists:partition(
+           fun
+               ({_, {error, _}}) -> true;
+               (_) -> false
+           end,
+           Completed) of
         {[], Vals} -> {ok, [{V, Es} || {_, {ok, V, Es}} <- Vals]};
-        {Errs, _} -> {error, [{I, R}|| {I, {error, R}} <- Errs]}
+        {Errs, _} -> {error, lists:concat([R || {_, {error, R}} <- Errs])}
     end.
 
 index([]) -> [];

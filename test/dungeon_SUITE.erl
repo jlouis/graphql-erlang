@@ -447,7 +447,7 @@ multiple_monsters_and_rooms(Config) ->
         <<"rooms">> := null
          },
         errors := [
-                   #{path := [<<"rooms">>,<<"MultipleRooms">>], reason := null_value},
+                   #{path := [1,<<"rooms">>,<<"MultipleRooms">>], reason := null_value},
                    #{path := [1,<<"rooms">>,<<"MultipleRooms">>],reason := not_found}]
       } = run(Config, <<"MultipleRooms">>, #{ <<"ids">> => [Room1, base64:encode(<<"room:2">>)]}),
 
