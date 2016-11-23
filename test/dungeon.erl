@@ -151,11 +151,6 @@ inject_color() ->
     ok = graphql:insert_schema_definition(Color),
     ok.
 
-ok(Data) -> ok(Data, []).
-
-ok([], Acc) -> {ok, lists:reverse(Acc)};
-ok([{ok, R} | Next], Acc) -> ok(Next, [R | Acc]).
-
 inject_monster() ->
     StatsInput = {input_object, #{
                id => 'StatsInput',
@@ -267,7 +262,7 @@ inject_monster() ->
             type => ['Thing'],
             resolve =>
                 fun(_, #monster { inventory = INV }, _) ->
-                        ok([load(OID) || OID <- INV])
+                        {ok, [load(OID) || OID <- INV]}
                 end,
             description => "The monsters inventory" },
           hp => #{
@@ -293,24 +288,24 @@ inject_monster() ->
                 	description => "The minimum attack value for the stats" } },
             resolve => fun (_, #monster{ stats = SS }, #{ <<"minAttack">> := Min }) ->
                 ct:pal("Stats: ~p, Min: ~p", [SS, Min]),
-                {ok, [S || S <- SS, S#stats.attack >= Min]}
+                {ok, [{ok, S} || S <- SS, S#stats.attack >= Min]}
              end,
             description => "The stats of the monster" },
           statsVariantOne => #{
             type => {non_null, ['Stats']},
             description => "Monster stats, modified by non-null",
-            resolve => fun(_, #monster{ stats = S}, _) -> {ok, S} end },
+            resolve => fun(_, #monster{ stats = Ss}, _) -> {ok, [{ok, S} || S <- Ss]} end },
           statsVariantTwo => #{
             type => ['Stats!'],
             description => "Monster stats where the inner object is modified by non-null",
-            resolve => fun(_, #monster{ stats = S}, _) -> {ok, S} end },
+            resolve => fun(_, #monster{ stats = Ss}, _) -> {ok, [{ok, S} || S <- Ss]} end },
           statsVariantThree => #{
             type => {non_null, ['Stats!']},
             description => "Monster stats where the inner object is modified by non-null",
-            resolve => fun(_, #monster{ stats = S}, _) -> {ok, S} end },
+            resolve => fun(_, #monster{ stats = Ss}, _) -> {ok, [{ok, S} || S <- Ss]} end },
           properties => #{
             type => ['Property'],
-            resolve => fun(_, #monster { properties = Props }, _) -> {ok, Props} end,
+            resolve => fun(_, #monster { properties = Props }, _) -> {ok, [{ok, P} || P <- Props]} end,
             description => "Monster properies"
           }
     	}}},
@@ -368,7 +363,7 @@ inject_room() ->
     				type => ['Thing'],
     				resolve =>
     				  fun(_, #room { contents = Contents }, _) ->
-    				    ok([load(OID) || OID <- Contents])
+                              {ok, [load(OID) || OID <- Contents]}
     				  end,
     				description => "Things in the room" }
     	}}},
@@ -473,7 +468,7 @@ inject_item() ->
     			contents => #{
     				type => ['Thing'],
     				resolve => fun(_, #item { contents = Cts }, _) ->
-    				    ok([load(OID) || OID <- Cts]) end,
+                                       {ok, [load(OID) || OID <- Cts]} end,
     				description => "The Items inside this item, if any" }
     	}}},
     ok = graphql:insert_schema_definition(Item),
@@ -549,7 +544,7 @@ inject() ->
     				    {ok, [begin
     				        {monster, _} = OID = unwrap(ID),
     				        {ok, M} = dirty_load(OID),
-    				        M
+                            {ok, M}
     				     end || ID <- InputIDs]}
     				end,
     				args => #{

@@ -138,13 +138,8 @@ get_character(ID) ->
         X -> {ok, X}
     end.
 
-ok(Data) -> ok(Data, []).
-
-ok([], Acc) -> {ok, lists:reverse(Acc)};
-ok([{ok, Val} | Next], Acc) -> ok(Next, [Val | Acc]).
-
 get_friends(#{ <<"friends">> := Friends }) ->
-    ok([get_character(F) || F <- Friends]).
+    {ok, [get_character(F) || F <- Friends]}.
     
 get_hero(_Ctx, #{ <<"episode">> := {enum, <<"EMPIRE">>} }) ->
     {Humans, _} = star_wars(),

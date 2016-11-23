@@ -91,10 +91,7 @@ pic_resolve(_Ctx, #{ <<"id">> := ID }, #{ <<"width">> := W, <<"height">> := H })
     {ok, get_pic(ID, W, H)}.
 
 query_feed_resolve(_Ctx, _, _) ->
-    ok([article(X) || X <- lists:seq(1,10)]).
-
-ok(Data) ->
-    {ok, [X || {ok, X} <- Data]}.
+    {ok, [article(X) || X <- lists:seq(1,10)]}.
 
 article(ID) ->
     IDBin = integer_to_binary(ID),
