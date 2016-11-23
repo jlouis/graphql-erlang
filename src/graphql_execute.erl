@@ -138,7 +138,7 @@ execute_field(Path, Ctx, ObjType, Value, [F|_] = Fields, #schema_field { resolve
     Args = resolve_args(Ctx, F),
     Fun = resolver_function(RF),
     ResolvedValue = resolve_field_value(Ctx, ObjType, Value, Name, Fun, Args),
-    complete_value([Name|Path], Ctx, ElaboratedTy, Fields, ResolvedValue).
+    complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue).
     
 resolve_field_value(Ctx, ObjectType, Value, Name, Fun, Args) ->
     try Fun(Ctx#{ field => Name, object_type => ObjectType }, Value, Args) of
