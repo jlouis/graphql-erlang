@@ -376,9 +376,9 @@ value(_Ctx, #{ type := Ty, value := {enum, E}}) ->
         atom -> binary_to_atom(N, utf8);
         tagged -> {enum, N}
     end;
-value(Ctx, #{ type := [Ty], value := {list, Vals}}) ->
+value(Ctx, #{ type := {list, Ty}, value := {list, Vals}}) ->
     [value(Ctx, {Ty, V}) || V <- Vals];
-value(Ctx, #{ type := [Ty], value := Vals}) when is_list(Vals) ->
+value(Ctx, #{ type := {list, Ty}, value := Vals}) when is_list(Vals) ->
     [value(Ctx, {Ty, V}) || V <- Vals];
 value(Ctx, #{ type := {non_null, Ty}, value := V}) ->
     value(Ctx, #{ type => Ty, value => V});
