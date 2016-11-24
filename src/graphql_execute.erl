@@ -239,14 +239,14 @@ complete_value_list(Path, Ctx, Ty, Fields, Results) ->
     end.
 
 complete_list_value_result(Completed) ->
-    case lists:partition(
+    case lists:any(
            fun
                ({_, {error, _}}) -> true;
                (_) -> false
            end,
            Completed) of
-        {[], Vals} -> {ok, [{V, Es} || {_, {ok, V, Es}} <- Vals]};
-        {Errs, _} -> {error, lists:concat([R || {_, {error, R}} <- Errs])}
+        true -> {error, lists:concat([R || {_, {error, R}} <- Completed])};
+        false -> {ok, [{V, Es} || {_, {ok, V, Es}} <- Completed]}
     end.
 
 index([]) -> [];
