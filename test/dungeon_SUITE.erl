@@ -311,6 +311,7 @@ complex_modifiers(Config) ->
       <<"stats">> => [
         %% Head ONE!
         #{
+          % resolver for attack field on Stats returns {ok, null} when attack is 13
           <<"attack">> => 13,
           <<"shellScripting">> => 5,
           <<"yell">> => <<"I'M READY">> },
@@ -324,7 +325,7 @@ complex_modifiers(Config) ->
                           <<"monster">> := #{
                             <<"id">> := MonsterID } } } } =
              run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
-    
+
     %% Standard Query
     #{ data :=
         #{ <<"monster">> := #{
@@ -352,10 +353,18 @@ complex_modifiers(Config) ->
         #{ <<"monster">> := #{
             <<"statsVariantTwo">> := null  }}} =
             run(Config, <<"MonsterStatsTwo">>, #{ <<"id">> => MonsterID }),
+
     %% If the list may not be null, make sure the error propagates to the wrapper object.
     #{ data :=
-        #{ <<"monster">> := null }} =
-            run(Config, <<"MonsterStatsThree">>, #{ <<"id">> => MonsterID }),
+        #{ <<"monster">> := null },
+        errors := [#{path := [<<"statsVariantThree">>, <<"monster">>, <<"MonsterStatsThree">>],
+                     reason := null_value},
+                   #{path := [0,<<"statsVariantThree">>,<<"monster">>,<<"MonsterStatsThree">>],
+                     reason := null_value},
+                   #{path := [<<"attack">>, 0,<<"statsVariantThree">>,<<"monster">>,<<"MonsterStatsThree">>],
+                     reason := null_value}]
+     } = run(Config, <<"MonsterStatsThree">>, #{ <<"id">> => MonsterID }),
+
     ok.
 
 non_null_field(Config) ->
