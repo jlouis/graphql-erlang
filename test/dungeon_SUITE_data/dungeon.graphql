@@ -43,6 +43,19 @@ query MultipleMonstersExpr {
     }
 }
 
+query MultipleMonstersExprMissing {
+    monsters(ids: ["bW9uc3Rlcjox", "bW9uc3RlcjoxMDAw", "bW9uc3Rlcjoy", "bW9uc3RlcjoxMDAx"]) {
+        id
+    }
+}
+
+query MultipleRooms($ids : [Id!]) {
+    rooms(ids: $ids) {
+        id
+    }
+}
+
+
 query InlineFragmentTest($id : Id!) {
   thing(id: $id) {
     ... on Monster {

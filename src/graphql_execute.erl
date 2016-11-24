@@ -29,7 +29,8 @@ execute_request(InitialCtx, {document, Operations}) ->
     end.
 
 complete_top_level(Res, []) -> #{ data => Res };
-complete_top_level(Res, Errs) -> #{ data => Res, errors => Errs }.
+complete_top_level(Res, Errs) ->
+    #{ data => Res, errors => Errs}.
 
 execute_query(Ctx, #op { selection_set = SSet,
                           schema = QType } = Op) ->
@@ -37,7 +38,7 @@ execute_query(Ctx, #op { selection_set = SSet,
     {Res, Errs} =
         execute_sset([graphql_ast:id(Op)], Ctx, SSet, QType, none),
     complete_top_level(Res, Errs).
-    
+
 execute_mutation(Ctx, #op { selection_set = SSet,
                              schema = QType } = Op) ->
     #object_type{} = QType,
@@ -48,8 +49,7 @@ execute_mutation(Ctx, #op { selection_set = SSet,
 execute_sset(Path, Ctx, SSet, Type, Value) ->
     GroupedFields = collect_fields(Path, Ctx, Type, SSet),
     execute_sset(Path, Ctx, GroupedFields, Type, Value, [], []).
-    
-    
+
 execute_sset(_Path, _Ctx, [], _Type, _Value, Map, Errs) ->
     {maps:from_list(lists:reverse(Map)), Errs};
 execute_sset(Path, Ctx, [{Key, [F|_] = Fields} | Next], Type, Value, Map, Errs) ->
@@ -66,7 +66,7 @@ execute_sset(Path, Ctx, [{Key, [F|_] = Fields} | Next], Type, Value, Map, Errs) 
                     {null, Errors}
             end
     end.
-    
+
 typename(#object_type { id = ID }) -> ID.
 
 lookup_field(#field { id = ID }, Obj) ->
@@ -80,8 +80,8 @@ lookup_field_name(N, #interface_type { fields = FS }) ->
 
 collect_fields(Path, Ctx, Type, SSet) -> collect_fields(Path, Ctx, Type, SSet, #{}).
 
-collect_fields(Path, Ctx, Type, SSet, Visited) -> collect_fields(Path, Ctx, Type, SSet, Visited, orddict:new()).
-   
+collect_fields(Path, Ctx, Type, SSet, Visited) ->
+    collect_fields(Path, Ctx, Type, SSet, Visited, orddict:new()).
 collect_fields(_Path, _Ctx, _Type, [], _Visited, Grouped) ->
     Grouped;
 collect_fields(Path, Ctx, Type, [#field{} = S |SS], Visited, Grouped) ->
@@ -110,11 +110,11 @@ collect_fields(Path, Ctx, Type, [S |SS], Visited, Grouped) ->
                 false ->
                     collect_fields(Path, Ctx, Type, SS, Visited, Grouped);
                 true ->
-                    FragGrouped = 
+                    FragGrouped =
                         collect_fields([name(FragID) | Path], Ctx, Type, FragmentSSet, Visited),
                     Grouped2 = collect_groups(FragGrouped, Grouped),
                     collect_fields(Path, Ctx, Type, SS, Visited, Grouped2)
-            end            
+            end
     end.
 
 collect_groups([], Grouped) -> Grouped;
@@ -138,8 +138,8 @@ execute_field(Path, Ctx, ObjType, Value, [F|_] = Fields, #schema_field { resolve
     Args = resolve_args(Ctx, F),
     Fun = resolver_function(RF),
     ResolvedValue = resolve_field_value(Ctx, ObjType, Value, Name, Fun, Args),
-    complete_value([Name|Path], Ctx, ElaboratedTy, Fields, ResolvedValue).
-    
+    complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue).
+
 resolve_field_value(Ctx, ObjectType, Value, Name, Fun, Args) ->
     try Fun(Ctx#{ field => Name, object_type => ObjectType }, Value, Args) of
         {error, Reason} -> {error, Reason};
@@ -152,8 +152,6 @@ resolve_field_value(Ctx, ObjectType, Value, Name, Fun, Args) ->
             {error, resolver_crash}
     end.
 
-complete_value(Path, _Ctx, _Ty, _Fields, {error, Reason}) ->
-    {ok, null, [#{ path => Path, reason => Reason }]};
 complete_value(Path, Ctx, Ty, Fields, {ok, {enum, Value}}) ->
     complete_value(Path, Ctx, Ty, Fields, {ok, Value});
 complete_value(Path, Ctx, {scalar, Scalar}, Fields, {ok, Value}) ->
@@ -162,65 +160,57 @@ complete_value(Path, Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
     lager:warning("Looking up type in executor: ~p", [Ty]),
     SchemaType = graphql_schema:get(Ty),
     complete_value(Path, Ctx, SchemaType, Fields, {ok, Value});
-complete_value(Path, Ctx, Ty, Fields, {ok, Value}) ->
-    case Ty of
-        {non_null, InnerTy} ->
-            case complete_value(Path, Ctx, InnerTy, Fields, {ok, Value}) of
-                {error, Reason} ->
-                    %% Rule: Along a path, there is at most one error, so if the underlying
-                    %% object is at fault, don't care too much about this level, just pass
-                    %% on the error
-                    err(Path, Reason);
-                {ok, null, InnerErrs} ->
-                    err(Path, null_value, InnerErrs);
-                {ok, CompletedResult, Errs} ->
-                    {ok, CompletedResult, Errs}
-            end;
-        _SomeTy when Value == null ->
-            {ok, null, []};
-        {list, _} when not is_list(Value) ->
-            err(Path, not_a_list);
-        {list, InnerTy} ->
-            case complete_value_list(Path, Ctx, InnerTy, Fields, Value) of
-                {ok, L, IE} ->
-                    %% There might have been errors in the inner processing, but all of
-                    %% those were errors we could handle by returning null values for
-                    %% them.
-                    {ok, L, IE};
-                {error, Reasons} ->
-                    %% At least one of the things inside could not be handled. Since we
-                    %% return at most one error per field, we just take that first error we
-                    %% run into and report that. We can extend this later to handle more
-                    %% than one error, if necessary.
-                    {ok, null, Reasons}
-            end;
-        #scalar_type { id = ID, output_coerce = OCoerce } ->
-            try OCoerce(Value) of
-                {ok, Result} -> {ok, Result, []};
-                {error, Reason} ->
-                    err(Path, {output_coerce, ID, Value, Reason})
-            catch
-                Cl:Err ->
-                    lager:warning("Output coercer crash: ~p, stack: ~p", [{Cl,Err}, erlang:get_stacktrace()]),
-                    err(Path, {coerce_crash, ID, Value, {Cl, Err}})
-            end;
-        %% TODO: Coercion handling for enumerated values!
-        #enum_type {} when is_binary(Value) ->
-            {ok, Value, []};
-        #enum_type { values = Values } when is_integer(Value) ->
-            #enum_value { val = Result } = maps:get(Value, Values),
-            {ok, Result, []};
-        #interface_type{ resolve_type = Resolver } ->
-            {ok, ResolvedType} = resolve_abstract_type(Resolver, Value),
-            complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
-        #union_type{ resolve_type = Resolver } ->
-            {ok, ResolvedType} = resolve_abstract_type(Resolver, Value),
-            complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
-        #object_type{} ->
-            SubSelectionSet = merge_selection_sets(Fields),
-            {Result, Errs} = execute_sset(Path, Ctx, SubSelectionSet, Ty, Value),
-            {ok, Result, Errs}
-    end.
+complete_value(Path, Ctx, {non_null, InnerTy}, Fields, Result) ->
+    %% Note we handle arbitrary results in this case. This makes sure errors
+    %% factor through the non-null handler here and that handles
+    %% nested {error, Reason} tuples correctly
+    case complete_value(Path, Ctx, InnerTy, Fields, Result) of
+        {error, Reason} ->
+            %% Rule: Along a path, there is at most one error, so if the underlying
+            %% object is at fault, don't care too much about this level, just pass
+            %% on the error
+            err(Path, Reason);
+        {ok, null, InnerErrs} ->
+            err(Path, null_value, InnerErrs);
+        {ok, _C, _E} = V ->
+            V
+    end;
+complete_value(_Path, _Ctx, _Ty, _Fields, {ok, null}) ->
+    {ok, null, []};
+complete_value(Path, _Ctx, {list, _}, _Fields, {ok, V}) when not is_list(V) ->
+    err(Path, not_a_list);
+complete_value(Path, Ctx, {list, InnerTy}, Fields, {ok, Value}) ->
+    complete_value_list(Path, Ctx, InnerTy, Fields, Value);
+complete_value(Path, _Ctx, #scalar_type { id = ID, output_coerce = OCoerce }, _Fields, {ok, Value}) ->
+    try OCoerce(Value) of
+        {ok, Result} -> {ok, Result, []};
+        {error, Reason} ->
+            err(Path, {output_coerce, ID, Value, Reason})
+    catch
+        Cl:Err ->
+            lager:warning("Output coercer crash: ~p, stack: ~p", [{Cl,Err}, erlang:get_stacktrace()]),
+            err(Path, {coerce_crash, ID, Value, {Cl, Err}})
+    end;
+complete_value(_Path, _Ctx, #enum_type {}, _Fields, {ok, Value}) when is_binary(Value) ->
+    %% TODO: Coercion handling for enumerated values!
+    {ok, Value, []};
+complete_value(_Path, _Ctx, #enum_type { values = Values }, _Fields, {ok, Value}) when is_integer(Value) ->
+    %% TODO: Coercion handling for enumerated values!
+    #enum_value { val = Result } = maps:get(Value, Values),
+    {ok, Result, []};
+complete_value(Path, Ctx, #interface_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
+    {ok, ResolvedType} = resolve_abstract_type(Resolver, Value),
+    complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
+complete_value(Path, Ctx, #union_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
+    {ok, ResolvedType} = resolve_abstract_type(Resolver, Value),
+    complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
+
+complete_value(Path, Ctx, #object_type{} = Ty, Fields, {ok, Value}) ->
+    SubSelectionSet = merge_selection_sets(Fields),
+    {Result, Errs} = execute_sset(Path, Ctx, SubSelectionSet, Ty, Value),
+    {ok, Result, Errs};
+complete_value(Path, _Ctx, _Ty, _Fields, {error, Reason}) ->
+    {ok, null, [#{ path => Path, reason => Reason }]}.
 
 resolve_abstract_type(Resolver, Value) ->
     try Resolver(Value) of
@@ -234,25 +224,33 @@ resolve_abstract_type(Resolver, Value) ->
            lager:warning("Resolve_type crashed: ~p", [erlang:get_stacktrace()]),
            {error, {resolve_type_crash, {Cl,Err}}}
     end.
-            
+
 complete_value_list(Path, Ctx, Ty, Fields, Results) ->
-    Completed = [complete_value(Path, Ctx, Ty, Fields, {ok, R}) || R <- Results],
-    case complete_list_value_result(0, Completed) of
-        {error, K, Reason} ->
-            err([K | Path], Reason);
-        L ->
+    IndexedResults = index(Results),
+    Completed = [{I, complete_value([I | Path], Ctx, Ty, Fields, R)} || {I, R} <- IndexedResults],
+    case complete_list_value_result(Completed) of
+        {error, Reasons} ->
+            {ok, null, Reasons};
+        {ok, L} ->
             {Vals, Errs} = lists:unzip(L),
             Len = length(Completed),
             Len = length(Vals),
             {ok, Vals, lists:concat(Errs)}
     end.
 
+complete_list_value_result(Completed) ->
+    case lists:any(
+           fun
+               ({_, {error, _}}) -> true;
+               (_) -> false
+           end,
+           Completed) of
+        true -> {error, lists:concat([R || {_, {error, R}} <- Completed])};
+        false -> {ok, [{V, Es} || {_, {ok, V, Es}} <- Completed]}
+    end.
 
-complete_list_value_result(_K, []) -> [];
-complete_list_value_result(K, [{ok, V, Es} | Vals]) ->
-    [{V, Es} | complete_list_value_result(K+1, Vals)];
-complete_list_value_result(K, [{error, Reason} | _]) ->
-    {error, K, Reason}.
+index([]) -> [];
+index(L) -> lists:zip(lists:seq(0, length(L)-1), L).
 
 find_operation(_N, []) -> not_found;
 find_operation(N, [#op { id = ID } = O | Next]) ->
@@ -308,6 +306,7 @@ default_resolver(#{ field := Field}, Cur, _Args) ->
         {'$lazy', F} when is_function(F, 0) -> F();
         not_found ->
             {error, not_found};
+        V when is_list(V) -> {ok, [ {ok, R} || R <- V ]};
         V -> {ok, V}
     end.
 
@@ -352,7 +351,7 @@ output_coerce_type(UserDefined) when is_binary(UserDefined) ->
 
 resolve_args(Ctx, #field { args = As }) ->
     resolve_args_(Ctx, As, #{}).
-    
+
 resolve_args_(_Ctx, [], Acc) -> Acc;
 resolve_args_(Ctx, [{ID, Val} | As], Acc) ->
     K = name(ID),
@@ -377,9 +376,9 @@ value(_Ctx, #{ type := Ty, value := {enum, E}}) ->
         atom -> binary_to_atom(N, utf8);
         tagged -> {enum, N}
     end;
-value(Ctx, #{ type := [Ty], value := {list, Vals}}) ->
+value(Ctx, #{ type := {list, Ty}, value := {list, Vals}}) ->
     [value(Ctx, {Ty, V}) || V <- Vals];
-value(Ctx, #{ type := [Ty], value := Vals}) when is_list(Vals) ->
+value(Ctx, #{ type := {list, Ty}, value := Vals}) when is_list(Vals) ->
     [value(Ctx, {Ty, V}) || V <- Vals];
 value(Ctx, #{ type := {non_null, Ty}, value := V}) ->
     value(Ctx, #{ type => Ty, value => V});
@@ -449,11 +448,11 @@ err(Path, Reason, More) when is_list(More) ->
 %% -- CONTEXT CANONICALIZATION ------------
 canon_context(#{ params := Params } = Ctx) ->
      Ctx#{ params := canon_params(Params) }.
-     
+
 canon_params(Ps) ->
      KVs = maps:to_list(Ps),
      maps:from_list([{binarize(K), V} || {K, V} <- KVs]).
-     
+
 binarize(A) when is_atom(A) -> atom_to_binary(A, utf8);
 binarize(B) when is_binary(B) -> B;
 binarize(L) when is_list(L) -> list_to_binary(L).

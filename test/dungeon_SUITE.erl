@@ -60,7 +60,7 @@ groups() ->
                  complex_modifiers,
                  simple_field_merge,
                  nested_field_merge,
-                 multiple_monsters
+                 multiple_monsters_and_rooms
                  ]},
 
     Errors = {errors, [],
@@ -311,6 +311,7 @@ complex_modifiers(Config) ->
       <<"stats">> => [
         %% Head ONE!
         #{
+          % resolver for attack field on Stats returns {ok, null} when attack is 13
           <<"attack">> => 13,
           <<"shellScripting">> => 5,
           <<"yell">> => <<"I'M READY">> },
@@ -324,7 +325,7 @@ complex_modifiers(Config) ->
                           <<"monster">> := #{
                             <<"id">> := MonsterID } } } } =
              run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
-    
+
     %% Standard Query
     #{ data :=
         #{ <<"monster">> := #{
@@ -352,10 +353,18 @@ complex_modifiers(Config) ->
         #{ <<"monster">> := #{
             <<"statsVariantTwo">> := null  }}} =
             run(Config, <<"MonsterStatsTwo">>, #{ <<"id">> => MonsterID }),
+
     %% If the list may not be null, make sure the error propagates to the wrapper object.
     #{ data :=
-        #{ <<"monster">> := null }} =
-            run(Config, <<"MonsterStatsThree">>, #{ <<"id">> => MonsterID }),
+        #{ <<"monster">> := null },
+        errors := [#{path := [<<"statsVariantThree">>, <<"monster">>, <<"MonsterStatsThree">>],
+                     reason := null_value},
+                   #{path := [0,<<"statsVariantThree">>,<<"monster">>,<<"MonsterStatsThree">>],
+                     reason := null_value},
+                   #{path := [<<"attack">>, 0,<<"statsVariantThree">>,<<"monster">>,<<"MonsterStatsThree">>],
+                     reason := null_value}]
+     } = run(Config, <<"MonsterStatsThree">>, #{ <<"id">> => MonsterID }),
+
     ok.
 
 non_null_field(Config) ->
@@ -404,20 +413,55 @@ scalar_as_expression_coerce(Config) ->
     true = (PF - 0.01) < 0.00001,
     ok.
 
-multiple_monsters(Config) ->
+multiple_monsters_and_rooms(Config) ->
     ID1 = base64:encode(<<"monster:1">>),
     ID2 = base64:encode(<<"monster:2">>),
+    ID1000 = base64:encode(<<"monster:1000">>),
+
     #{ data := #{
         <<"monsters">> := [
             #{ <<"id">> := ID1 }, #{ <<"id">> := ID2 } ]
      }} = run(Config, <<"MultipleMonsters">>, #{ <<"ids">> => [ID1, ID2] }),
+
     #{ data := #{
         <<"monsters">> := [
             #{ <<"id">> := ID1 }, #{ <<"id">> := ID2 } ]
      }} = run(Config, <<"MultipleMonstersExpr">>, #{}),
-     
+
+    #{ data := #{
+        <<"monsters">> := [
+            #{ <<"id">> := ID1 }, #{ <<"id">> := ID2 } , null ]},
+       errors := [
+           #{path := [2, <<"monsters">>, <<"MultipleMonsters">>],
+             reason := not_found}]
+     } = run(Config, <<"MultipleMonsters">>, #{ <<"ids">> => [ID1, ID2, ID1000] }),
+
+    #{ data := #{
+        <<"monsters">> := [
+            #{ <<"id">> := ID1 }, null, #{ <<"id">> := ID2 }, null ]},
+       errors := [
+                  #{path := [1, <<"monsters">>, <<"MultipleMonstersExprMissing">>],
+                    reason := not_found},
+                  #{path := [3, <<"monsters">>, <<"MultipleMonstersExprMissing">>],
+                    reason := not_found}]
+     } = run(Config, <<"MultipleMonstersExprMissing">>, #{}),
+
+     Room1 = base64:encode(<<"room:1">>),
+
+     #{ data := #{
+        <<"rooms">> := [#{<<"id">> := Room1}]}
+      } = run(Config, <<"MultipleRooms">>, #{ <<"ids">> => [Room1]}),
+
+     #{ data := #{
+        <<"rooms">> := null
+         },
+        errors := [
+                   #{path := [1,<<"rooms">>,<<"MultipleRooms">>], reason := null_value},
+                   #{path := [1,<<"rooms">>,<<"MultipleRooms">>],reason := not_found}]
+      } = run(Config, <<"MultipleRooms">>, #{ <<"ids">> => [Room1, base64:encode(<<"room:2">>)]}),
+
      ok.
-        
+
 inline_fragment(Config) ->
     ID = base64:encode(<<"monster:1">>),
     Expected = #{ data => #{
