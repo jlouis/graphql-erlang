@@ -7,12 +7,12 @@
 
 %% Resolvers for the introspection
 -export([
-	schema_resolver/3,
-	type_resolver/3,
-	schema_types/3,
-	query_type/3,
-	mutation_type/3,
-	subscription_type/3
+    schema_resolver/3,
+    type_resolver/3,
+    schema_types/3,
+    query_type/3,
+    mutation_type/3,
+    subscription_type/3
 ]).
 
 -spec augment_root(QueryObj) -> ok
@@ -21,16 +21,16 @@
 augment_root(QName) ->
     #object_type{ fields = Fields } = Obj = graphql_schema:get(QName),
     Schema = #schema_field {
-    	ty = {non_null, <<"__Schema">>},
-    	description = <<"The introspection schema">>,
-    	resolve = fun ?MODULE:schema_resolver/3 },
+        ty = {non_null, <<"__Schema">>},
+        description = <<"The introspection schema">>,
+        resolve = fun ?MODULE:schema_resolver/3 },
     Type = #schema_field {
-    	ty = <<"__Type">>,
-    	description = <<"The introspection type">>,
-    	resolve = fun ?MODULE:type_resolver/3,
-    	args = #{
-    		<<"name">> =>
-    		   #schema_arg { ty = {non_null, {scalar, string}}, description = <<"The type to query">> }
+        ty = <<"__Type">>,
+        description = <<"The introspection type">>,
+        resolve = fun ?MODULE:type_resolver/3,
+        args = #{
+            <<"name">> =>
+               #schema_arg { ty = {non_null, {scalar, string}}, description = <<"The type to query">> }
          }},
      Augmented = Obj#object_type { fields = Fields#{
          <<"__schema">> => Schema,
@@ -38,32 +38,32 @@ augment_root(QName) ->
      }},
      true = graphql_schema:insert(Augmented, #{}),
      ok.
-     
+
 schema_resolver(_Ctx, none, #{}) ->
     {ok, #{ <<"directives">> => [] }}.
-    
+
 type_resolver(_Ctx, none, #{ <<"name">> := N }) ->
     case graphql_schema:lookup(N) of
         not_found -> {ok, null};
-        Ty -> {ok, render_type(Ty)}
+        Ty -> render_type(Ty)
     end.
 
 query_type(_Ctx, _Obj, _) ->
     #root_schema{ query = QType } = graphql_schema:get('ROOT'),
-    {ok, render_type(QType)}.
+    render_type(QType).
 
 mutation_type(_Ctx, _Obj, _) ->
     #root_schema { mutation = MType } = graphql_schema:get('ROOT'),
     case MType of
         undefined -> {ok, null};
-        MT -> {ok, render_type(MT)}
+        MT -> render_type(MT)
     end.
 
 subscription_type(_Ctx, _Obj, _) ->
     #root_schema { subscription = SType } = graphql_schema:get('ROOT'),
     case SType of
         undefined -> {ok, null};
-        ST -> {ok, render_type(ST)}
+        ST -> render_type(ST)
     end.
 
 schema_types(_Ctx, _Obj, _Args) ->
@@ -81,7 +81,7 @@ render_type(Name) when is_binary(Name) ->
            throw({not_found, Name});
        Ty -> render_type(Ty)
     end;
-render_type(Ty) -> #{
+render_type(Ty) -> {ok, #{
     <<"kind">> => type_kind(Ty),
     <<"name">> => type_name(Ty),
     <<"description">> => type_description(Ty),
@@ -90,7 +90,7 @@ render_type(Ty) -> #{
     <<"possibleTypes">> => type_possibilities(Ty),
     <<"enumValues">> => type_enum_values(Ty),
     <<"inputFields">> => type_input_fields(Ty),
-    <<"ofType">> => type_unwrap(Ty) }.
+    <<"ofType">> => type_unwrap(Ty) }}.
 
 type_kind({scalar, _}) -> <<"SCALAR">>;
 type_kind(#scalar_type{}) -> <<"SCALAR">>;
@@ -136,11 +136,14 @@ type_possibilities(#union_type { types = Types }) ->
 type_possibilities(_) -> null.
 
 type_enum_values(#enum_type { values = VMap }) ->
-    [render_enum_value(V) || V <- maps:to_list(VMap)];
+    [begin
+         {ok, R} = render_enum_value(V),
+         R
+     end || V <- maps:to_list(VMap)];
 type_enum_values(_) -> null.
 
-type_unwrap({list, Ty}) -> render_type(Ty);
-type_unwrap({non_null, Ty}) -> render_type(Ty);
+type_unwrap({list, Ty}) -> {ok, U} = render_type(Ty), U;
+type_unwrap({non_null, Ty}) -> {ok, U} = render_type(Ty), U;
 type_unwrap(_) -> null.
 
 type_input_fields(#input_object_type{ fields = FS }) ->
@@ -154,27 +157,28 @@ type_fields(#interface_type { fields = FS }) ->
 type_fields(_) -> null.
 
 render_field({Name, #schema_field {
-	description = Desc,
-	args = Args,
-	ty = Ty,
-	deprecation = Deprecation }}) ->
+                       description = Desc,
+                       args = Args,
+                       ty = Ty,
+                       deprecation = Deprecation }
+             }) ->
     {IsDeprecated, DeprecationReason} = render_deprecation(Deprecation),
-    #{
+    {ok, #{
         <<"name">> => Name,
         <<"description">> => Desc,
         <<"args">> => ?LAZY({ok, [render_input_value(IV) || IV <- maps:to_list(Args)]}),
-        <<"type">> => ?LAZY({ok, render_type(Ty)}),
+        <<"type">> => ?LAZY(render_type(Ty)),
         <<"isDeprecated">> => IsDeprecated,
         <<"deprecationReason">> => DeprecationReason
-    }.
-    
+      }}.
+
 render_input_value({K, #schema_arg { ty = Ty, description = Desc }}) ->
-    #{
+    {ok, #{
         <<"name">> => K,
         <<"description">> => Desc,
-        <<"type">> => ?LAZY({ok, render_type(Ty)}),
+        <<"type">> => ?LAZY(render_type(Ty)),
         <<"defaultValue">> => null
-    }.
+    }}.
 
 interface_implementors(ID) ->
     Pass = fun
@@ -184,16 +188,17 @@ interface_implementors(ID) ->
     {ok, [render_type(Ty) || Ty <- graphql_schema:all(), Pass(Ty)]}.
 
 render_enum_value({_Value, #enum_value{
-	val = Key,
-	description = Desc,
-	deprecation = Deprecation }}) ->
+                              val = Key,
+                              description = Desc,
+                              deprecation = Deprecation }
+                  }) ->
     {IsDeprecated, DeprecationReason} = render_deprecation(Deprecation),
-    #{
+    {ok, #{
        <<"name">> => Key,
        <<"description">> => Desc,
        <<"isDeprecated">> => IsDeprecated,
        <<"deprecationReason">> => DeprecationReason
-     }.
+     }}.
 
 render_deprecation(undefined) ->
     {false, null};
