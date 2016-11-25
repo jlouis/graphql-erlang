@@ -245,7 +245,14 @@ resolve_paginate_ordered(_Source, _Type, #{ <<"first">> := F, <<"last">> := L}, 
 resolve_paginate_ordered(_Source, _Type, #{ <<"first">> := N }, _Bounds) when N /= null, N < 0 ->
     {error, negative_first};
 resolve_paginate_ordered(Source, Type, #{ <<"first">> := N }, {Lo, Hi}) when N /= null ->
-    {res, Edges, []} = gryphon_hydra:assoc_ordered_range(Source, Type, Hi, Lo, N + 1),
+    Options = [
+        {high_low, #{high => Hi, low => Lo}},
+        {limit, N + 1},
+        {order_by, client_timestamp},
+        {order, asc}
+    ],
+    {res, Edges, []} = gryphon_hydra:assoc_range(Source, Type, Options),
+    Ordering = [Timestamp || {_, Timestamp} <- Edges],
     Count = length(Edges),
     PageInfo = #{
         <<"hasNextPage">> => Count > N,
@@ -253,7 +260,7 @@ resolve_paginate_ordered(Source, Type, #{ <<"first">> := N }, {Lo, Hi}) when N /
     },
     {ok, #{
         <<"pageInfo">> => PageInfo,
-        <<"edges">> => lists:reverse(edges_ordered(Edges, N)),
+        <<"edges">> => edges_ordered(Edges, N),
         <<"count">> => Count
     }};
 resolve_paginate_ordered(_Source, _Type, #{ <<"last">> := N }, _Bounds) when N /= null, N < 0 ->
@@ -307,6 +314,7 @@ edges_sequential([Obj | Next], K) ->
 edges_ordered([], _) -> [];
 edges_ordered(_, 0) -> [];
 edges_ordered([{Obj, Timestamp} | Next], N) ->
+    lager:info("%% Order: ~p", [Timestamp]),
     Cursor = pack_cursor({ordered, Timestamp}),
     Edge = #{ <<"node">> => Obj, <<"cursor">> => Cursor },
     [Edge | edges_ordered(Next, N-1)].
