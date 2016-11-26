@@ -87,6 +87,7 @@ tc_param(Path, K, #vardef { ty = Ty }, Val) ->
 
 check_param(Path, {non_null, Ty}, V) -> check_param(Path, Ty, V);
 check_param(Path, {scalar, Sc}, V) -> input_coerce_scalar(Path, Sc, V);
+check_param(Path, #scalar_type{} = STy, V) -> input_coerce_scalar(Path, STy, V);
 check_param(Path, #enum_type{} = ETy, {enum, V}) when is_binary(V) ->
     check_param(Path, ETy, V);
 check_param(Path, #enum_type { id = Ty }, V) when is_binary(V) ->
