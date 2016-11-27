@@ -119,17 +119,32 @@ directives(Path, Ds) ->
 
 directive(Path, #directive{ id = ID } = D) ->
     case graphql_ast:name(ID) of
-        <<"include">> -> D#directive { schema = include_directive() };
-        <<"skip">> -> D#directive { schema = skip_directive() };
+        <<"include">> -> D#directive { schema = directive_schema(include) };
+        <<"skip">> -> D#directive { schema = directive_schema(skip) };
         Name ->
             graphql_err:abort([D | Path], {unknown_directive, Name})
     end.
 
-include_directive() ->
-    todo.
-
-skip_directive() ->
-    todo.
+directive_schema(include) ->
+    #directive_type {
+       id = <<"include">>,
+       args = #{
+         <<"if">> =>
+             #schema_arg{
+                ty = {scalar, bool},
+                default = false,
+                description = <<"Wether or not the item should be included">> }
+        }};
+directive_schema(skip) ->
+    #directive_type {
+       id = <<"skip">>,
+       args = #{
+         <<"if">> =>
+             #schema_arg{
+                ty = {scalar, bool},
+                default = false,
+                description = <<"Wether or not the item should be skipped">> }
+        }}.
 
 %% -- SELECTION SETS -------------------------------
 
