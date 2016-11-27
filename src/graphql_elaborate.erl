@@ -46,21 +46,22 @@ mk_funenv(Ops) ->
     lists:foldl(F, #{}, Ops).
 
 %% -- FRAGMENTS -----------------------------------
-frag(Path, #frag { ty = T, directives = [] } = F) ->
-   Ty = graphql_ast:name(T), %% This will always be a name
-   case graphql_schema:lookup(Ty) of
-       not_found ->
-           graphql_err:abort([F | Path], {type_not_found, Ty});
-       #object_type{ fields = Fields } = Obj ->
-           fields([F | Path], F#frag { schema = Obj }, Fields);
-       #interface_type{ fields = Fields } = IFace ->
-           fields([F | Path], F#frag { schema = IFace }, Fields);
-       #union_type {} = Union ->
-           %% A union can only be elaborated on an empty field set:
-           fields([F | Path], F#frag { schema = Union }, #{})
-   end;
-frag(Path, #frag { directives = Dirs } = F) ->
-    graphql_err:abort([F | Path], {directives_on_fragment, Dirs}).
+frag(Path, #frag { id = {name, _, _}, directives = [_|_] = Dirs } = F) ->
+    graphql_err:abort([F | Path], {directives_on_named_fragment, Dirs});
+frag(Path, #frag { ty = T, directives = Dirs } = F) ->
+    Ty = graphql_ast:name(T), %% This will always be a name
+    ElabDirs = directives(Dirs),
+    case graphql_schema:lookup(Ty) of
+        not_found ->
+            graphql_err:abort([F | Path], {type_not_found, Ty});
+        #object_type{ fields = Fields } = Obj ->
+            fields([F | Path], F#frag { schema = Obj, directives = ElabDirs }, Fields);
+        #interface_type{ fields = Fields } = IFace ->
+            fields([F | Path], F#frag { schema = IFace, directives = ElabDirs }, Fields);
+        #union_type {} = Union ->
+            %% A union can only be elaborated on an empty field set:
+            fields([F | Path], F#frag { schema = Union, directives = ElabDirs }, #{})
+   end.
 
 %% -- OPERATIONS -----------------------------------
 
@@ -112,6 +113,15 @@ root(Path, #op { ty = T } = Op) ->
         Schema -> graphql_schema:resolve_root_type(T, Schema)
     end.
 
+%% -- DIRECTIVES -----------------------------------
+directives(Ds) ->
+    [directive(D) || D <- Ds].
+
+directive(#directive{ id = ID, args = Args } = D) ->
+    Name = graphql_ast:name(ID),
+    lager:warning("Received directive: ~p", [#{ name => Name, args => Args }]),
+    D.
+
 %% -- SELECTION SETS -------------------------------
 
 fields(Path, #frag { selection_set = SSet} = F, Fields) ->
@@ -122,16 +132,19 @@ fields(Path, #op{ selection_set = SSet} = O, Fields) ->
 sset(Path, SSet, Fields) ->
     [field(Path, S, Fields) || S <- SSet].
 
-field(_Path, #frag_spread {} = FragSpread, _Fields) ->
-    FragSpread;
+field(_Path, #frag_spread { directives = Dirs } = FragSpread, _Fields) ->
+    ElabDirs = directives(Dirs),
+    FragSpread#frag_spread { directives = ElabDirs };
 %% Inline fragments are elaborated the same way as fragments
 field(Path, #frag { id = '...' } = Frag, _Fields) ->
     frag(Path, Frag);
-field(Path, #field { id = ID, args = Args, selection_set = SSet } = F, Fields) ->
+field(Path, #field { id = ID, args = Args, selection_set = SSet, directives = Dirs } = F, Fields) ->
     Name = graphql_ast:name(ID),
+    ElabDirs = directives(Dirs),
     case maps:get(Name, Fields, not_found) of
         not_found when Name == <<"__typename">> ->
-            F#field { schema = {introspection, typename} };
+            F#field { schema = {introspection, typename},
+                      directives = ElabDirs };
         not_found ->
             graphql_err:abort(Path, {unknown_field, Name});
         #schema_field{ ty = Ty, args = SArgs } = SF ->
@@ -140,6 +153,7 @@ field(Path, #field { id = ID, args = Args, selection_set = SSet } = F, Fields) -
             F#field {
                 args = field_args([F | Path], Args, SArgs),
                 schema = SF#schema_field{ ty = Type },
+                directives = ElabDirs,
                 selection_set = SSet2 }
      end.
 
