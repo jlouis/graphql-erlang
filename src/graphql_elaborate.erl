@@ -46,7 +46,7 @@ mk_funenv(Ops) ->
     lists:foldl(F, #{}, Ops).
 
 %% -- FRAGMENTS -----------------------------------
-frag(Path, #frag { ty = T } = F) ->
+frag(Path, #frag { ty = T, directives = [] } = F) ->
    Ty = graphql_ast:name(T), %% This will always be a name
    case graphql_schema:lookup(Ty) of
        not_found ->
@@ -58,18 +58,23 @@ frag(Path, #frag { ty = T } = F) ->
        #union_type {} = Union ->
            %% A union can only be elaborated on an empty field set:
            fields([F | Path], F#frag { schema = Union }, #{})
-   end.
+   end;
+frag(Path, #frag { directives = Dirs } = F) ->
+    graphql_err:abort([F | Path], {directives_on_fragment, Dirs}).
 
 %% -- OPERATIONS -----------------------------------
 
-op(Path, #op { vardefs = VDefs } = Op) ->
+op(Path, #op { vardefs = VDefs, directives = [] } = Op) ->
     RootSchema = root(Path, Op),
     case graphql_schema:lookup(RootSchema) of
         not_found ->
             graphql_err:abort([Op | Path], {type_not_found, RootSchema});
         #object_type{ fields = Fields } = Obj ->
             fields([Op | Path], Op#op{ schema = Obj, vardefs = var_defs([Op | Path], VDefs) }, Fields)
-    end.
+    end;
+op(Path, #op { directives = Dirs } = Op) ->
+    graphql_err:abort([Op | Path], {directives_on_op, Dirs}).
+
 
 vdef(#vardef { ty = Ty }) ->
     try vdef_type(Ty) of
