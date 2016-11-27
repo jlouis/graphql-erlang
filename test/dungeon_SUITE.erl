@@ -118,6 +118,22 @@ include_directive(Config) ->
              <<"name">> := <<"goblin">>,
              <<"hitpoints">> := 10 }}} =
         run(Config, <<"GoblinQueryDirectives">>, #{ <<"fat">> => true }),
+    
+    ct:log("Do check for inline fragments of no type designator"),
+    case run(Config, <<"GoblinQueryDirectivesInline">>,
+             #{ <<"fat">> => false }) of
+        #{ data := Data } ->
+            GoblinIL = maps:get(<<"goblin">>, Data),
+            0 = maps:size(maps:with([<<"name">>, <<"hitpoints">>], GoblinIL)),
+            ok
+    end,
+    #{ data := #{
+         <<"goblin">> := #{
+             <<"id">> := GoblinID,
+             <<"name">> := <<"goblin">>,
+             <<"hitpoints">> := 10 }}} =
+        run(Config, <<"GoblinQueryDirectivesInline">>, #{ <<"fat">> => true }),
+
     ok.
     
 unions(Config) ->

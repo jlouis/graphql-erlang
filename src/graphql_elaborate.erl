@@ -15,7 +15,7 @@ document({document, Ops}) ->
 operations(Path, Operations) ->
     [operation_(Path, Op) || Op <- Operations].
 
-operation_(Path, #frag{} = F) -> frag(Path, F);
+operation_(Path, #frag{} = F) -> frag(Path, F, undefined);
 operation_(Path, #op{} = O) -> op(Path, O).
 
 %% -- VARIABLE ENVIRONMENTS -----------------------
@@ -46,22 +46,32 @@ mk_funenv(Ops) ->
     lists:foldl(F, #{}, Ops).
 
 %% -- FRAGMENTS -----------------------------------
-frag(Path, #frag { id = {name, _, _}, directives = [_|_] = Dirs } = F) ->
+frag(Path, #frag { id = {name, _, _}, directives = [_|_] = Dirs } = F, _) ->
     graphql_err:abort([F | Path], {directives_on_named_fragment, Dirs});
-frag(Path, #frag { ty = T, directives = Dirs } = F) ->
-    Ty = graphql_ast:name(T), %% This will always be a name
-    ElabDirs = directives([F | Path], Dirs),
+frag(Path, #frag { ty = undefined, directives = Dirs } = Frag, ObjectType) ->
+    frag_(Path,
+          Frag#frag {
+            ty = undefined,
+            schema = ObjectType,
+            directives = directives([Frag | Path], Dirs)
+           });
+frag(Path, #frag { ty = T, directives = Dirs } = F, _ObjecType) ->
+    Ty = graphql_ast:name(T),
     case graphql_schema:lookup(Ty) of
         not_found ->
             graphql_err:abort([F | Path], {type_not_found, Ty});
-        #object_type{ fields = Fields } = Obj ->
-            fields([F | Path], F#frag { schema = Obj, directives = ElabDirs }, Fields);
-        #interface_type{ fields = Fields } = IFace ->
-            fields([F | Path], F#frag { schema = IFace, directives = ElabDirs }, Fields);
-        #union_type {} = Union ->
-            %% A union can only be elaborated on an empty field set:
-            fields([F | Path], F#frag { schema = Union, directives = ElabDirs }, #{})
-   end.
+        Schema ->
+            frag_(Path, F#frag { schema = Schema, directives = directives([F|Path], Dirs) })
+    end.
+
+frag_(Path, #frag { schema = #object_type{ fields = Fields }} = F) ->
+    fields([F | Path], F, Fields);
+frag_(Path, #frag { schema = #interface_type{ fields = Fields }} = F) ->
+    fields([F | Path], F, Fields);
+frag_(Path, #frag { schema = #union_type{}} = F) ->
+    %% Unions are always on the empty field set
+    fields([F | Path], F, #{}).
+
 
 %% -- OPERATIONS -----------------------------------
 
@@ -156,21 +166,21 @@ directive_schema(skip) ->
 
 %% -- SELECTION SETS -------------------------------
 
-fields(Path, #frag { selection_set = SSet} = F, Fields) ->
-    F#frag{ selection_set = sset(Path, SSet, Fields)};
-fields(Path, #op{ selection_set = SSet} = O, Fields) ->
-    O#op{ selection_set = sset(Path, SSet, Fields)}.
+fields(Path, #frag { schema = OType, selection_set = SSet} = F, Fields) ->
+    F#frag{ selection_set = sset(Path, OType, SSet, Fields)};
+fields(Path, #op{ schema = OType, selection_set = SSet} = O, Fields) ->
+    O#op{ selection_set = sset(Path, OType, SSet, Fields)}.
 
-sset(Path, SSet, Fields) ->
-    [field(Path, S, Fields) || S <- SSet].
+sset(Path, OType, SSet, Fields) ->
+    [field(Path, OType, S, Fields) || S <- SSet].
 
-field(Path, #frag_spread { directives = Dirs } = FragSpread, _Fields) ->
+field(Path, _OType, #frag_spread { directives = Dirs } = FragSpread, _Fields) ->
     ElabDirs = directives([FragSpread | Path], Dirs),
     FragSpread#frag_spread { directives = ElabDirs };
 %% Inline fragments are elaborated the same way as fragments
-field(Path, #frag { id = '...' } = Frag, _Fields) ->
-    frag(Path, Frag);
-field(Path, #field { id = ID, args = Args, selection_set = SSet, directives = Dirs } = F, Fields) ->
+field(Path, OType, #frag { id = '...' } = Frag, _Fields) ->
+    frag(Path, Frag, OType);
+field(Path, _OType, #field { id = ID, args = Args, selection_set = SSet, directives = Dirs } = F, Fields) ->
     Name = graphql_ast:name(ID),
     ElabDirs = directives([F | Path], Dirs),
     case maps:get(Name, Fields, not_found) of
@@ -241,17 +251,17 @@ field_lookup(Path, {scalar, _}, [_|_]) ->
 field_lookup(Path, #scalar_type{}, [_|_]) ->
     graphql_err:abort(Path, selection_on_scalar);
 field_lookup(Path, #scalar_type{}, SSet) ->
-    sset(Path, SSet, #{});
+    sset(Path, undefined, SSet, #{});
 field_lookup(Path, #object_type{}, []) ->
     graphql_err:abort(Path, fieldless_object);
-field_lookup(Path, #object_type{ fields = Fields }, SSet) ->
-    sset(Path, SSet, Fields);
+field_lookup(Path, #object_type{ fields = Fields } = OType, SSet) ->
+    sset(Path, OType, SSet, Fields);
 field_lookup(Path, #interface_type{}, []) ->
     graphql_err:abort(Path, fieldless_interface);
-field_lookup(Path, #interface_type{ fields = Fields }, SSet) ->
-    sset(Path, SSet, Fields);
-field_lookup(Path, #union_type{}, SSet) ->
-    sset(Path, SSet, #{});
+field_lookup(Path, #interface_type{ fields = Fields } = OType, SSet) ->
+    sset(Path, OType, SSet, Fields);
+field_lookup(Path, #union_type{} = OType, SSet) ->
+    sset(Path, OType, SSet, #{});
 field_lookup(_Path, #enum_type{}, []) ->
     [];
 field_lookup(Path, #enum_type{}, _SSet) ->
