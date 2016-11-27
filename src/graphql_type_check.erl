@@ -226,7 +226,7 @@ tc_directives(Ctx, Path, Ds) ->
     [tc_directive(Ctx, Path, D) || D <- Ds].
 
 tc_directive(Ctx, Path, #directive { args = Args, schema = #directive_type { args = SArgs }} = D) ->
-    #directive { args = tc_args(Ctx, [D | Path], Args, SArgs) }.
+    D#directive { args = tc_args(Ctx, [D | Path], Args, SArgs) }.
 
 %% -- ARGS -------------------------------------
 tc_args(Ctx, Path, Args, Schema) ->

@@ -11,7 +11,7 @@ query GoblinQuery($id : Id! = "bW9uc3Rlcjox") {
 query GoblinQueryDirectives($id : Id! = "bW9uc3Rlcjox", $fat : Bool!) {
   goblin: monster(id: $id) {
     id
-    @include(if: $fat) name
+    name @include(if: $fat)
     hitpoints
   }
 }

@@ -78,16 +78,35 @@ lookup_field_name(N, #object_type { fields = FS }) ->
 lookup_field_name(N, #interface_type { fields = FS }) ->
     maps:get(N, FS, not_found).
 
+view_include_skip_directives(_Ctx, []) -> include;
+view_include_skip_directives(Ctx, [#directive { id = ID } = D | Next]) ->
+    Args = resolve_args(Ctx, D),
+    ct:pal("Args: ~p", [Args]),
+    case {name(ID), Args} of
+        {<<"include">>, #{ <<"if">> := true }} ->
+            view_include_skip_directives(Ctx, Next);
+        {<<"include">>, #{ <<"if">> := false }} -> skip;
+        {<<"skip">>, #{ <<"if">> := true }} -> skip;
+        {<<"skip">>, #{ <<"if">> := false }} ->
+            view_include_skip_directives(Ctx, Next)
+    end.
+
 collect_fields(Path, Ctx, Type, SSet) -> collect_fields(Path, Ctx, Type, SSet, #{}).
 
 collect_fields(Path, Ctx, Type, SSet, Visited) ->
     collect_fields(Path, Ctx, Type, SSet, Visited, orddict:new()).
 collect_fields(_Path, _Ctx, _Type, [], _Visited, Grouped) ->
     Grouped;
-collect_fields(Path, Ctx, Type, [#field{} = S |SS], Visited, Grouped) ->
-    ResponseKey = alias(S),
-    Grouped2 = orddict:append(ResponseKey, S, Grouped),
-    collect_fields(Path, Ctx, Type, SS, Visited, Grouped2);
+collect_fields(Path, Ctx, Type, [#field{ directives = Dirs } = S |SS], Visited, Grouped) ->
+    case view_include_skip_directives(Ctx, Dirs) of
+        include ->
+            ct:pal("include"),
+            collect_fields(Path, Ctx, Type, SS, Visited,
+                           orddict:append(alias(S), S, Grouped));
+        skip ->
+            ct:pal("skipping ~p", [alias(S)]),
+            collect_fields(Path, Ctx, Type, SS, Visited, Grouped)
+    end;
 collect_fields(Path, Ctx, Type, [#frag_spread { id = ID }|SS], Visited, Grouped) ->
     #{ fragments := Frags } = Ctx,
     Name = name(ID),
@@ -349,6 +368,8 @@ output_coerce_type(UserDefined) when is_binary(UserDefined) ->
 
 %% -- LOWER LEVEL RESOLVERS ----------------
 
+resolve_args(Ctx, #directive { args = As }) ->
+    resolve_args_(Ctx, As, #{});
 resolve_args(Ctx, #field { args = As }) ->
     resolve_args_(Ctx, As, #{}).
 
