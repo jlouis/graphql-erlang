@@ -81,7 +81,6 @@ lookup_field_name(N, #interface_type { fields = FS }) ->
 view_include_skip_directives(_Ctx, []) -> include;
 view_include_skip_directives(Ctx, [#directive { id = ID } = D | Next]) ->
     Args = resolve_args(Ctx, D),
-    ct:pal("Args: ~p", [Args]),
     case {name(ID), Args} of
         {<<"include">>, #{ <<"if">> := true }} ->
             view_include_skip_directives(Ctx, Next);
@@ -100,39 +99,47 @@ collect_fields(_Path, _Ctx, _Type, [], _Visited, Grouped) ->
 collect_fields(Path, Ctx, Type, [#field{ directives = Dirs } = S |SS], Visited, Grouped) ->
     case view_include_skip_directives(Ctx, Dirs) of
         include ->
-            ct:pal("include"),
             collect_fields(Path, Ctx, Type, SS, Visited,
                            orddict:append(alias(S), S, Grouped));
         skip ->
-            ct:pal("skipping ~p", [alias(S)]),
             collect_fields(Path, Ctx, Type, SS, Visited, Grouped)
     end;
-collect_fields(Path, Ctx, Type, [#frag_spread { id = ID }|SS], Visited, Grouped) ->
-    #{ fragments := Frags } = Ctx,
-    Name = name(ID),
-    %% TODO: Lift this to a function by itself called collect_view_fragment...
-    case maps:is_key(Name, Visited) of
-        true ->
-            collect_fields(Path, Ctx, Type, SS, Visited, Grouped);
-        false ->
-            case maps:get(Name, Frags, not_found) of
-                 not_found ->
-                     collect_fields(Path, Ctx, Type, SS, Visited#{ Name => true }, Grouped);
-            #frag{} = F ->
-                 collect_fields(Path, Ctx, Type, [F | SS], Visited#{ Name => true }, Grouped)
-            end
+collect_fields(Path, Ctx, Type, [#frag_spread { id = ID, directives = Dirs }|SS], Visited, Grouped) ->
+    case view_include_skip_directives(Ctx, Dirs) of
+        include ->
+            #{ fragments := Frags } = Ctx,
+            Name = name(ID),
+            %% TODO: Lift this to a function by itself called collect_view_fragment...
+            case maps:is_key(Name, Visited) of
+                true ->
+                    collect_fields(Path, Ctx, Type, SS, Visited, Grouped);
+                false ->
+                    case maps:get(Name, Frags, not_found) of
+                        not_found ->
+                            collect_fields(Path, Ctx, Type, SS, Visited#{ Name => true }, Grouped);
+                        #frag{} = F ->
+                            collect_fields(Path, Ctx, Type, [F | SS], Visited#{ Name => true }, Grouped)
+                    end
+            end;
+        skip ->
+            collect_fields(Path, Ctx, Type, SS, Visited, Grouped)
     end;
 collect_fields(Path, Ctx, Type, [S |SS], Visited, Grouped) ->
     case S of
-        #frag{ id = FragID, selection_set = FragmentSSet } = Fragment ->
-            case does_fragment_type_apply(Type, Fragment) of
-                false ->
-                    collect_fields(Path, Ctx, Type, SS, Visited, Grouped);
-                true ->
-                    FragGrouped =
-                        collect_fields([name(FragID) | Path], Ctx, Type, FragmentSSet, Visited),
-                    Grouped2 = collect_groups(FragGrouped, Grouped),
-                    collect_fields(Path, Ctx, Type, SS, Visited, Grouped2)
+        #frag{ id = FragID, selection_set = FragmentSSet, directives = Dirs } = Fragment ->
+            case view_include_skip_directives(Ctx, Dirs) of
+                include ->
+                    case does_fragment_type_apply(Type, Fragment) of
+                        false ->
+                            collect_fields(Path, Ctx, Type, SS, Visited, Grouped);
+                        true ->
+                            FragGrouped =
+                                collect_fields([name(FragID) | Path], Ctx, Type, FragmentSSet, Visited),
+                            Grouped2 = collect_groups(FragGrouped, Grouped),
+                            collect_fields(Path, Ctx, Type, SS, Visited, Grouped2)
+                    end;
+                skip ->
+                    collect_fields(Path, Ctx, Type, SS, Visited, Grouped)
             end
     end.
 
