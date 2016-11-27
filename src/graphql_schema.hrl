@@ -49,6 +49,12 @@
 }).
 -type schema_arg() :: #schema_arg{}.
 
+-record(directive_type, {
+          id :: binary(),
+          args = #{} :: #{ binary() => schema_arg() }
+}).
+-type directive_type() :: #directive_type{}.
+
 -record(schema_field, {
 	ty :: schema_type(),
 	description :: binary() | undefined,
