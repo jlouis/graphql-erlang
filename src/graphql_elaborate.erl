@@ -50,7 +50,7 @@ frag(Path, #frag { id = {name, _, _}, directives = [_|_] = Dirs } = F) ->
     graphql_err:abort([F | Path], {directives_on_named_fragment, Dirs});
 frag(Path, #frag { ty = T, directives = Dirs } = F) ->
     Ty = graphql_ast:name(T), %% This will always be a name
-    ElabDirs = directives(Dirs),
+    ElabDirs = directives([F | Path], Dirs),
     case graphql_schema:lookup(Ty) of
         not_found ->
             graphql_err:abort([F | Path], {type_not_found, Ty});
@@ -114,13 +114,22 @@ root(Path, #op { ty = T } = Op) ->
     end.
 
 %% -- DIRECTIVES -----------------------------------
-directives(Ds) ->
-    [directive(D) || D <- Ds].
+directives(Path, Ds) ->
+    [directive(Path, D) || D <- Ds].
 
-directive(#directive{ id = ID, args = Args } = D) ->
-    Name = graphql_ast:name(ID),
-    lager:warning("Received directive: ~p", [#{ name => Name, args => Args }]),
-    D.
+directive(Path, #directive{ id = ID } = D) ->
+    case graphql_ast:name(ID) of
+        <<"include">> -> D#directive { schema = include_directive() };
+        <<"skip">> -> D#directive { schema = skip_directive() };
+        Name ->
+            graphql_err:abort([D | Path], {unknown_directive, Name})
+    end.
+
+include_directive() ->
+    todo.
+
+skip_directive() ->
+    todo.
 
 %% -- SELECTION SETS -------------------------------
 
@@ -132,15 +141,15 @@ fields(Path, #op{ selection_set = SSet} = O, Fields) ->
 sset(Path, SSet, Fields) ->
     [field(Path, S, Fields) || S <- SSet].
 
-field(_Path, #frag_spread { directives = Dirs } = FragSpread, _Fields) ->
-    ElabDirs = directives(Dirs),
+field(Path, #frag_spread { directives = Dirs } = FragSpread, _Fields) ->
+    ElabDirs = directives([FragSpread | Path], Dirs),
     FragSpread#frag_spread { directives = ElabDirs };
 %% Inline fragments are elaborated the same way as fragments
 field(Path, #frag { id = '...' } = Frag, _Fields) ->
     frag(Path, Frag);
 field(Path, #field { id = ID, args = Args, selection_set = SSet, directives = Dirs } = F, Fields) ->
     Name = graphql_ast:name(ID),
-    ElabDirs = directives(Dirs),
+    ElabDirs = directives([F | Path], Dirs),
     case maps:get(Name, Fields, not_found) of
         not_found when Name == <<"__typename">> ->
             F#field { schema = {introspection, typename},

@@ -57,8 +57,9 @@
 }).
 
 -record(directive, {
-	id :: name(),
-	args = [] :: [any()]
+          id :: name(),
+          args = [] :: [any()],
+          schema :: any()
 }).
 -type directive() :: #directive{}.
 
