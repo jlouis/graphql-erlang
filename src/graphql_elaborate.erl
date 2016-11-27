@@ -115,15 +115,23 @@ root(Path, #op { ty = T } = Op) ->
 
 %% -- DIRECTIVES -----------------------------------
 directives(Path, Ds) ->
-    [directive(Path, D) || D <- Ds].
-
-directive(Path, #directive{ id = ID } = D) ->
-    case graphql_ast:name(ID) of
-        <<"include">> -> D#directive { schema = directive_schema(include) };
-        <<"skip">> -> D#directive { schema = directive_schema(skip) };
-        Name ->
-            graphql_err:abort([D | Path], {unknown_directive, Name})
+    try
+        [directive(Path, D) || D <- Ds]
+    catch
+        throw:{unknown, Unknown} ->
+            graphql_err:abort(Path, {unknown_directive, Unknown})
     end.
+
+directive(Path, #directive{ id = ID, args = Args } = D) ->
+    
+    Schema = #directive_type { args = SArgs } =
+        case graphql_ast:name(ID) of
+            <<"include">> -> directive_schema(include);
+            <<"skip">> -> directive_schema(skip);
+            _Name -> throw({unknown, D})
+        end,
+    D#directive { args = field_args([D | Path], Args, SArgs),
+                  schema = Schema }.
 
 directive_schema(include) ->
     #directive_type {
@@ -131,7 +139,7 @@ directive_schema(include) ->
        args = #{
          <<"if">> =>
              #schema_arg{
-                ty = {scalar, bool},
+                ty = graphql_schema:get(<<"Bool">>),
                 default = false,
                 description = <<"Wether or not the item should be included">> }
         }};
@@ -141,7 +149,7 @@ directive_schema(skip) ->
        args = #{
          <<"if">> =>
              #schema_arg{
-                ty = {scalar, bool},
+                ty = graphql_schema:get(<<"Bool">>),
                 default = false,
                 description = <<"Wether or not the item should be skipped">> }
         }}.
@@ -211,6 +219,7 @@ field_arg(Path, K, V, SArgs) ->
 field_arg_type({non_null, Ty}) -> {non_null, field_arg_type(Ty)};
 field_arg_type({list, Ty}) -> {list, field_arg_type(Ty)};
 field_arg_type({scalar, _} = Ty) -> Ty;
+field_arg_type(#scalar_type{} = Ty) -> Ty;
 field_arg_type(Ty) when is_binary(Ty) ->
     case graphql_schema:lookup(Ty) of
         #scalar_type{} = ScalarTy -> ScalarTy;
