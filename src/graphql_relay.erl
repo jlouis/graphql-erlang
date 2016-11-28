@@ -252,7 +252,6 @@ resolve_paginate_ordered(Source, Type, #{ <<"first">> := N }, {Lo, Hi}) when N /
         {order, asc}
     ],
     {res, Edges, []} = gryphon_hydra:assoc_range(Source, Type, Options),
-    Ordering = [Timestamp || {_, Timestamp} <- Edges],
     Count = length(Edges),
     PageInfo = #{
         <<"hasNextPage">> => Count > N,
