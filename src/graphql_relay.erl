@@ -314,7 +314,6 @@ edges_sequential([Obj | Next], K) ->
 edges_ordered([], _) -> [];
 edges_ordered(_, 0) -> [];
 edges_ordered([{Obj, Timestamp} | Next], N) ->
-    lager:info("%% Order: ~p", [Timestamp]),
     Cursor = pack_cursor({ordered, Timestamp}),
     Edge = #{ <<"node">> => Obj, <<"cursor">> => Cursor },
     [Edge | edges_ordered(Next, N-1)].
