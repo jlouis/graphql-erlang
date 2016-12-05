@@ -72,6 +72,7 @@ path(Path) ->
            F(#frag { id = ID }) -> name(ID);
            F(#op { id = ID }) -> name(ID);
            F(#field { id = ID }) -> name(ID);
+           F(#directive { id = ID }) -> name(ID);
            F(#enum_type { id = ID }) -> name(ID);
            F(#interface_type { id = ID }) -> name(ID);
            F(#union_type { id = ID }) -> name(ID);

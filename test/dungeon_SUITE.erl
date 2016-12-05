@@ -60,7 +60,8 @@ groups() ->
                  complex_modifiers,
                  simple_field_merge,
                  nested_field_merge,
-                 multiple_monsters_and_rooms
+                 multiple_monsters_and_rooms,
+                 include_directive
                  ]},
 
     Errors = {errors, [],
@@ -101,6 +102,40 @@ default_query(Config) ->
     
     ok.
 
+include_directive(Config) ->
+    GoblinID = base64:encode(<<"monster:1">>),
+    case run(Config, <<"GoblinQueryDirectives">>,
+             #{ <<"fat">> => false }) of
+        #{ data := #{ <<"goblin">> := Goblin }} ->
+            case maps:is_key(<<"name">>, Goblin) of
+                true -> ct:fail("Not handling include");
+                false -> ok
+            end
+    end,
+    #{ data := #{
+         <<"goblin">> := #{
+             <<"id">> := GoblinID,
+             <<"name">> := <<"goblin">>,
+             <<"hitpoints">> := 10 }}} =
+        run(Config, <<"GoblinQueryDirectives">>, #{ <<"fat">> => true }),
+    
+    ct:log("Do check for inline fragments of no type designator"),
+    case run(Config, <<"GoblinQueryDirectivesInline">>,
+             #{ <<"fat">> => false }) of
+        #{ data := Data } ->
+            GoblinIL = maps:get(<<"goblin">>, Data),
+            0 = maps:size(maps:with([<<"name">>, <<"hitpoints">>], GoblinIL)),
+            ok
+    end,
+    #{ data := #{
+         <<"goblin">> := #{
+             <<"id">> := GoblinID,
+             <<"name">> := <<"goblin">>,
+             <<"hitpoints">> := 10 }}} =
+        run(Config, <<"GoblinQueryDirectivesInline">>, #{ <<"fat">> => true }),
+
+    ok.
+    
 unions(Config) ->
     ct:log("Initial query on the schema"),
     Goblin = base64:encode(<<"monster:1">>),

@@ -87,6 +87,7 @@ tc_param(Path, K, #vardef { ty = Ty }, Val) ->
 
 check_param(Path, {non_null, Ty}, V) -> check_param(Path, Ty, V);
 check_param(Path, {scalar, Sc}, V) -> input_coerce_scalar(Path, Sc, V);
+check_param(Path, #scalar_type{} = STy, V) -> input_coerce_scalar(Path, STy, V);
 check_param(Path, #enum_type{} = ETy, {enum, V}) when is_binary(V) ->
     check_param(Path, ETy, V);
 check_param(Path, #enum_type { id = Ty }, V) when is_binary(V) ->
@@ -193,7 +194,7 @@ tc_op(Ctx, Path, #op { vardefs = VDefs, selection_set = SSet} = Op) ->
 tc_sset(Ctx, Path, SSet) ->
     [tc_field(Ctx, Path, S) || S <- SSet].
 
-tc_field(#{ fragenv := FE }, Path, #frag_spread { id = ID } = FSpread) ->
+tc_field(#{ fragenv := FE } = Ctx, Path, #frag_spread { id = ID, directives = Ds } = FSpread) ->
     Name = graphql_ast:name(ID),
     case maps:get(Name, FE, not_found) of
         not_found ->
@@ -202,19 +203,30 @@ tc_field(#{ fragenv := FE }, Path, #frag_spread { id = ID } = FSpread) ->
             %% You can always include a fragspread, as long as it exists
             %% It may be slightly illegal in a given context but this just
             %% means the system will ignore the fragment on execution
-            FSpread
+            FSpread#frag_spread { directives = tc_directives(Ctx, Path, Ds) }
     end;
-tc_field(Ctx, Path, #frag { id = '...', selection_set = SSet} = InlineFrag) ->
+tc_field(Ctx, Path, #frag { id = '...', selection_set = SSet, directives = Ds} = InlineFrag) ->
+    
     InlineFrag#frag {
+        directives = tc_directives(Ctx, [InlineFrag | Path], Ds),
         selection_set = tc_sset(Ctx, [InlineFrag | Path], SSet)
     };
-tc_field(_Ctx, _Path, #field { schema = {introspection, typename} } = F) ->
-    F;
+tc_field(Ctx, Path, #field { schema = {introspection, typename}, directives = Ds } = F) ->
+    F#field { directives = tc_directives(Ctx, [F | Path], Ds)};
 tc_field(Ctx, Path, #field { args = Args,
                              selection_set = SSet,
+                             directives = Ds,
                              schema = #schema_field { args = SArgs }} = F) ->
     F#field { args = tc_args(Ctx, [F | Path], Args, SArgs),
+              directives = tc_directives(Ctx, [F | Path], Ds),
               selection_set = tc_sset(Ctx, [F | Path], SSet) }.
+
+%% -- DIRECTIVES --------------------------------
+tc_directives(Ctx, Path, Ds) ->
+    [tc_directive(Ctx, Path, D) || D <- Ds].
+
+tc_directive(Ctx, Path, #directive { args = Args, schema = #directive_type { args = SArgs }} = D) ->
+    D#directive { args = tc_args(Ctx, [D | Path], Args, SArgs) }.
 
 %% -- ARGS -------------------------------------
 tc_args(Ctx, Path, Args, Schema) ->

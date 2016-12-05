@@ -8,6 +8,24 @@ query GoblinQuery($id : Id! = "bW9uc3Rlcjox") {
   }
 }
 
+query GoblinQueryDirectives($id : Id! = "bW9uc3Rlcjox", $fat : Bool!) {
+  goblin: monster(id: $id) {
+    id
+    name @include(if: $fat)
+    hitpoints
+  }
+}
+
+query GoblinQueryDirectivesInline($id : Id! = "bW9uc3Rlcjox", $fat : Bool!) {
+  goblin: monster(id: $id) {
+    id
+    ... @include(if: $fat) {
+      name
+      hitpoints
+    }
+  }
+}
+
 query MinGoblin($id : Id! = "bW9uc3Rlcjox", $minAttack : int!) {
   goblin: monster(id: $id) {
     id
