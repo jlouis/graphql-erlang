@@ -40,7 +40,9 @@ augment_root(QName) ->
      ok.
 
 schema_resolver(_Ctx, none, #{}) ->
-    {ok, #{ <<"directives">> => [] }}.
+    {ok, #{ <<"directives">> =>
+                [directive(include),
+                 directive(skip)]}}.
 
 type_resolver(_Ctx, none, #{ <<"name">> := N }) ->
     case graphql_schema:lookup(N) of
@@ -412,7 +414,7 @@ directive(Kind) ->
                  <<"exclude a selection on a conditional variable">>}
         end,
 
-    #{
+    {ok, #{
        <<"name">> => Name,
        <<"description">> => Desc,
        <<"locations">> =>
@@ -426,4 +428,4 @@ directive(Kind) ->
                <<"type">> =>
                    render_type(<<"Bool">>),
                <<"defaultValue">> => false }}]
-     }.
+     }}.
