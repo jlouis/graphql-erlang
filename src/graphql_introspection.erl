@@ -422,10 +422,8 @@ directive(Kind) ->
             {ok, <<"FRAGMENT_SPREADS">>},
             {ok, <<"INLINE_FRAGMENT">>}],
        <<"args">> =>
-           [{ok, #{
-               <<"name">> => <<"if">>,
-               <<"description">> => <<"flag for the condition">>,
-               <<"type">> =>
-                   render_type(<<"Bool">>),
-               <<"defaultValue">> => false }}]
+           #{ <<"name">> => <<"if">>,
+              <<"description">> => <<"flag for the condition">>,
+              <<"type">> => render_type(<<"Bool">>),
+              <<"defaultValue">> => false }
      }}.
