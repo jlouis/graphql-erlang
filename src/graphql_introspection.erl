@@ -414,16 +414,14 @@ directive(Kind) ->
                  <<"exclude a selection on a conditional variable">>}
         end,
 
-    {ok, #{
+    #{
        <<"name">> => Name,
        <<"description">> => Desc,
        <<"locations">> =>
-           [{ok, <<"FIELD">>},
-            {ok, <<"FRAGMENT_SPREADS">>},
-            {ok, <<"INLINE_FRAGMENT">>}],
+           [<<"FIELD">>, <<"FRAGMENT_SPREADS">>, <<"INLINE_FRAGMENT">>],
        <<"args">> =>
            #{ <<"name">> => <<"if">>,
               <<"description">> => <<"flag for the condition">>,
               <<"type">> => render_type(<<"Bool">>),
               <<"defaultValue">> => false }
-     }}.
+     }.
