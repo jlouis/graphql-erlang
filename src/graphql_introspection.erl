@@ -401,3 +401,29 @@ inject() ->
     ok = graphql:insert_schema_definition(Schema),
     ok.
 
+directive(Kind) ->
+    {Name, Desc} =
+        case Kind of
+            include ->
+                {<<"include">>,
+                 <<"include a selection on a conditional variable">> };
+            skip ->
+                {<<"skip">>,
+                 <<"exclude a selection on a conditional variable">>}
+        end,
+
+    #{
+       <<"name">> => Name,
+       <<"description">> => Desc,
+       <<"locations">> =>
+           [{ok, <<"FIELD">>},
+            {ok, <<"FRAGMENT_SPREADS">>},
+            {ok, <<"INLINE_FRAGMENT">>}],
+       <<"args">> =>
+           [{ok, #{
+               <<"name">> => <<"if">>,
+               <<"description">> => <<"flag for the condition">>,
+               <<"type">> =>
+                   render_type(<<"Bool">>),
+               <<"defaultValue">> => false }}]
+     }.
