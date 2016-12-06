@@ -421,8 +421,8 @@ directive(Kind) ->
        <<"locations">> =>
            [<<"FIELD">>, <<"FRAGMENT_SPREADS">>, <<"INLINE_FRAGMENT">>],
        <<"args">> =>
-           #{ <<"name">> => <<"if">>,
-              <<"description">> => <<"flag for the condition">>,
-              <<"type">> => Bool,
-              <<"defaultValue">> => false }
+           [#{ <<"name">> => <<"if">>,
+               <<"description">> => <<"flag for the condition">>,
+               <<"type">> => Bool,
+               <<"defaultValue">> => false }]
      }.

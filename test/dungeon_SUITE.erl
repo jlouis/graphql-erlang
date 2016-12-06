@@ -61,7 +61,8 @@ groups() ->
                  simple_field_merge,
                  nested_field_merge,
                  multiple_monsters_and_rooms,
-                 include_directive
+                 include_directive,
+                 introspection
                  ]},
 
     Errors = {errors, [],
@@ -101,6 +102,17 @@ default_query(Config) ->
         run(Config, <<"MinGoblin">>, #{<<"minAttack">> => 30 }),
     
     ok.
+
+introspection(Config) ->
+    case run(Config, <<"introspection.graphql">>, <<"IntrospectionQuery">>, #{}) of
+        #{ errors := [] } ->
+            ok;
+        #{ errors := Errs } ->
+            ct:log("Errors: ~p", [Errs]),
+            ct:fail(introspection_errors);
+        #{ } ->
+            ok %% No Errors present, so this is OK
+    end.
 
 include_directive(Config) ->
     GoblinID = base64:encode(<<"monster:1">>),
