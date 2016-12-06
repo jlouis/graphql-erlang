@@ -413,6 +413,7 @@ directive(Kind) ->
                 {<<"skip">>,
                  <<"exclude a selection on a conditional variable">>}
         end,
+    {ok, Bool} = render_type(<<"Bool">>),
 
     #{
        <<"name">> => Name,
@@ -422,6 +423,6 @@ directive(Kind) ->
        <<"args">> =>
            #{ <<"name">> => <<"if">>,
               <<"description">> => <<"flag for the condition">>,
-              <<"type">> => render_type(<<"Bool">>),
+              <<"type">> => Bool,
               <<"defaultValue">> => false }
      }.
