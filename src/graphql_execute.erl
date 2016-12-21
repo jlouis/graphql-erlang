@@ -25,10 +25,13 @@ execute_request(InitialCtx, {document, Operations}) ->
         {ok, #op { ty = {mutation, _} } = Op } ->
             execute_mutation(Ctx, Op);
         {error, Reason} ->
-            throw(Reason)
+            complete_top_level(null, [Reason])
     end.
 
-complete_top_level(Res, []) -> #{ data => Res };
+complete_top_level(Res, []) ->
+    #{ data => Res };
+complete_top_level(undefined, Errs) ->
+    #{ errors => Errs };
 complete_top_level(Res, Errs) ->
     #{ data => Res, errors => Errs}.
 
@@ -175,7 +178,7 @@ resolve_field_value(Ctx, ObjectType, Value, Name, Fun, Args) ->
     catch
         Cl:Err ->
             lager:warning("Resolver function error: ~p stacktrace: ~p", [{Cl,Err}, erlang:get_stacktrace()]),
-            {error, resolver_crash}
+            {error, {resolver_crash, Fun, ObjectType, Name}}
     end.
 
 complete_value(Path, Ctx, Ty, Fields, {ok, {enum, Value}}) ->
@@ -467,7 +470,8 @@ field_type(#field { schema = SF }) -> SF.
 
 %% -- ERROR HANDLING --
 
-err(Path, Reason) -> err(Path, Reason, []).
+err(Path, Reason) ->
+    err(Path, Reason, []).
 
 err(Path, Reason, More) when is_list(More) ->
     {error, [#{ path => Path, reason => Reason} | More]}.
