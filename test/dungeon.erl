@@ -134,13 +134,13 @@ inject_color() ->
                                 Red = binary_to_integer(<<R1, R2>>, 16),
                                 Green = binary_to_integer(<<G1, G2>>, 16),
                                 Blue = binary_to_integer(<<B1, B2>>, 16),
-                                {ok, {Red, Green, Blue}};
+                                {ok, #{ r => Red, g => Green, b => Blue}};
                             (<<"#">>) ->
                                 exit(argh);
                             (X) ->
                                 {error, {invalid_color, X}}
                         end,
-    	output_coerce => fun ({R,G,B}) ->
+    	output_coerce => fun (#{ r := R, g := G, b := B}) ->
                                  ct:pal("Output coercer called~n"),
                                  R1 = integer_to_binary(R, 16),
                                  G1 = integer_to_binary(G, 16),
