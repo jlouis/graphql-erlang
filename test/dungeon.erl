@@ -93,7 +93,7 @@ populate() ->
     {atomic, _} = mnesia:transaction(Fun),
     {atomic, _} = insert(#monster {
         name = <<"goblin">>,
-        color = {65, 146, 75},
+        color = #{ r => 65, g => 146, b => 75},
         hitpoints = 10,
         mood = <<"DODGY">>,
         stats = [#stats{}] }),
@@ -240,12 +240,12 @@ inject_monster() ->
             description => "The name of the monster" },
           color => #{
             type => 'Color!',
-            resolve => fun(_, #monster{ color = {R,G,B} = C }, #{ <<"colorType">> := CType }) ->
+            resolve => fun(_, #monster{ color = #{ r := R, g := G, b := B} = C }, #{ <<"colorType">> := CType }) ->
                                   case CType of
                                       <<"rgb">> -> {ok, C};
                                       <<"gray">> ->
                                           V = 0.30*R + 0.59*G + 0.11*B,
-                                          {ok, {V, V, V}}
+                                          {ok, #{ r => V, g => V, b => V}}
                                   end
                        end,
             description => "The color of the monster",
@@ -659,7 +659,7 @@ mut_int_room(_Ctx, none, #{ <<"input">> := Input }) ->
 mut_int_monster(_Ctx, none, #{ <<"input">> := Input }) ->
     #{ <<"clientMutationId">> := MID,
        <<"name">> := N,
-       <<"color">> := {_,_,_} = C,
+       <<"color">> := #{} = C,
        <<"hitpoints">> := HP,
        <<"stats">> := Stats,
        <<"mood">> := M,

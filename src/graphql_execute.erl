@@ -423,10 +423,15 @@ value(Ctx, #{ type := #input_object_type { fields = FieldEnv },
     ObjVals = value_object(Ctx, FieldEnv, maps:to_list(O)),
     maps:from_list(ObjVals);
 value(Ctx, #{ type := ObjTy, value := O}) when is_map(O) ->
-    #input_object_type { fields = FieldEnv } = graphql_schema:get(
-        graphql_ast:unwrap_type(ObjTy)),
-    ObjVals = value_object(Ctx, FieldEnv, maps:to_list(O)),
-    maps:from_list(ObjVals);
+    case graphql_schema:get(graphql_ast:unwrap_type(ObjTy)) of
+        #input_object_type { fields = FieldEnv } ->
+            ObjVals = value_object(Ctx, FieldEnv, maps:to_list(O)),
+            maps:from_list(ObjVals);
+        #scalar_type{} ->
+            %% Input coercion has produced a scalar type. In this
+            %% case, we just let the given scalar coercion through
+            O
+    end;
 value(#{ params := Params }, #{ value := {var, ID}}) ->
     maps:get(name(ID), Params);
 value(_Ctx, #{ type := {scalar, STy}, value := V}) ->
