@@ -5,8 +5,6 @@
   {applications,
    [kernel,
     stdlib,
-    
-    jsx,
     lager
    ]},
   {mod, {graphql_app, []}},
