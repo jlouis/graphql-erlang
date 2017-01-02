@@ -64,6 +64,10 @@ end_per_testcase(_Case, _Config) ->
     ok.
 
 groups() ->
+    Schema = {schema, [shuffle, parallel], [
+    	lex_schema
+    ]},
+
     Basic = {basic, [shuffle, parallel], [ hello_world, user_queries ] },
     SW = {star_wars, [shuffle, parallel], [
         %% Basic tests
@@ -124,9 +128,10 @@ groups() ->
 	v_5_4_2_3_1
     ]},
 
-    [Basic, SW, EnumType, SchemaTest, Validation, Introspection].
+    [Basic, SW, EnumType, Schema, SchemaTest, Validation, Introspection].
 
 all() -> [
+    {group, schema},
     {group, validation},
     {group, basic},
     {group, star_wars},
@@ -146,6 +151,17 @@ user_queries(Config) ->
     #{ data :=
        #{ <<"user">> := #{ <<"id">> := <<"2">>, <<"name">> := <<"Marie">> }}} = th:x(Config, Query),
     ok.
+
+%% -- SCHEMA --------------------------------
+lex_schema(Config) ->
+    FName = filename:join([?config(data_dir, Config), "test_schema.spec"]),
+    {ok, Data} = file:read_file(FName),
+    case graphql_scanner:string(binary_to_list(Data)) of
+        {ok, Token, _EndLine} ->
+            ok;
+        {error, Err, _EndLine} ->
+            ct:fail({parse_error, Err})
+    end.
 
 %% -- STAR WARS™ --------------------------------
 

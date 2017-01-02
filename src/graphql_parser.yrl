@@ -172,18 +172,18 @@ Directive -> '@' Name :
 Directive -> '@' Name Arguments :
     #directive { id = '$2', args = '$3' }.
 
-KeywordName -> 'query' : atom_to_binary('$1', utf8).
-KeywordName -> 'mutation' : atom_to_binary('$1', utf8).
-KeywordName -> 'fragment' : atom_to_binary('$1', utf8).
-KeywordName -> 'type' : atom_to_binary('$1', utf8).
-KeywordName -> 'implements' : atom_to_binary('$1', utf8).
-KeywordName -> 'interface' : atom_to_binary('$1', utf8).
-KeywordName -> 'union' : atom_to_binary('$1', utf8).
-KeywordName -> 'scalar' : atom_to_binary('$1', utf8).
-KeywordName -> 'enum' : atom_to_binary('$1', utf8).
-KeywordName -> 'input' : atom_to_binary('$1', utf8).
-KeywordName -> 'extend' : atom_to_binary('$1', utf8).
-KeywordName -> 'null' : atom_to_binary('$1', utf8).
+KeywordName -> 'query' : keyword('$1').
+KeywordName -> 'mutation' : keyword('$1').
+KeywordName -> 'fragment' : keyword('$1').
+KeywordName -> 'type' : keyword('$1').
+KeywordName -> 'implements' : keyword('$1').
+KeywordName -> 'interface' : keyword('$1').
+KeywordName -> 'union' : keyword('$1').
+KeywordName -> 'scalar' : keyword('$1').
+KeywordName -> 'enum' : keyword('$1').
+KeywordName -> 'input' : keyword('$1').
+KeywordName -> 'extend' : keyword('$1').
+KeywordName -> 'null' : keyword('$1').
 
 FragmentName -> name : '$1'.
 FragmentName -> KeywordName : '$1'.
@@ -303,3 +303,7 @@ g_bool({bool, _, B}) -> B.
 
 g_list(L) when is_list(L) -> L.
 g_input_object(KVPairs) -> maps:from_list(KVPairs).
+
+%% Convert keywords into binaries if they don't occur in the KW-position
+keyword({A, Line}) when is_atom(A) ->
+    {name, Line, atom_to_binary(A, utf8)}.

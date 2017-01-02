@@ -15,7 +15,7 @@ Comma               = ,
 Ignored             = {WhiteSpace}|{LineTerminator}|{Comment}|{Comma}
 
 % Lexical tokens
-Punctuator          = [!$():=@\[\]{|}]|\.\.\.
+Punctuator          = [+!$():=@\[\]{|}]|\.\.\.
 Name                = [_A-Za-z][_0-9A-Za-z]*
 
 % Int Value
@@ -62,6 +62,14 @@ identifier("subscription", TokenLine) -> {subscription, TokenLine};
 identifier("fragment", TokenLine) -> {fragment, TokenLine};
 identifier("on", TokenLine) -> {on, TokenLine};
 identifier("null", TokenLine) -> {null, TokenLine};
+identifier("scalar", TokenLine) -> {scalar, TokenLine};
+identifier("enum", TokenLine) -> {enum, TokenLine};
+identifier("type", TokenLine) -> {type, TokenLine};
+identifier("input", TokenLine) -> {input, TokenLine};
+identifier("implements", TokenLine) -> {implements, TokenLine};
+identifier("interface", TokenLine) -> {interface, TokenLine};
+identifier("union", TokenLine) -> {union, TokenLine};
+identifier("extend", TokenLine) -> {extend, TokenLine};
 identifier(ID, TokenLine) -> {name, TokenLine, iolist_to_binary(ID)}.
 
 unquote(Str) ->
