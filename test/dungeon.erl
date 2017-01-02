@@ -311,7 +311,7 @@ inject_monster() ->
     	}}},
     ok = graphql:insert_schema_definition(Monster),
 
-    ok = graphql_relay:input('IntroduceMonster', #{
+    ok = relay_helper:input('IntroduceMonster', #{
                                name => #{
                                  type => 'string!',
                                  description => "The defining name of the monster" },
@@ -368,7 +368,7 @@ inject_room() ->
     				description => "Things in the room" }
     	}}},
     	ok = graphql:insert_schema_definition(Room),
-    ok = graphql_relay:input('IntroduceRoom',
+    ok = relay_helper:input('IntroduceRoom',
         #{
     	    description => #{
     		type => 'string!',
@@ -380,7 +380,7 @@ inject_room() ->
                description => "The introduced room" }
         }),
 
-    ok = graphql_relay:input('SpawnMinion',
+    ok = relay_helper:input('SpawnMinion',
 	#{
     	    monsterId => #{
     		type => 'id!',
@@ -472,7 +472,7 @@ inject_item() ->
     				description => "The Items inside this item, if any" }
     	}}},
     ok = graphql:insert_schema_definition(Item),
-    ok = graphql_relay:input('IntroduceItem',
+    ok = relay_helper:input('IntroduceItem',
       #{
         name => #{
         		type => 'string!',
