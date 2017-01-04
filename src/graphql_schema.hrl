@@ -77,10 +77,10 @@
 -type scalar_type() :: #scalar_type{}.
 
 -record(input_object_type, {
-	id :: binary(),
-	description :: binary(),
-	fields = #{} :: #{ binary() => schema_arg() }
-}).
+          id :: binary(),
+          description :: binary(),
+          fields = #{} :: #{ binary() => schema_arg() }
+         }).
 -type input_object_type() :: #input_object_type{}.
 
 -record(object_type, {

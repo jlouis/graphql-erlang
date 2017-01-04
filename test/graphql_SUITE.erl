@@ -170,8 +170,7 @@ parse_schema(Config) ->
     {ok, Data} = file:read_file(FName),
     case graphql:load_schema(#{ scalars => #{},
                                 objects => #{} }, Data) of
-        {ok, Document} ->
-            ct:log("Document: ~p", [Document]),
+        ok ->
             ok;
         {error, Reason} ->
             ct:fail(Reason)
