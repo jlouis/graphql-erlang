@@ -64,9 +64,11 @@ end_per_testcase(_Case, _Config) ->
     ok.
 
 groups() ->
-    Schema = {schema, [shuffle, parallel], [
-    	lex_schema
-    ]},
+    Schema = {schema, [shuffle, parallel],
+              [
+               lex_schema,
+               parse_schema
+              ]},
 
     Basic = {basic, [shuffle, parallel], [ hello_world, user_queries ] },
     SW = {star_wars, [shuffle, parallel], [
@@ -161,6 +163,18 @@ lex_schema(Config) ->
             ok;
         {error, Err, _EndLine} ->
             ct:fail({parse_error, Err})
+    end.
+
+parse_schema(Config) ->
+    FName = filename:join([?config(data_dir, Config), "test_schema.spec"]),
+    {ok, Data} = file:read_file(FName),
+    case graphql:load_schema(#{ scalars => #{},
+                                objects => #{} }, Data) of
+        {ok, Document} ->
+            ct:log("Document: ~p", [Document]),
+            ok;
+        {error, Reason} ->
+            ct:fail(Reason)
     end.
 
 %% -- STAR WARS™ --------------------------------

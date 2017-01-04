@@ -13,8 +13,9 @@
 
 %% Schema Definitions
 -export([
-    insert_schema_definition/1,
-    validate_schema/0
+         load_schema/2,
+         insert_schema_definition/1,
+         validate_schema/0
 ]).
 
 -type json() :: number() | binary() | true | false | null | #{ binary() => json() }.
@@ -30,6 +31,16 @@
 -spec parse( binary() | string()) -> {ok, ast()} | {error, term()}.
 parse(Input) when is_binary(Input) -> parse(binary_to_list(Input));
 parse(Input) when is_list(Input) ->
+    case graphql_scanner:string(Input) of
+        {ok, Tokens, _EndLine} ->
+            graphql_parser:parse(Tokens);
+        {error, Err, _EndLine} ->
+            {error, Err}
+    end.
+
+load_schema(Mapping, Input) when is_binary(Input) ->
+    load_schema(Mapping, binary_to_list(Input));
+load_schema(Mapping, Input) when is_list(Input) ->
     case graphql_scanner:string(Input) of
         {ok, Tokens, _EndLine} ->
             graphql_parser:parse(Tokens);

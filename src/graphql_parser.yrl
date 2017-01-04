@@ -25,10 +25,12 @@ Nonterminals
   
   Name KeywordName
   Value EnumValue ListValue Values
-  InputObjectValue InputObjectFields InputObjectField.
+  InputObjectValue InputObjectFields InputObjectField
+
+  AnnotationList Annotation.
 
 Terminals
-  '{' '}' '(' ')' '[' ']' '!' ':' '@' '$' '=' '|' '...'
+  '{' '}' '(' ')' '[' ']' '!' ':' '@' '$' '=' '|' '...' '+'
   'query' 'mutation' 'subscription' 'fragment' 'on' 'null'
   'type' 'implements' 'interface' 'union' 'scalar' 'enum' 'input' 'extend'
   name int float bstring bool.
@@ -225,10 +227,19 @@ TypeDefinition -> EnumTypeDefinition : '$1'.
 TypeDefinition -> InputObjectTypeDefinition : '$1'.
 TypeDefinition -> TypeExtensionDefinition : '$1'.
 
+AnnotationList -> Annotation : ['$1'].
+AnnotationList -> Annotation AnnotationList : ['$1'|'$2'].
+
+Annotation -> '+' Name : {annotation, '$2', []}.
+Annotation -> '+' Name Arguments: {annotation, '$2', '$3'}.
+
+ObjectTypeDefinition -> AnnotationList 'type' Name '{' FieldDefinitionList '}' : {object_type, '$3', [], '$5', '$1'}.
 ObjectTypeDefinition -> 'type' Name '{' FieldDefinitionList '}' :
-  {object_type, '$2', [], '$4'}.
+  {object_type, '$2', [], '$4', []}.
+ObjectTypeDefinition -> AnnotationList 'type' Name ImplementsInterfaces '{' FieldDefinitionList '}' :
+  {object_type, '$3', '$4', '$6', '$1'}.
 ObjectTypeDefinition -> 'type' Name ImplementsInterfaces '{' FieldDefinitionList '}' :
-  {object_type, '$3', '$3', '$5'}.
+  {object_type, '$2', '$3', '$5', []}.
 
 ImplementsInterfaces -> 'implements' NamedTypeList : '$2'.
 
@@ -238,16 +249,30 @@ NamedTypeList -> NamedType NamedTypeList : ['$1'|'$2'].
 FieldDefinitionList -> FieldDefinition : ['$1'].
 FieldDefinitionList -> FieldDefinition FieldDefinitionList : ['$1'|'$2'].
 
-FieldDefinition -> Name ':' Type : {field_def, '$1', [], '$3'}.
-FieldDefinition -> Name ArgumentsDefinition ':' Type : {field, '$1', '$2', '$4'}.
+FieldDefinition -> Name ':' Type : {field_def, '$1', [], '$3', [], []}.
+FieldDefinition -> Name ':' Type Directives : {field_def, '$1', [], '$3', '$4', []}.
+FieldDefinition -> Name ArgumentsDefinition ':' Type : {field_def, '$1', '$2', '$4', [], []}.
+FieldDefinition -> Name ArgumentsDefinition ':' Type Directives : {field_def, '$1', '$2', '$4', '$5', []}.
+
+FieldDefinition -> AnnotationList Name ':' Type : {field_def, '$2', [], '$4', [], '$1'}.
+FieldDefinition -> AnnotationList Name ':' Type Directives : {field_def, '$2', [], '$5', '$5', '$1'}.
+FieldDefinition -> AnnotationList Name ArgumentsDefinition ':' Type : {field_def, '$2', '$3', '$5', [], '$1'}.
+FieldDefinition -> AnnotationList Name ArgumentsDefinition ':' Type Directives : {field_def, '$2', '$3', '$5', '$6', '$1'}.
 
 ArgumentsDefinition -> '(' InputValueDefinitionList ')' : '$2'.
 
 InputValueDefinitionList -> InputValueDefinition : ['$1'].
 InputValueDefinitionList -> InputValueDefinition InputValueDefinitionList : ['$1'|'$2'].
 
-InputValueDefinition -> Name ':' Type : {'$1', '$2'}.
-InputValueDefinition -> Name ':' Type DefaultValue : {'$1', '$2', '$4'}.
+
+InputValueDefinition -> AnnotationList Name ':' Type :
+                            {'$2', '$4', '$1'}.
+InputValueDefinition -> Name ':' Type :
+                            {'$1', '$3', []}.
+InputValueDefinition -> AnnotationList Name ':' Type DefaultValue :
+                            {'$2', '$4', '$5', '$1'}.
+InputValueDefinition -> Name ':' Type DefaultValue :
+                            {'$1', '$3', '$4', []}.
 
 InterfaceTypeDefinition -> 'interface' Name '{' FieldDefinitionList '}' :
     {interface, '$1', '$4'}.
@@ -258,7 +283,8 @@ UnionTypeDefinition -> 'union' Name '=' UnionMembers :
 UnionMembers -> NamedType : ['$1'].
 UnionMembers -> NamedType '|' UnionMembers : ['$1'|'$3'].
 
-ScalarTypeDefinition -> 'scalar' Name : {scalar, '$1'}.
+ScalarTypeDefinition -> AnnotationList 'scalar' Name : {scalar, '$3', '$1'}.
+ScalarTypeDefinition -> 'scalar' Name : {scalar, '$2', []}.
 
 EnumTypeDefinition -> 'enum' Name '{' EnumValueDefinitionList '}':
     {enum, '$2', '$4'}.
@@ -268,8 +294,9 @@ EnumValueDefinitionList -> EnumValueDefinition EnumValueDefinitionList : ['$1'|'
 
 EnumValueDefinition -> EnumValue : '$1'.
 
+InputObjectTypeDefinition -> AnnotationList 'input' Name '{' InputValueDefinitionList '}' : {input, '$3', '$5', '$1'}.
 InputObjectTypeDefinition -> 'input' Name '{' InputValueDefinitionList '}' :
-    {input, '$2', '$4'}.
+    {input, '$2', '$4', []}.
 
 TypeExtensionDefinition -> 'extend' ObjectTypeDefinition :
     {extend, '$2'}.
