@@ -104,7 +104,7 @@ Selection -> FragmentSpread : '$1'.
 Selection -> InlineFragment : '$1'.
 
 FragmentSpread -> '...' FragmentName : 
-    #frag_spread { id = '$2'}.
+    #frag_spread { id = '$2' }.
 FragmentSpread -> '...' FragmentName Directives :
     #frag_spread { id = '$2', directives = '$3' }.
 
@@ -230,16 +230,41 @@ TypeDefinition -> TypeExtensionDefinition : '$1'.
 AnnotationList -> Annotation : ['$1'].
 AnnotationList -> Annotation AnnotationList : ['$1'|'$2'].
 
-Annotation -> '+' Name : {annotation, '$2', []}.
-Annotation -> '+' Name Arguments: {annotation, '$2', '$3'}.
+Annotation -> '+' Name :
+                  #annotation {
+                     id = '$2',
+                     args = []
+                    }.
+Annotation -> '+' Name Arguments :
+                  #annotation {
+                     id = '$2',
+                     args = '$3'
+                    }.
 
-ObjectTypeDefinition -> AnnotationList 'type' Name '{' FieldDefinitionList '}' : {object_type, '$3', [], '$5', '$1'}.
+ObjectTypeDefinition -> AnnotationList 'type' Name '{' FieldDefinitionList '}' :
+                            #p_type {
+                               annotations = '$1',
+                               id = '$3',
+                               fields = '$5'
+                              }.
 ObjectTypeDefinition -> 'type' Name '{' FieldDefinitionList '}' :
-  {object_type, '$2', [], '$4', []}.
+                            #p_type {
+                               id = '$2',
+                               fields = '$4'
+                              }.
 ObjectTypeDefinition -> AnnotationList 'type' Name ImplementsInterfaces '{' FieldDefinitionList '}' :
-  {object_type, '$3', '$4', '$6', '$1'}.
+                            #p_type {
+                               annotations = '$1',
+                               id = '$3',
+                               implements = '$4',
+                               fields = '$5'
+                              }.
 ObjectTypeDefinition -> 'type' Name ImplementsInterfaces '{' FieldDefinitionList '}' :
-  {object_type, '$2', '$3', '$5', []}.
+                            #p_type {
+                               id = '$2',
+                               implements = '$3',
+                               fields = '$5'
+                              }.
 
 ImplementsInterfaces -> 'implements' NamedTypeList : '$2'.
 
@@ -249,15 +274,58 @@ NamedTypeList -> NamedType NamedTypeList : ['$1'|'$2'].
 FieldDefinitionList -> FieldDefinition : ['$1'].
 FieldDefinitionList -> FieldDefinition FieldDefinitionList : ['$1'|'$2'].
 
-FieldDefinition -> Name ':' Type : {field_def, '$1', [], '$3', [], []}.
-FieldDefinition -> Name ':' Type Directives : {field_def, '$1', [], '$3', '$4', []}.
-FieldDefinition -> Name ArgumentsDefinition ':' Type : {field_def, '$1', '$2', '$4', [], []}.
-FieldDefinition -> Name ArgumentsDefinition ':' Type Directives : {field_def, '$1', '$2', '$4', '$5', []}.
-
-FieldDefinition -> AnnotationList Name ':' Type : {field_def, '$2', [], '$4', [], '$1'}.
-FieldDefinition -> AnnotationList Name ':' Type Directives : {field_def, '$2', [], '$5', '$5', '$1'}.
-FieldDefinition -> AnnotationList Name ArgumentsDefinition ':' Type : {field_def, '$2', '$3', '$5', [], '$1'}.
-FieldDefinition -> AnnotationList Name ArgumentsDefinition ':' Type Directives : {field_def, '$2', '$3', '$5', '$6', '$1'}.
+FieldDefinition -> Name ':' Type :
+                       #p_field_def {
+                          id = '$1',
+                          type = '$3'
+                         }.
+FieldDefinition -> Name ':' Type Directives :
+                       #p_field_def {
+                          id = '$1',
+                          type = '$3',
+                          directives = '$4'
+                         }.
+FieldDefinition -> Name ArgumentsDefinition ':' Type :
+                       #p_field_def {
+                          id = '$1',
+                          args = '$2',
+                          type = '$4'
+                         }.
+FieldDefinition -> Name ArgumentsDefinition ':' Type Directives :
+                       #p_field_def {
+                          id = '$1',
+                          args = '$2',
+                          type = '$4',
+                          directives = '$5'
+                         }.
+FieldDefinition -> AnnotationList Name ':' Type :
+                       #p_field_def {
+                          annotations = '$1',
+                          id = '$2',
+                          type = '$4'
+                         }.
+FieldDefinition -> AnnotationList Name ':' Type Directives :
+                       #p_field_def {
+                          annotations = '$1',
+                          id = '$2',
+                          type = '$4',
+                          directives = '$5'
+                         }.
+FieldDefinition -> AnnotationList Name ArgumentsDefinition ':' Type :
+                       #p_field_def {
+                          annotations = '$1',
+                          id = '$2',
+                          args = '$3',
+                          type = '$5'
+                         }.
+FieldDefinition -> AnnotationList Name ArgumentsDefinition ':' Type Directives :
+                       #p_field_def {
+                          annotations = '$1',
+                          id = '$2',
+                          args = '$3',
+                          type = '$5',
+                          directives = '$6'
+                         }.
 
 ArgumentsDefinition -> '(' InputValueDefinitionList ')' : '$2'.
 
@@ -266,37 +334,76 @@ InputValueDefinitionList -> InputValueDefinition InputValueDefinitionList : ['$1
 
 
 InputValueDefinition -> AnnotationList Name ':' Type :
-                            {'$2', '$4', '$1'}.
+                            #p_input_value {
+                               annotations = '$1',
+                               id = '$2',
+                               type = '$4'
+                              }.
 InputValueDefinition -> Name ':' Type :
-                            {'$1', '$3', []}.
+                            #p_input_value {
+                               id = '$1',
+                               type = '$3'
+                              }.
 InputValueDefinition -> AnnotationList Name ':' Type DefaultValue :
-                            {'$2', '$4', '$5', '$1'}.
+                            #p_input_value {
+                               annotations = '$1',
+                               id = '$2',
+                               type = '$4',
+                               default = '$5'
+                              }.
 InputValueDefinition -> Name ':' Type DefaultValue :
-                            {'$1', '$3', '$4', []}.
+                            #p_input_value {
+                               id = '$1',
+                               type = '$3',
+                               default = '$4'
+                              }.
 
 InterfaceTypeDefinition -> 'interface' Name '{' FieldDefinitionList '}' :
-    {interface, '$1', '$4'}.
+                               #p_interface {
+                                  id = '$2',
+                                  fields = '$4'
+                                 }.
 
 UnionTypeDefinition -> 'union' Name '=' UnionMembers :
-    {union, '$2', '$4'}.
+    #p_union {
+       id = '$2',
+       members = '$2'
+      }.
 
 UnionMembers -> NamedType : ['$1'].
 UnionMembers -> NamedType '|' UnionMembers : ['$1'|'$3'].
 
-ScalarTypeDefinition -> AnnotationList 'scalar' Name : {scalar, '$3', '$1'}.
-ScalarTypeDefinition -> 'scalar' Name : {scalar, '$2', []}.
+ScalarTypeDefinition -> AnnotationList 'scalar' Name :
+                            #p_scalar { 
+                               id = '$3',
+                               annotations = '$1' 
+                              }.
+ScalarTypeDefinition -> 'scalar' Name :
+                            #p_scalar {
+                               id = '$2'
+                              }.
 
 EnumTypeDefinition -> 'enum' Name '{' EnumValueDefinitionList '}':
-    {enum, '$2', '$4'}.
+                          #p_enum {
+                             id = '$2',
+                             variants = '$4'
+                            }.
 
 EnumValueDefinitionList -> EnumValueDefinition : ['$1'].
 EnumValueDefinitionList -> EnumValueDefinition EnumValueDefinitionList : ['$1'|'$2'].
 
 EnumValueDefinition -> EnumValue : '$1'.
 
-InputObjectTypeDefinition -> AnnotationList 'input' Name '{' InputValueDefinitionList '}' : {input, '$3', '$5', '$1'}.
+InputObjectTypeDefinition -> AnnotationList 'input' Name '{' InputValueDefinitionList '}' :
+                                 #p_input_object{
+                                    id = '$1',
+                                    defs = '$5',
+                                    annotations = '$1' }.
 InputObjectTypeDefinition -> 'input' Name '{' InputValueDefinitionList '}' :
-    {input, '$2', '$4', []}.
+                                 #p_input_object{
+                                    id = '$2',
+                                    defs = '$4',
+                                    annotations = [] }.
 
 TypeExtensionDefinition -> 'extend' ObjectTypeDefinition :
     {extend, '$2'}.

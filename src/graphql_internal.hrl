@@ -60,7 +60,7 @@
           id :: name(),
           args = [] :: [any()],
           schema :: any()
-}).
+         }).
 -type directive() :: #directive{}.
 
 -record(op, {
@@ -70,8 +70,67 @@
 	directives = [] :: [#directive{}],
 	selection_set = [] :: [#field{}],
 	schema = undefined :: 'undefined' | any()
-}).
+         }).
 -type op() :: #op{}.
 
 -type ast() :: {document, [#op{}]}.
 -type context() :: #{ atom() => any() }.
+
+%%% --- Parsed Schemas
+%% Parsed schemas all starts with a p_ suffix
+
+-record(annotation, {
+          id :: name(),
+          args = [] :: [any()]
+         }).
+-type annotation() :: #annotation{}.
+
+-record(p_field_def, {
+          annotations = [] :: [annotation()],
+          id :: name(),
+          args = [] :: any(),
+          type :: atom(),
+          directives = [] :: [any()]
+          }).
+-type p_field_def() :: #p_field_def{}.
+
+-record(p_type, {
+          annotations = [] :: [annotation()],
+          id :: name(),
+          fields = [] :: [p_field_def()],
+          implements = [] :: [name()]
+         }).
+
+-record(p_input_value, {
+          id :: name(),
+          annotations = [] :: any(),
+          default = null :: any(),
+          type :: atom()
+         }).
+
+-record(p_interface, {
+          id :: name(),
+          fields = [] :: any()
+         }).
+
+-record(p_union, {
+          id :: name(),
+          members :: [name()]
+         }).
+
+-record(p_scalar, {
+          id :: name(),
+          annotations = [] :: any()
+        }).
+
+-record(p_enum, {
+          id :: name(),
+          variants = [] :: any()
+         }).
+
+-record(p_input_object, {
+          id :: name(),
+          defs = [] :: any(),
+          annotations = [] :: any()
+        }).
+
