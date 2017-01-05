@@ -32,6 +32,17 @@ mk(#{ unions := Us }, #p_union { id = ID,
        description => Description,
        resolve_module => Mod,
        types => Types }};
+mk(_Map, #p_input_object {
+            id = ID,
+            annotations = Annots,
+            defs = Ds }) ->
+    Name = name(ID),
+    Description = description(Annots),
+    Defs = input_defs(Ds),
+    {input_object, #{
+       id => Name,
+       description => Description,
+       fields => Defs }};
 mk(#{ interfaces := IF }, #p_interface {
                             id = ID,
                             annotations = Annots,
@@ -49,7 +60,9 @@ mk(#{ interfaces := IF }, #p_interface {
           
 fields(Raw) ->
     maps:from_list([field(R) || R <- Raw]).
-  
+
+input_defs(Raw) ->  
+    maps:from_list([input_def(D) || D <- Raw]).
 
 inject(Def) ->
     ok = graphql:insert_schema_definition(Def).
@@ -87,9 +100,20 @@ description(Annots) ->
         not_found ->
             <<"No description provided">>;
         #annotation { args = Args } ->
-            ct:pal("Args is: ~p", [Args]),
-            <<"TODO">>
+            find(<<"text">>, Args)
     end.
+
+input_def(#p_input_value { id = ID,
+                           annotations = Annots,
+                           default = Default, 
+                           type = Type }) ->
+    Name = name(ID),
+    Description = description(Annots),
+    K = binary_to_atom(Name, utf8),
+    V = #{ type => Type,
+           default => Default,
+           description => Description },
+    {K, V}.
 
 field(#p_field_def{ id = ID, annotations = Annots, type = T }) ->
     Name = name(ID),
@@ -100,6 +124,8 @@ field(#p_field_def{ id = ID, annotations = Annots, type = T }) ->
     {K, V}.
 
 find(_T, []) -> not_found;
+find(T, [{{name, _, T}, V}|_]) -> V;
+find(T, [{{name, _, _}, _}|Next]) -> find(T, Next);
 find(T, [#annotation { id = {name, _, T}} = A|_]) -> A;
 find(T, [#annotation{}|Next]) -> find(T, Next).
 
