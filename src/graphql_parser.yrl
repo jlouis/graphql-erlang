@@ -367,7 +367,7 @@ InterfaceTypeDefinition -> 'interface' Name '{' FieldDefinitionList '}' :
 UnionTypeDefinition -> 'union' Name '=' UnionMembers :
     #p_union {
        id = '$2',
-       members = '$2'
+       members = '$4'
       }.
 
 UnionMembers -> NamedType : ['$1'].
