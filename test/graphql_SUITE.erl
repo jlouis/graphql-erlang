@@ -170,12 +170,13 @@ parse_schema(Config) ->
     {ok, Data} = file:read_file(FName),
     case graphql:load_schema(#{ scalars => #{},
                                 interfaces => #{
-                                 'Node' => node_resolver
+                                 'Node' => node_resource
                                  },
                                 unions => #{
-                                 'Thing' => node_resolver
+                                 'Thing' => node_resource
                                  },
-                                objects => #{} }, Data) of
+                                objects => #{
+                                 'Stats' => stats_resource } }, Data) of
         ok ->
             ok;
         {error, Reason} ->

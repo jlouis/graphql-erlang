@@ -32,6 +32,22 @@ mk(#{ unions := Us }, #p_union { id = ID,
        description => Description,
        resolve_module => Mod,
        types => Types }};
+mk(#{ objects := OM }, #p_type {
+           id = ID,
+           annotations = Annots,
+           fields = Fs,
+           implements = Impls }) ->
+    Name = name(ID),
+    Description = description(Annots),
+    Mod = maps:get(Name, OM),
+    Fields = fields(Fs),
+    Implements = [name(I) || I <- Impls],
+    {object, #{
+       id => Name,
+       description => Description,
+       fields => Fields,
+       resolve_module => Mod,
+       implements => Implements }};
 mk(_Map, #p_input_object {
             id = ID,
             annotations = Annots,
