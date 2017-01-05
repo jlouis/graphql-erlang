@@ -79,8 +79,7 @@ root_interfaces(#{ interfaces := IFs }) -> [binarize(I) || I <- IFs];
 root_interfaces(_) -> [].
 
 c_id(ID) -> binarize(ID).
-
-c_type(ID) when is_atom(ID) -> binarize(ID).
+c_type(ID) -> binarize(ID).
 
 c_interfaces(#{ interfaces := IFs }) -> [binarize(I) || I <- IFs];
 c_interfaces(#{}) -> [].
@@ -127,6 +126,7 @@ c_field_val(M) ->
 c_field_val_ty(#{ type := Ty }) ->
     handle_type(Ty).
 
+handle_type({scalar, T}) -> handle_type(T);
 handle_type('string!') -> {non_null, {scalar, string}};
 handle_type(string) -> {scalar, string};
 handle_type('int!') -> {non_null, {scalar, int}};
@@ -139,6 +139,7 @@ handle_type(bool) -> {scalar, bool};
 handle_type('bool!') -> {non_null, {scalar, bool}};
 handle_type({non_null, Ty}) -> {non_null, handle_type(Ty)};
 handle_type([Ty]) -> {list, handle_type(Ty)};
+handle_type({list, Ty}) -> {list, handle_type(Ty)};
 handle_type(A) when is_atom(A) -> non_null(atom_to_list(A)).
     
 non_null(Ty) ->

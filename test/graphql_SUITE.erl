@@ -176,7 +176,9 @@ parse_schema(Config) ->
                                  'Thing' => node_resource
                                  },
                                 objects => #{
-                                 'Stats' => stats_resource } }, Data) of
+                                  'Monster' => monster_resource,
+                                  'Item' => item_resource,
+                                  'Stats' => stats_resource } }, Data) of
         ok ->
             ok;
         {error, Reason} ->
