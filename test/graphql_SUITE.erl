@@ -169,6 +169,12 @@ parse_schema(Config) ->
     FName = filename:join([?config(data_dir, Config), "test_schema.spec"]),
     {ok, Data} = file:read_file(FName),
     case graphql:load_schema(#{ scalars => #{},
+                                interfaces => #{
+                                 'Node' => node_resolver
+                                 },
+                                unions => #{
+                                 'Thing' => node_resolver
+                                 },
                                 objects => #{} }, Data) of
         ok ->
             ok;
