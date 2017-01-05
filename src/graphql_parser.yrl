@@ -395,7 +395,13 @@ ScalarTypeDefinition -> 'scalar' Name :
                                id = '$2'
                               }.
 
-EnumTypeDefinition -> 'enum' Name '{' EnumValueDefinitionList '}':
+EnumTypeDefinition -> AnnotationList 'enum' Name '{' EnumValueDefinitionList '}' :
+                          #p_enum {
+                             annotations = '$1',
+                             id = '$3',
+                             variants = '$5'
+                            }.
+EnumTypeDefinition -> 'enum' Name '{' EnumValueDefinitionList '}' :
                           #p_enum {
                              id = '$2',
                              variants = '$4'

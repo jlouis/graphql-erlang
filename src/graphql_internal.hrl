@@ -127,6 +127,7 @@
 
 -record(p_enum, {
           id :: name(),
+          annotations = [] :: any(),
           variants = [] :: any()
          }).
 
