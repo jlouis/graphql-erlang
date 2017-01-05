@@ -408,7 +408,7 @@ EnumValueDefinition -> EnumValue : '$1'.
 
 InputObjectTypeDefinition -> AnnotationList 'input' Name '{' InputValueDefinitionList '}' :
                                  #p_input_object{
-                                    id = '$1',
+                                    id = '$3',
                                     defs = '$5',
                                     annotations = '$1' }.
 InputObjectTypeDefinition -> 'input' Name '{' InputValueDefinitionList '}' :
