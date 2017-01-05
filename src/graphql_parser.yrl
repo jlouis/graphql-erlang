@@ -358,12 +358,24 @@ InputValueDefinition -> Name ':' Type DefaultValue :
                                default = '$4'
                               }.
 
+InterfaceTypeDefinition -> AnnotationList 'interface' Name '{' FieldDefinitionList '}' :
+                               #p_interface {
+                                  annotations = '$1',
+                                  id = '$3',
+                                  fields = '$5'
+                                 }.
 InterfaceTypeDefinition -> 'interface' Name '{' FieldDefinitionList '}' :
                                #p_interface {
                                   id = '$2',
                                   fields = '$4'
                                  }.
 
+UnionTypeDefinition -> AnnotationList 'union' Name '=' UnionMembers :
+                           #p_union {
+                              annotations = '$1',
+                              id = '$3',
+                              members = '$5'
+                             }.
 UnionTypeDefinition -> 'union' Name '=' UnionMembers :
     #p_union {
        id = '$2',

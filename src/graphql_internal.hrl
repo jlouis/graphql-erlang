@@ -110,11 +110,13 @@
 
 -record(p_interface, {
           id :: name(),
+          annotations = [] :: any(),
           fields = [] :: any()
          }).
 
 -record(p_union, {
           id :: name(),
+          annotations = [] :: any(),
           members :: [name()]
          }).
 
