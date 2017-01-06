@@ -25,7 +25,7 @@ mk(#{ unions := Us }, #p_union { id = ID,
                                  members = Ms }) ->
     Name = name(ID),
     Description = description(Annots),
-    Mod = maps:get(Name, Us),
+    Mod = mapping(Name, Us),
     Types = [handle_type(M) || M <- Ms],
     {union, #{
        id => Name,
@@ -39,7 +39,7 @@ mk(#{ objects := OM }, #p_type {
            implements = Impls }) ->
     Name = name(ID),
     Description = description(Annots),
-    Mod = maps:get(Name, OM),
+    Mod = mapping(Name, OM),
     Fields = fields(Fs),
     Implements = [name(I) || I <- Impls],
     {object, #{
@@ -78,7 +78,7 @@ mk(#{ interfaces := IF }, #p_interface {
                             fields = FS }) ->
     Name = name(ID),
     Description = description(Annots),
-    Mod = get_interface(Name, IF),
+    Mod = mapping(Name, IF),
     Fields = fields(FS),
     {interface, #{
        id => Name,
@@ -167,18 +167,18 @@ variants(Vs) ->
                 
 mapi(F, L) -> mapi(F, L, 0).
 
-mapi(F, [], _) -> [];
-mapi(F, [X|Xs], K) -> [F(X, K) | mapi(F, Xs, K+1)].
+mapi(_F, [], _) -> [];
+mapi(F,  [X|Xs], K) -> [F(X, K) | mapi(F, Xs, K+1)].
 
 handle_type({non_null, T}) -> {non_null, handle_type(T)};
 handle_type({list, T}) -> {list, handle_type(T)};
 handle_type({name, _, T}) -> binary_to_atom(T, utf8);
 handle_type({scalar, X}) -> {scalar, X}.
 
-get_interface(Name, IFaces) ->
-    case maps:get(Name, IFaces, undefined) of
+mapping(Name, Map) ->
+    case maps:get(Name, Map, undefined) of
         undefined ->
-            map:get(default, IFaces);
+            map:get(default, Map);
         X -> X
     end.
             
