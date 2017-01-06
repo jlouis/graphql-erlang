@@ -78,7 +78,7 @@ mk(#{ interfaces := IF }, #p_interface {
                             fields = FS }) ->
     Name = name(ID),
     Description = description(Annots),
-    Mod = maps:get(Name, IF),
+    Mod = get_interface(Name, IF),
     Fields = fields(FS),
     {interface, #{
        id => Name,
@@ -165,8 +165,6 @@ variants(Vs) ->
         end,
     maps:from_list(mapi(F, Vs)).
                 
-
-
 mapi(F, L) -> mapi(F, L, 0).
 
 mapi(F, [], _) -> [];
@@ -177,3 +175,10 @@ handle_type({list, T}) -> {list, handle_type(T)};
 handle_type({name, _, T}) -> binary_to_atom(T, utf8);
 handle_type({scalar, X}) -> {scalar, X}.
 
+get_interface(Name, IFaces) ->
+    case maps:get(Name, IFaces, undefined) of
+        undefined ->
+            map:get(default, IFaces);
+        X -> X
+    end.
+            
