@@ -178,7 +178,7 @@ handle_type({scalar, X}) -> {scalar, X}.
 mapping(Name, Map) ->
     case maps:get(Name, Map, undefined) of
         undefined ->
-            map:get(default, Map);
+            maps:get(default, Map);
         X -> X
     end.
             
