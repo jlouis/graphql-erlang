@@ -118,8 +118,8 @@ handle_map(M) ->
     maps:from_list(
       lists:map(fun({K, V}) -> {binarize(K), V} end, L)).
 
-binarize(A) when is_atom(A) ->
-    atom_to_binary(A, utf8).
+binarize(default) -> deafult;
+binarize(A) when is_atom(A) -> atom_to_binary(A, utf8).
 
 name({name, _, N}) -> N.
     
