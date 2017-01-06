@@ -35,8 +35,10 @@ x({enum, #{ id := ID, description := Desc, values := VDefs }}) ->
     	values = map_2(fun c_enum_val/2, VDefs) };
 x({object, #{ id := ID, fields := FieldDefs, description := Desc } = Obj}) ->
     Interfaces = c_interfaces(Obj),
+    ModuleResolver = maps:get(resolve_module, Obj, undefined),
     #object_type {
         id = c_id(ID),
+        resolve_module = ModuleResolver,
         description = binarize(Desc),
         fields = map_2(fun c_field/2, FieldDefs),
         interfaces = Interfaces

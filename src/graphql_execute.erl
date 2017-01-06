@@ -165,11 +165,24 @@ execute_field(Path, Ctx, ObjType, Value, [F|_] = Fields, #schema_field { resolve
     Name = name(F),
     #schema_field { ty = ElaboratedTy } = field_type(F),
     Args = resolve_args(Ctx, F),
-    Fun = resolver_function(RF),
+    Fun = resolver_function(ObjType, RF),
     ResolvedValue = resolve_field_value(Ctx, ObjType, Value, Name, Fun, Args),
     complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue).
 
-resolve_field_value(Ctx, ObjectType, Value, Name, Fun, Args) ->
+resolve_field_value(Ctx, ObjectType, Value, Name, Fun, Args) when is_function(Fun, 4) ->
+    try Fun(Ctx#{ field => Name, object_type => ObjectType}, Value, Name, Args) of
+        {error, Reason} -> {error, Reason};
+        {ok, Result} -> {ok, Result};
+        default ->
+            resolve_field_value(Ctx, ObjectType, Value, Name, fun ?MODULE:default_resolver/3, Args);
+        Wrong ->
+            {error, {wrong_resolver_return, Fun, Name, Wrong}}
+    catch
+        Cl:Err ->
+            lager:warning("Resolver function error: ~p stacktrace: ~p", [{Cl,Err}, erlang:get_stacktrace()]),
+            {error, {resolver_crash, Fun, ObjectType, Name}}
+    end;
+resolve_field_value(Ctx, ObjectType, Value, Name, Fun, Args) when is_function(Fun, 3) ->
     try Fun(Ctx#{ field => Name, object_type => ObjectType }, Value, Args) of
         {error, Reason} -> {error, Reason};
         {ok, Result} -> {ok, Result};
@@ -323,8 +336,11 @@ fragments(Frags) ->
 
 %% -- FUNCTION RESOLVERS ---------------------------------
 
-resolver_function(R) when is_function(R, 3) -> R;
-resolver_function(undefined) -> fun ?MODULE:default_resolver/3.
+resolver_function(_ObjType, R) when is_function(R, 3) -> R;
+resolver_function(#object_type { resolve_module = undefined }, undefined) ->
+    fun ?MODULE:default_resolver/3;
+resolver_function(#object_type { resolve_module = M }, undefined) ->
+    fun M:execute/4.
 
 
 default_resolver(_, none, _) -> {error, no_object};
