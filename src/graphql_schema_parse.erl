@@ -172,7 +172,12 @@ mapi(F,  [X|Xs], K) -> [F(X, K) | mapi(F, Xs, K+1)].
 
 handle_type({non_null, T}) -> {non_null, handle_type(T)};
 handle_type({list, T}) -> {list, handle_type(T)};
-handle_type({name, _, T}) -> binary_to_atom(T, utf8);
+handle_type({name, _, T}) ->
+    case T of
+        <<"Boolean">> -> {scalar, bool};
+        <<"Boolean!">> -> {non_null, {scalar, bool}};
+        B when is_binary(B) -> binary_to_atom(B, utf8)
+    end;
 handle_type({scalar, X}) -> {scalar, X}.
 
 mapping(Name, Map) ->

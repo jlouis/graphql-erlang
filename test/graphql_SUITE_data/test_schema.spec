@@ -51,6 +51,7 @@ type Item implements Node {
 	description: String
 	weight: String
 	weightSum: String
+    foo: Boolean
 	contents: [Thing]
 }
 
