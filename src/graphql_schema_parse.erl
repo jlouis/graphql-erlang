@@ -144,13 +144,18 @@ input_def(#p_input_value { id = ID,
            description => Description },
     {K, V}.
 
-field(#p_field_def{ id = ID, annotations = Annots, type = T }) ->
+field(#p_field_def{ id = ID, annotations = Annots, type = T, args = Args }) ->
     Name = name(ID),
     Description = description(Annots),
     %% We assume schemas are always under our control, so this is safe
     K = binary_to_atom(Name, utf8),
-    V = #{ type => handle_type(T), description => Description },
+    V = #{ type => handle_type(T),
+           description => Description,
+           args => handle_args(Args)},
     {K, V}.
+
+handle_args(Args) ->
+    maps:from_list([input_def(A) || A <- Args]).
 
 find(_T, []) -> not_found;
 find(T, [{{name, _, T}, V}|_]) -> V;
