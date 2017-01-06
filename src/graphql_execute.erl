@@ -241,7 +241,9 @@ complete_value(Path, Ctx, #object_type{} = Ty, Fields, {ok, Value}) ->
 complete_value(Path, _Ctx, _Ty, _Fields, {error, Reason}) ->
     {ok, null, [#{ path => Path, reason => Reason }]}.
 
-resolve_abstract_type(Resolver, Value) ->
+resolve_abstract_type(Module, Value) when is_atom(Module) ->
+    resolve_abstract_type(fun Module:execute/1, Value);
+resolve_abstract_type(Resolver, Value) when is_function(Resolver, 1) ->
     try Resolver(Value) of
         {ok, Ty} ->
             Obj = #object_type{} = graphql_schema:get(binarize(Ty)),

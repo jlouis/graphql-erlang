@@ -168,9 +168,11 @@ c_arg_val(#{ type := Ty, description := Desc, default := Def }) ->
 c_arg_val(#{ type := Ty, description := Desc }) ->
     #schema_arg { ty = handle_type(Ty), description = binarize(Desc) }.
 
+union_resolver(#{ resolve_module := M}) when is_atom(M) -> M;
 union_resolver(#{ resolve_type := F}) when is_function(F,1) -> F;
 union_resolver(#{ id := ID }) -> fun(_Data) -> exit({no_union_resolver, ID}) end.
 
+interface_resolver(#{ resolve_module := M }) when is_atom(M) -> M;
 interface_resolver(#{ resolve_type := F }) when is_function(F,1) -> F;
 interface_resolver(#{ id := ID }) -> fun(_Data) -> exit({no_interface_resolver, ID}) end.
 
