@@ -77,7 +77,7 @@ load(S) ->
 insert_new_(Rec) ->
     case gen_server:call(?MODULE, {insert_new, Rec}) of
         true -> ok;
-        false -> {error, already_exists}
+        false -> {error, already_exists, id(Rec)}
     end.
 
 -spec all() -> [any()].
