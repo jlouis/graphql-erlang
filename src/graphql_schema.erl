@@ -49,7 +49,7 @@ insert(S, #{ canonicalize := true }) ->
             case gen_server:call(?MODULE, {insert, Rec}) of
                 true -> ok;
                 false ->
-                    {error, already_exists}
+                    {error, already_exists, id(S)}
             end
     catch
         Class:Reason ->
