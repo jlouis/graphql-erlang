@@ -69,6 +69,7 @@ e_valid(Src, Dest, M) ->
         #interface_type{} -> {edge, Src, unnode(Dest)};
         #union_type{} -> {edge, Src, unnode(Dest)};
         #scalar_type{} -> skip;
+        #enum_type{} -> skip;
         Obj ->
             io:format("Warning, skipping object: ~p", [Obj]),
             skip
