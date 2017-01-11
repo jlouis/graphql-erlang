@@ -68,7 +68,9 @@ e_valid(Src, Dest, M) ->
         #object_type{} -> {edge, Src, unnode(Dest)};
         #interface_type{} -> {edge, Src, unnode(Dest)};
         #union_type{} -> {edge, Src, unnode(Dest)};
-        _ -> skip
+        Obj ->
+            io:format("Warning, skipping object: ~p", [Obj]),
+            skip
     end.
 
 entry(#object_type { id = <<"__", _/binary>> }, _) -> skip;
@@ -123,6 +125,7 @@ ty({non_null, Ty}) -> [ty(Ty), "!"].
 
 unwrap(Ty) when is_binary(Ty) -> Ty;
 unwrap([Ty]) -> unwrap(Ty);
+unwrap({list, Ty}) -> unwrap(Ty);
 unwrap({non_null, Ty}) -> unwrap(Ty);
 unwrap(_) -> skip.
 
