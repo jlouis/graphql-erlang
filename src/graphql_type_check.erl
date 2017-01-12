@@ -163,14 +163,23 @@ input_coerce_scalar(Path, #scalar_type {} = SType, Val) ->
 input_coerce_scalar(Path, Ty, _V) ->
     graphql_err:abort(Path, {type_mismatch, #{ schema => {scalar, Ty}}}).
 
-input_coercer(Path, #scalar_type { id = ID, input_coerce = IC}, Val) ->
+input_coercer(Path, #scalar_type { id = ID, input_coerce = IC, resolve_module = undefined }, Val) ->
     try IC(Val) of
         {ok, NewVal} -> {replace, NewVal};
         {error, Reason} -> graphql_err:abort(Path, {input_coercion, ID, Val, Reason})
     catch
         Cl:Err ->
             graphql_err:abort(Path, {input_coerce_abort, {Cl, Err}})
+    end;
+input_coercer(Path, #scalar_type { id = ID, resolve_module = RM}, Val) ->
+    try RM:input(Val) of
+        {ok, NewVal} -> {replace, NewVal};
+        {error, Reason} -> graphql_err:abort(Path, {input_coercion, ID, Val, Reason})
+    catch
+        Cl:Err ->
+            graphql_err:abort(Path, {input_coerce_abort, {Cl, Err}})
     end.
+            
 
 %% -- FRAGMENTS --------------------------------
 

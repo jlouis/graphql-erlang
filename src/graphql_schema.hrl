@@ -70,7 +70,7 @@
 -record(scalar_type, {
           id :: binary(),
           description :: binary(),
-          resolve_module :: mod(),
+          resolve_module = undefined :: mod(),
           output_coerce = fun(X) -> {ok, X} end :: fun ((any()) -> {ok, any()} | {error, any()}),
           input_coerce = fun(X) -> {ok, X} end :: fun((any()) -> {ok, any()} | {error, any()})
          }).

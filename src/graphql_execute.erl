@@ -223,8 +223,18 @@ complete_value(Path, _Ctx, {list, _}, _Fields, {ok, V}) when not is_list(V) ->
     err(Path, not_a_list);
 complete_value(Path, Ctx, {list, InnerTy}, Fields, {ok, Value}) ->
     complete_value_list(Path, Ctx, InnerTy, Fields, Value);
-complete_value(Path, _Ctx, #scalar_type { id = ID, output_coerce = OCoerce }, _Fields, {ok, Value}) ->
+complete_value(Path, _Ctx, #scalar_type { id = ID, output_coerce = OCoerce, resolve_module = undefined }, _Fields, {ok, Value}) ->
     try OCoerce(Value) of
+        {ok, Result} -> {ok, Result, []};
+        {error, Reason} ->
+            err(Path, {output_coerce, ID, Value, Reason})
+    catch
+        Cl:Err ->
+            lager:warning("Output coercer crash: ~p, stack: ~p", [{Cl,Err}, erlang:get_stacktrace()]),
+            err(Path, {coerce_crash, ID, Value, {Cl, Err}})
+    end;
+complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
+    try RM:output(ID, RM) of
         {ok, Result} -> {ok, Result, []};
         {error, Reason} ->
             err(Path, {output_coerce, ID, Value, Reason})
