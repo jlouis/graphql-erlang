@@ -168,7 +168,8 @@ lex_schema(Config) ->
 parse_schema(Config) ->
     FName = filename:join([?config(data_dir, Config), "test_schema.spec"]),
     {ok, Data} = file:read_file(FName),
-    case graphql:load_schema(#{ scalars => #{},
+    case graphql:load_schema(#{ scalars => #{
+                                 default => scalar_resource },
                                 interfaces => #{
                                  'Node' => node_resource
                                  },

@@ -14,11 +14,11 @@ inject(BaseMapping, {ok, {document, Entries}}) ->
 mk(#{ scalars := Sc }, #p_scalar { id = ID, annotations = Annots }) ->
     Name = name(ID),
     Description = description(Annots),
-    CoerceMod = maps:get(Name, Sc, undefined),
+    Mod = mapping(Name, Sc),
     {scalar, #{
        id => Name,
        description => Description,
-       coerce_module => CoerceMod
+       coerce_module => Mod
       }};
 mk(#{ unions := Us }, #p_union { id = ID,
                                  annotations = Annots,
