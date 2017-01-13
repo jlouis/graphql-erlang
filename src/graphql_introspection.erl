@@ -160,9 +160,7 @@ type_fields(_) -> null.
 
 interesting_field({<<"__schema">>, #schema_field {}}) -> false;
 interesting_field({<<"__type">>, #schema_field{}}) -> false;
-interesting_field({N, _}) -> 
-    lager:warning("Interesting: ~p", [N]),
-    true.
+interesting_field({_, _}) -> true.
 
 render_field({Name, #schema_field {
                        description = Desc,
