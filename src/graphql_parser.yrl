@@ -257,7 +257,7 @@ ObjectTypeDefinition -> AnnotationList 'type' Name ImplementsInterfaces '{' Fiel
                                annotations = '$1',
                                id = '$3',
                                implements = '$4',
-                               fields = '$5'
+                               fields = '$6'
                               }.
 ObjectTypeDefinition -> 'type' Name ImplementsInterfaces '{' FieldDefinitionList '}' :
                             #p_type {
