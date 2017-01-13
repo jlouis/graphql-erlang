@@ -153,10 +153,16 @@ type_input_fields(#input_object_type{ fields = FS }) ->
 type_input_fields(_) -> null.
 
 type_fields(#object_type { fields = FS }) ->
-    ?LAZY({ok, [render_field(F) || F <- maps:to_list(FS)]});
+    ?LAZY({ok, [render_field(F) || F <- maps:to_list(FS), interesting_field(F)]});
 type_fields(#interface_type { fields = FS }) ->
-    ?LAZY({ok, [render_field(F) || F <- maps:to_list(FS)]});
+    ?LAZY({ok, [render_field(F) || F <- maps:to_list(FS), interesting_field(F)]});
 type_fields(_) -> null.
+
+interesting_field({<<"__schema">>, #schema_field {}}) -> false;
+interesting_field({<<"__type">>, #schema_field{}}) -> false;
+interesting_field({N, _}) -> 
+    lager:warning("Interesting: ~p", [N]),
+    true.
 
 render_field({Name, #schema_field {
                        description = Desc,
