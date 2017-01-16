@@ -47,7 +47,7 @@ mk(#{ objects := OM }, #p_type {
        description => Description,
        fields => Fields,
        resolve_module => Mod,
-       implements => Implements }};
+       interfaces => Implements }};
 mk(_Map, #p_enum {
             id = ID,
             annotations = Annots,
