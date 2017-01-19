@@ -464,7 +464,7 @@ value(#{ params := Params }, #{ value := {var, ID}}) ->
     maps:get(name(ID), Params);
 value(_Ctx, #{ type := {scalar, STy}, value := V}) ->
     value_scalar(STy, V);
-value(_Ctx, #{ type := _, value := V} = M) ->
+value(Ctx, #{ type := _, value := V} = M) ->
     %% lager:info("Resolving: ~p", [M]),
     default_resolution(Ctx, M),
     V.
