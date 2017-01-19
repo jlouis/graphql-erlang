@@ -465,8 +465,12 @@ value(#{ params := Params }, #{ value := {var, ID}}) ->
 value(_Ctx, #{ type := {scalar, STy}, value := V}) ->
     value_scalar(STy, V);
 value(_Ctx, #{ type := _, value := V} = M) ->
-    lager:info("Resolving: ~p", [M]),
+    %% lager:info("Resolving: ~p", [M]),
+    default_resolution(Ctx, M),
     V.
+
+default_resolution(_Ctx, _M) ->
+    phone_home.
 
 value_scalar(string, null) -> null;
 value_scalar(string, S) when is_binary(S) -> S;
