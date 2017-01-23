@@ -172,7 +172,7 @@ input_coercer(Path, #scalar_type { id = ID, input_coerce = IC, resolve_module = 
             graphql_err:abort(Path, {input_coerce_abort, {Cl, Err}})
     end;
 input_coercer(Path, #scalar_type { id = ID, resolve_module = RM}, Val) ->
-    try RM:input(Val) of
+    try RM:input(ID, Val) of
         {ok, NewVal} -> {replace, NewVal};
         {error, Reason} -> graphql_err:abort(Path, {input_coercion, ID, Val, Reason})
     catch
