@@ -240,7 +240,7 @@ complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Field
             err(Path, {output_coerce, ID, Value, Reason})
     catch
         Cl:Err ->
-            lager:warning("Output coercer crash: ~p, stack: ~p", [{Cl,Err}, erlang:get_stacktrace()]),
+            lager:warning("Output coercer crash: ~p, stack: ~p", [{Cl,Err,ID,Value}, erlang:get_stacktrace()]),
             err(Path, {coerce_crash, ID, Value, {Cl, Err}})
     end;
 complete_value(_Path, _Ctx, #enum_type {}, _Fields, {ok, Value}) when is_binary(Value) ->
