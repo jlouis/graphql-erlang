@@ -234,7 +234,7 @@ complete_value(Path, _Ctx, #scalar_type { id = ID, output_coerce = OCoerce, reso
             err(Path, {coerce_crash, ID, Value, {Cl, Err}})
     end;
 complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
-    try RM:output(ID, RM) of
+    try RM:output(ID, Value) of
         {ok, Result} -> {ok, Result, []};
         {error, Reason} ->
             err(Path, {output_coerce, ID, Value, Reason})
