@@ -47,28 +47,14 @@ x({input_object, #{ id := ID, fields := FieldDefs, description := Desc }}) ->
     #input_object_type { id = c_id(ID), description = binarize(Desc),
          fields = map_2(fun c_input_value/2, FieldDefs) };
 x({scalar, #{ id := ID,
-              description := Desc,
-              input_coerce := InFun,
-              output_coerce := OutFun }})
-  when
-      is_function(InFun, 1),
-      is_function(OutFun, 1) ->
+              description := Desc} = Data}) ->
+    {Mod, InFun, OutFun} = scalar_resolve(Data),
     #scalar_type {
        id = c_id(ID),
        description = binarize(Desc),
+       resolve_module = Mod,
        input_coerce = InFun,
-       output_coerce = OutFun };
-x({scalar, #{ id := ID, input_coerce := _, output_coerce := _ }}) ->
-    exit({scalar_coercers_wrong_fun_arity, ID});
-x({scalar, #{ id := ID, output_coerce := _ }}) ->
-    exit({missing_input_coerce, ID});
-x({scalar, #{ id := ID, input_coerce := _ }}) ->
-    exit({missing_output_coerce, ID});
-x({scalar, #{ id := ID, description := Desc }}) ->
-    #scalar_type {
-       id = c_id(ID),
-       description = binarize(Desc) }.
-
+       output_coerce = OutFun }.
 
 %% -- ROOT -------------
 root_query(#{ query := Q}) -> binarize(Q);
@@ -185,6 +171,24 @@ binarize(B) when is_binary(B) -> B.
 map_2(F, M) ->
     Unpacked = maps:to_list(M),
     maps:from_list([F(K, V) || {K, V} <- Unpacked]).
+
+scalar_resolve(#{ coerce_module := Mod }) when is_atom(Mod) ->
+    {Mod, undefined, undefined};
+scalar_resolve(#{ input_coerce := In, output_coerce := Out} )
+  when is_function(In, 1),
+       is_function(Out, 1) ->
+    {undefined, In, Out};
+scalar_resolve(#{ id := ID, input_coerce := _, output_coerce := _ }) ->
+    exit({scalar_coercers_wrong_fun_arity, ID});
+scalar_resolve(#{ id := ID, output_coerce := _ }) ->
+    exit({missing_input_coerce, ID});
+scalar_resolve(#{ id := ID, input_coerce := _ }) ->
+    exit({missing_output_coerce, ID});
+scalar_resolve(#{}) ->
+    {undefined,
+     fun(X) -> {ok, X} end,
+     fun(X) -> {ok, X} end}.
+
 
 %% -- Deprecation
 deprecation(#{ deprecation := Reason }) ->

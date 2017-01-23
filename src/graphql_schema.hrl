@@ -71,8 +71,8 @@
           id :: binary(),
           description :: binary(),
           resolve_module = undefined :: mod(),
-          output_coerce = fun(X) -> {ok, X} end :: fun ((any()) -> {ok, any()} | {error, any()}),
-          input_coerce = fun(X) -> {ok, X} end :: fun((any()) -> {ok, any()} | {error, any()})
+          output_coerce :: fun ((any()) -> {ok, any()} | {error, any()}),
+          input_coerce  :: fun((any()) -> {ok, any()} | {error, any()})
          }).
 -type scalar_type() :: #scalar_type{}.
 
