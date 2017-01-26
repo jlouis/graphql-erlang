@@ -317,8 +317,8 @@ schema_type(Tag) ->
 
 value_type(Ctx, Path, {non_null, Ty}, V) ->
     {non_null, value_type(Ctx, Path, Ty, V)};
-value_type(Ctx, Path, {list, Ty}, Vals) when is_list(Vals) ->
-    {list, [value_type(Ctx, Path, Ty, T) || T <- Vals]};
+value_type(Ctx, Path, {list, Ty}, Vs) when is_list(Vs) ->
+    {list, [{value_type(Ctx, Path, Ty, V), V} || V <- Vs]};
 value_type(#{ varenv := VE }, Path, _, {var, ID}) ->
     Name = graphql_ast:name(ID),
     case maps:get(Name, VE, not_found) of
@@ -351,12 +351,12 @@ value_type(_Ctx, _Path, _, Obj) when is_map(Obj) -> coerce_object(Obj).
 
 refl_list(_Path, [], _T, Result) ->
     {replace, lists:reverse(Result)};
-refl_list(Path, [A|As], T, Acc) ->
+refl_list(Path, [{A, V}|As], T, Acc) ->
     case refl(Path, A, T) of
         ok ->
-            refl_list(Path, As, T, [A|Acc]);
-        {replace, V} ->
             refl_list(Path, As, T, [V|Acc]);
+        {replace, RV} ->
+            refl_list(Path, As, T, [RV|Acc]);
         {error, _Reason} ->
             {error, {list, T}}
    end.
@@ -385,7 +385,6 @@ refl(_Path, #input_object_type { id = ID }, {input_object, #input_object_type { 
     ok;
 refl(Path, Obj, #input_object_type{} = Ty) when is_map(Obj) ->
     check_input_object(Path, Ty, Obj);
-%% Nullable types
 %% Failure:
 refl(_Path, A, T) -> {error, A, T}.
 
