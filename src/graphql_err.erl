@@ -60,7 +60,11 @@ err_msg({unbound_variable, Var}) ->
 err_msg({input_coerce_abort, {Class, Reason}}) ->
     io_lib:format("Input coercer failed with an exception of class ~p and reason ~p", [Class, Reason]);
 err_msg({input_coercion, Type, Value, Reason}) ->
-    io_lib:format("Input coercion failed for type ~s with value ~p. The reason it failed is: ~p", [Type, Value, Reason]).
+    io_lib:format("Input coercion failed for type ~s with value ~p. The reason it failed is: ~p", [Type, Value, Reason]);
+err_msg({excess_fields_in_object, Fields}) ->
+    io_lib:format("The object contains unknown fields and values: ~p", [Fields]);
+err_msg(Otherwise) ->
+    io_lib:format("General uncategorized error: ~p", [Otherwise]).
 
 -spec path([Input]) -> [binary()]
   when
