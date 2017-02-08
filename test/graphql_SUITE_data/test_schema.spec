@@ -19,6 +19,7 @@ input StatsInput {
 	+description(text: "When the monster yells, what does it yell?")
 	yell: String
 	
+	+requiresAuthentication
 	+description(text: "How good is the monster at shell scripting?")
 	shellScripting: Int
 }

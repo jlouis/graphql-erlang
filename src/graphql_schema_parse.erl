@@ -18,6 +18,7 @@ mk(#{ scalars := Sc }, #p_scalar { id = ID, annotations = Annots }) ->
     {scalar, #{
        id => Name,
        description => Description,
+       annotations => annotations(Annots),
        coerce_module => Mod
       }};
 mk(#{ unions := Us }, #p_union { id = ID,
@@ -30,6 +31,7 @@ mk(#{ unions := Us }, #p_union { id = ID,
     {union, #{
        id => Name,
        description => Description,
+       annotations => annotations(Annots),
        resolve_module => Mod,
        types => Types }};
 mk(#{ objects := OM }, #p_type {
@@ -46,6 +48,7 @@ mk(#{ objects := OM }, #p_type {
        id => Name,
        description => Description,
        fields => Fields,
+       annotations => annotations(Annots),
        resolve_module => Mod,
        interfaces => Implements }};
 mk(_Map, #p_enum {
@@ -59,6 +62,7 @@ mk(_Map, #p_enum {
        id => Name,
        repr => binary,
        description => Description,
+       annotations => annotations(Annots),
        values => Variants
       }};
 mk(_Map, #p_input_object {
@@ -71,6 +75,7 @@ mk(_Map, #p_input_object {
     {input_object, #{
        id => Name,
        description => Description,
+       annotations => annotations(Annots),
        fields => Defs }};
 mk(#{ interfaces := IF }, #p_interface {
                             id = ID,
@@ -84,6 +89,7 @@ mk(#{ interfaces := IF }, #p_interface {
        id => Name,
        description => Description,
        resolve_module => Mod,
+       annotations => annotations(Annots),
        fields => Fields
       }}.
           
@@ -123,7 +129,14 @@ binarize(A) when is_atom(A) -> atom_to_binary(A, utf8).
 
 name({name, _, N}) -> N.
     
-                        
+annotations(As) ->
+    maps:from_list([annotation(A) || A <- As]).
+
+annotation(#annotation { id = {name, _, T}, args = Args }) ->
+    {T, maps:from_list([annotation_arg(Ag) || Ag <- Args])}.
+    
+annotation_arg({{name, _, A}, Val}) -> {A, Val}.
+       
 description(Annots) ->
     case find(<<"description">>, Annots) of
         not_found ->
@@ -141,6 +154,7 @@ input_def(#p_input_value { id = ID,
     K = binary_to_atom(Name, utf8),
     V = #{ type => handle_type(Type),
            default => Default,
+           annotations => annotations(Annots),
            description => Description },
     {K, V}.
 
@@ -151,6 +165,7 @@ field(#p_field_def{ id = ID, annotations = Annots, type = T, args = Args }) ->
     K = binary_to_atom(Name, utf8),
     V = #{ type => handle_type(T),
            description => Description,
+           annotations => annotations(Annots),
            args => handle_args(Args)},
     {K, V}.
 
