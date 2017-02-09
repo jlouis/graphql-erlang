@@ -15,6 +15,7 @@
 -record(enum_value, {
           val :: binary(),
           description :: binary(),
+          annotations = #{} :: #{ binary() => any() },
           deprecation = undefined :: undefined | binary()
          }).
 -type enum_value() :: #enum_value{}.
@@ -23,6 +24,7 @@
           id :: binary(),
           description :: binary(),
           repr = tagged :: tagged | atom | binary,
+          annotations = #{} :: #{ binary() => any() },
           values :: #{ integer() => enum_value() }
          }).
 -type enum_type() :: #enum_type{}.
@@ -32,6 +34,7 @@
           description :: binary(),
           resolve_module :: mod(),
           resolve_type :: fun ((any()) -> {ok, atom()} | {error, term()}),
+          annotations = #{} :: #{ binary() => any() },
           fields :: #{ binary() => schema_field() }
          }).
 -type interface_type() :: #interface_type{}.
@@ -41,6 +44,7 @@
           description :: binary(),
           resolve_module :: mod(),
           resolve_type :: fun ((any()) -> {ok, atom()} | {error, term()}),
+          annotations = #{} :: #{ binary() => any() },
           types :: [binary()]
          }).
 -type union_type() :: #union_type{}.
@@ -63,6 +67,7 @@
           description :: binary() | undefined,
           resolve = undefined :: undefined | resolver(),
           deprecation = undefined :: undefined | binary(),
+          annotations = #{} :: #{ binary() => any() },
           args = #{} :: #{ binary() => schema_arg() }
          }).
 -type schema_field() :: #schema_field{}.
@@ -70,6 +75,7 @@
 -record(scalar_type, {
           id :: binary(),
           description :: binary(),
+          annotations = #{} :: #{ binary() => any() },
           resolve_module = undefined :: mod(),
           output_coerce :: fun ((any()) -> {ok, any()} | {error, any()}),
           input_coerce  :: fun((any()) -> {ok, any()} | {error, any()})
@@ -79,6 +85,7 @@
 -record(input_object_type, {
           id :: binary(),
           description :: binary(),
+          annotations = #{} :: #{ binary() => any() },
           fields = #{} :: #{ binary() => schema_arg() }
          }).
 -type input_object_type() :: #input_object_type{}.
@@ -86,6 +93,7 @@
 -record(object_type, {
           id :: binary(),
           description :: binary(),
+          annotations = #{} :: #{ binary() => any() },
           resolve_module :: mod(),
           fields = #{} :: #{ binary() => schema_field() },
           interfaces = [] :: [binary()]

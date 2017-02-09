@@ -161,31 +161,29 @@ does_fragment_type_apply(
           #union_type { types = Types } -> lists:member(ID, Types)
       end.
 
-execute_field(Path, Ctx, ObjType, Value, [F|_] = Fields, #schema_field { resolve = RF}) ->
+execute_field(Path, Ctx, ObjType, Value, [F|_] = Fields, #schema_field { annotations = FAns, resolve = RF}) ->
     Name = name(F),
     #schema_field { ty = ElaboratedTy } = field_type(F),
     Args = resolve_args(Ctx, F),
     Fun = resolver_function(ObjType, RF),
-    ResolvedValue = resolve_field_value(Ctx, ObjType, Value, Name, Fun, Args),
+    ResolvedValue = resolve_field_value(Ctx, ObjType, Value, Name, FAns, Fun, Args),
     complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue).
 
-resolve_field_value(Ctx, ObjectType, Value, Name, Fun, Args) when is_function(Fun, 4) ->
-    try Fun(Ctx#{ field => Name, object_type => ObjectType}, Value, Name, Args) of
+resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectType, Value, Name, FAns, Fun, Args) ->
+    CtxAnnot = Ctx#{
+        field => Name,
+        field_annotations => FAns,
+        object_type => OID,
+        object_annotations => OAns
+    },
+    try (if
+        is_function(Fun, 4) -> Fun(CtxAnnot, Value, Name, Args);
+        is_function(Fun, 3) -> Fun(CtxAnnot, Value, Args)
+    end) of
         {error, Reason} -> {error, Reason};
         {ok, Result} -> {ok, Result};
         default ->
-            resolve_field_value(Ctx, ObjectType, Value, Name, fun ?MODULE:default_resolver/3, Args);
-        Wrong ->
-            {error, {wrong_resolver_return, Fun, Name, Wrong}}
-    catch
-        Cl:Err ->
-            lager:warning("Resolver function error: ~p stacktrace: ~p", [{Cl,Err}, erlang:get_stacktrace()]),
-            {error, {resolver_crash, Fun, ObjectType, Name}}
-    end;
-resolve_field_value(Ctx, ObjectType, Value, Name, Fun, Args) when is_function(Fun, 3) ->
-    try Fun(Ctx#{ field => Name, object_type => ObjectType }, Value, Args) of
-        {error, Reason} -> {error, Reason};
-        {ok, Result} -> {ok, Result};
+            resolve_field_value(Ctx, ObjectType, Value, Name, FAns, fun ?MODULE:default_resolver/3, Args);
         Wrong ->
             {error, {wrong_resolver_return, Fun, Name, Wrong}}
     catch

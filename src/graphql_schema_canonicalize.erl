@@ -14,24 +14,28 @@ x({interface, #{ id := ID, description := Desc, fields := FieldDefs } = I}) ->
     Resolver = interface_resolver(I),
     #interface_type { id = c_id(ID), description = binarize(Desc),
         resolve_type = Resolver,
+        annotations = annotations(I),
         fields = map_2(fun c_field/2, FieldDefs) };
 x({union, #{ id := ID, description := Desc, types := Types } = U}) ->
     Resolver = union_resolver(U),
     #union_type {
         id = c_id(ID),
         description = binarize(Desc),
+        annotations = annotations(U),
         types = [c_type(T) || T <- Types],
         resolve_type = Resolver
     };
-x({enum, #{ id := ID, description := Desc, values := VDefs, repr := Repr}}) ->
+x({enum, #{ id := ID, description := Desc, values := VDefs, repr := Repr} = E}) ->
     #enum_type {
     	id = c_id(ID),
     	description = binarize(Desc),
+    	annotations = annotations(E),
     	values = map_2(fun c_enum_val/2, VDefs),
     	repr = c_repr(Repr)
      };
-x({enum, #{ id := ID, description := Desc, values := VDefs }}) ->
+x({enum, #{ id := ID, description := Desc, values := VDefs } = E}) ->
     #enum_type { id = c_id(ID), description = binarize(Desc),
+         annotations = annotations(E),
     	values = map_2(fun c_enum_val/2, VDefs) };
 x({object, #{ id := ID, fields := FieldDefs, description := Desc } = Obj}) ->
     Interfaces = c_interfaces(Obj),
@@ -40,11 +44,13 @@ x({object, #{ id := ID, fields := FieldDefs, description := Desc } = Obj}) ->
         id = c_id(ID),
         resolve_module = ModuleResolver,
         description = binarize(Desc),
+        annotations = annotations(Obj),
         fields = map_2(fun c_field/2, FieldDefs),
         interfaces = Interfaces
     };
-x({input_object, #{ id := ID, fields := FieldDefs, description := Desc }}) ->
+x({input_object, #{ id := ID, fields := FieldDefs, description := Desc } = IO}) ->
     #input_object_type { id = c_id(ID), description = binarize(Desc),
+         annotations = annotations(IO),
          fields = map_2(fun c_input_value/2, FieldDefs) };
 x({scalar, #{ id := ID,
               description := Desc} = Data}) ->
@@ -52,6 +58,7 @@ x({scalar, #{ id := ID,
     #scalar_type {
        id = c_id(ID),
        description = binarize(Desc),
+       annotations = annotations(Data),
        resolve_module = Mod,
        input_coerce = InFun,
        output_coerce = OutFun }.
@@ -108,6 +115,7 @@ c_field_val(M) ->
     	resolve = c_field_val_resolve(M),
     	args = c_field_val_args(M),
     	deprecation = deprecation(M),
+    	annotations = annotations(M),
     	description = c_field_val_description(M)
     }.
 
@@ -189,6 +197,9 @@ scalar_resolve(#{}) ->
      fun(X) -> {ok, X} end,
      fun(X) -> {ok, X} end}.
 
+%% -- Annotations
+annotations(#{ annotations := Annots }) -> Annots;
+annotations(#{}) -> #{}.
 
 %% -- Deprecation
 deprecation(#{ deprecation := Reason }) ->
