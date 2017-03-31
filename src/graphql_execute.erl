@@ -19,11 +19,11 @@ execute_request(InitialCtx, {document, Operations}) ->
     Ctx = InitialCtx#{ fragments => fragments(Frags) },
     case get_operation(Ctx, Ops) of
         {ok, #op { ty = {query, _} } = Op } ->
-            execute_query(Ctx, Op);
+            execute_query(Ctx#{ op_type => query }, Op);
         {ok, #op { ty = undefined } = Op } ->
-            execute_query(Ctx, Op);
+            execute_query(Ctx#{ op_type => query }, Op);
         {ok, #op { ty = {mutation, _} } = Op } ->
-            execute_mutation(Ctx, Op);
+            execute_mutation(Ctx#{ op_type => mutation }, Op);
         {error, Reason} ->
             complete_top_level(null, [Reason])
     end.
