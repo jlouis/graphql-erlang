@@ -7,6 +7,6 @@
        {ref,"3074d4865b3385a050badf7828ad31490d860df5"}},
   0},
  {<<"lager">>,
-  {git,"https://github.com/basho/lager.git",
-       {ref,"8187757388c9adc915379caaab36a2f2ca26e944"}},
+  {git,"https://github.com/erlang-lager/lager.git",
+       {ref,"92b1548f7f97a7fef257dffc45ef7b14006334e6"}},
   0}].
