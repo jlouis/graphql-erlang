@@ -551,7 +551,6 @@ nested_field_merge(Config) ->
               <<"shellScripting">> := 3,
               <<"yell">> := <<"HELO">> }]
     }}} = Res = run(Config, <<"TestNestedFieldMerge">>, #{ <<"id">> => ID }),
-    ct:pal("~p", [jsx:encode(Res)]),
     ok.
 
 unknown_variable(Config) ->
