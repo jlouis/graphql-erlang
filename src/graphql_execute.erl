@@ -223,7 +223,7 @@ complete_value(Path, Ctx, {list, InnerTy}, Fields, {ok, Value}) ->
     complete_value_list(Path, Ctx, InnerTy, Fields, Value);
 complete_value(Path, _Ctx, #scalar_type { id = ID, output_coerce = OCoerce, resolve_module = undefined }, _Fields, {ok, Value}) ->
     try OCoerce(Value) of
-        {ok, Result} -> {ok, Result, []};
+        {ok, Result} -> complete_value_scalar(Path, ID, Result);
         {error, Reason} ->
             err(Path, {output_coerce, ID, Value, Reason})
     catch
@@ -233,7 +233,7 @@ complete_value(Path, _Ctx, #scalar_type { id = ID, output_coerce = OCoerce, reso
     end;
 complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
     try RM:output(ID, Value) of
-        {ok, Result} -> {ok, Result, []};
+        {ok, Result} -> complete_value_scalar(Path, ID, Result);
         {error, Reason} ->
             err(Path, {output_coerce, ID, Value, Reason})
     catch
@@ -276,6 +276,15 @@ resolve_abstract_type(Resolver, Value) when is_function(Resolver, 1) ->
            lager:warning("Resolve_type crashed: ~p", [erlang:get_stacktrace()]),
            {error, {resolve_type_crash, {Cl,Err}}}
     end.
+
+complete_value_scalar(_Path, _ID, Result) when is_binary(Result) -> {ok, Result, []};
+complete_value_scalar(_Path, _ID, Result) when is_number(Result) -> {ok, Result, []};
+complete_value_scalar(_Path, _ID, true) -> {ok, true, []};
+complete_value_scalar(_Path, _ID, false) -> {ok, false, []};
+complete_value_scalar(_Path, _ID, null) -> {ok, null, []};
+complete_value_scalar( Path,  ID, Value) -> 
+    err(Path, {output_coerce, ID, Value, not_scalar_type}).
+
 
 complete_value_list(Path, Ctx, Ty, Fields, Results) ->
     IndexedResults = index(Results),
