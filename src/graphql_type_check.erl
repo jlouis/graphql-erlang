@@ -347,7 +347,9 @@ value_type(_Ctx, _Path, _, I) when is_integer(I) -> {scalar, int, I};
 value_type(_Ctx, _Path, _, F) when is_float(F) -> {scalar, float, F};
 value_type(_Ctx, _Path, _, true) -> {scalar, bool, true};
 value_type(_Ctx, _Path, _, false) -> {scalar, bool, false};
-value_type(_Ctx, _Path, _, Obj) when is_map(Obj) -> coerce_object(Obj).
+value_type(_Ctx, _Path, _, Obj) when is_map(Obj) -> coerce_object(Obj);
+value_type(_Ctx, Path, Ty, Val) -> 
+    graphql_err:abort(Path, {invalid_value_type_coercion, Ty, Val}).
 
 refl_list(_Path, [], _T, Result) ->
     {replace, lists:reverse(Result)};
