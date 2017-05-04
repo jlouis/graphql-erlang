@@ -221,7 +221,252 @@ modern web work is about moving data around. If you have to move less
 data, you decrease the memory and network pressure, which can
 translate to faster service.
 
-## Architecture
+### Materializing JOINs
+
+If we take a look at the `Faction` type, we see the following:
+
+	type Faction : Node {
+	  id: ID!
+	  name: String
+	  ships: ShipConnection
+	}
+
+in this, `ships` is a field referring to a `ShipConnection`. A
+Connection type is Relay Modern standard of how to handle a
+paginated set of objects in GraphQL. Like "Materialization by
+derivation" we would derive this field by looking up the data in the
+database for the join and then producing an object which the
+`ship_connection_resource` can handle. For instance:
+
+    execute(Ctx, #faction { id = ID }, <<"ships">>, _Args) ->
+        {ok, Ships} = ship:lookup_by_faction(ID),
+        pagination:build_pagination(Ships).
+        
+where the `build_pagination` function returns some object which is a
+generic connection object. It will probably look something along the
+lines of
+
+    #{
+      '$type' => <<"ShipConnection">>,
+      <<"pageInfo">> => #{
+          <<"hasNextPage">> => false,
+          ...
+      },
+      <<"edges">> => [
+          #{ <<"cursor">> => base64:encode(<<"edge:1">>),
+             <<"node">> => #ship{ ... } },
+          ...]
+    }
+    
+which can then be processed further by other resources. Note how we
+are eagerly constructing several objects at once and then exploiting the
+cursor moves of the GraphQL system to materialize the fields which the
+client requests. The alternative is to lazily construct
+materializations on demand, but when data is readily available anyway,
+it is often more efficient to just pass pointers along.
+
+## API
+
+The GraphQL API is defined in the module `graphql`. Every
+functionality is exported in that module. Do not call inside other
+modules as their functionality can change at any point in time even
+between major releases.
+
+The system deliberately splits each phase and hands it over to the
+programmer. This allows you to debug a bit easier and gives the
+programmer more control over the parts. A typical implementation will
+start by using the schema loader:
+
+    inject() ->
+      {ok, File} = application:get_env(myapp, schema_file),
+      Priv = code:priv_dir(myapp),
+      FName = filename:join([Priv, File]),
+      {ok, SchemaData} = file:read_file(FName),
+      Map = #{
+        scalars => #{ default => scalar_resource },
+        interfaces => #{ default => resolve_resource },
+        unions => #{ default => resolve_resource },
+        objects => #{
+          'Ship' => ship_resource,
+          'Faction' => faction_resource,
+          ...
+          'Query' => query_resource,
+          'Mutation' => mutation_resource
+        }
+      },
+      ok = graphql:load_schema(Map, SchemaData),
+          Root = {root,
+          #{
+            query => 'Query',
+            mutation => 'Mutation',
+            interfaces => []
+          }},
+      ok = graphql:insert_schema_definition(Root),
+      ok = graphql:validate_schema(),
+      ok.
+
+This will set up the schema in the code by reading it from a file on
+disk. Each of the `_resource` names refers to modules which implements
+the backend code.
+
+In order to execute queries on the schema, code such as the following
+can be used. We have a query document in `Doc` and we have a requested
+operation name in `OpName` and parameter variables for the given op in
+`Vars`. The variables `Req` and `State` are standard cowboy request
+and state tracking variables from `cowboy_rest`.
+
+    run(Doc, OpName, Vars, Req, State) ->
+      case graphql:parse(Doc) of
+        {ok, AST} ->
+          try
+             Elaborated = graphql:elaborate(AST),
+             {ok, #{fun_env := FunEnv,
+                    ast := AST2 }} = graphql:type_check(Elaborated),
+             ok = graphql:validate(AST2),
+             Coerced = graphql:type_check_params(FunEnv, OpName, Vars),
+             Ctx = #{ params => Coerced, operation_name => OpName },
+             Response = graphql:execute(Ctx, AST2),
+             Req2 = cowboy_req:set_resp_body(encode_json(Response), Req),
+             {ok, Reply} = cowboy_req:reply(200, Req2),
+             {halt, Reply, State}
+          catch
+               throw:Err ->
+                   err(400, Err, Req, State)
+          end;
+        {error, Error} ->
+           err(400, {parser_error, Error}, Req, State)
+      end.
+
+## Conventions
+
+* Everything uses binary() by default
+
+## Middlewares
+
+This GraphQL system does not support middlewares, because it turns out
+the systems design is flexible enough middlewares can be implemented
+by developers themselves. The observation is that any query runs
+through the `Query` type and thus a `query_resource`. Likewise, any
+`Mutation` factors through the `mutation_resource`.
+
+As a result, you can implement middlewares by using the `execute/4`
+function as a wrapper. For instance you could define a mutation
+function as:
+
+    execute(Ctx, Obj, Field, Args) ->
+        AnnotCtx = perform_authentication(Ctx),
+        execute_field(AnnotCtx, Obj, Field, Args).
+
+The reason this works so well is because we are able to use pattern
+matching on `execute/4` functions and then specialize them. If we had
+an individual function for each field, then we would have been forced
+to implement middlewares in the system, which incurs more code lines
+to support.
+
+More complex systems will define a stack of middlewares in the list
+and run them one by one. As an example, a `clientMutationId` is part
+of the Relay Modern specification and must be present in every
+mutation. You can build your `mutation_resource` such that it runs a
+`maps:take/2` on the argument input, runs the underlying mutation, and
+then adds back the `clientMutationId` afterwards. 
+
+## Schema Extensions
+
+TODO
+
+## Resource modules
+
+The following section documents the layout of resource modules as they
+are used in GraphQL, and what they are needed for in the
+implementation.
+
+### Scalar Resources
+
+GraphQL contains two major kinds of data: objects and scalars. Objects
+are product types where each element in the product is a field. Raw
+data are represented as *scalar* values. GraphQL defines a number of
+standard scalar values: boolean, integers, floating point numbers,
+enumerations, strings, identifiers and so on. But you can extend the
+set of scalars yourself. The spec will contain something along the
+lines of
+
+    scalar Color
+    scalar DateTime
+
+and so on. These are mapped onto resource modules handling scalars. It
+is often enough to provide a default scalar module in the mapping and
+then implement two functions to handle the scalars:
+
+    -module(scalar_resource).
+    
+    -export(
+      [input/2,
+       output/2]).
+       
+    -spec input(Type, Value) -> {ok, Coerced} | {error, Reason}
+      when
+        Type :: binary(),
+        Value :: binary(),
+        Coerced :: any(),
+        Reason :: term().
+    input(<<"Color">>, C) -> color:coerce(C);
+    input(<<"DateTime">>, DT) -> datetime:coerce(DT);
+    input(Ty, V) ->
+       error_logger:info_report({coercing_generic_scalar, Ty, V}),
+       {ok, V}.
+       
+    -spec output(Type, Value) -> {ok, Coerced} | {error, Reason}
+      when
+        Type :: binary(),
+        Value :: binary(),
+        Coerced :: any(),
+        Reason :: term().
+    output(<<"Color">>, C) -> color:as_binary(C);
+    output(<<"DateTime">>, DT) -> datetime:as_binary(DT);
+    output(Ty, V) ->
+       error_logger:info_report({output_generic_scalar, Ty, V}),
+       {ok, V}.
+
+Scalar Mappings allow you to have an internal and external
+representation of values. You could for instance read a color such as
+`#aabbcc`, convert it into `#{ r => 0.66, g => 0.73, b => 0.8 }`
+internally and back again when outputting it. Likewise a datetime
+object can be converted to a UNIX timestamp and a timezone internally
+if you want. You can also handle multiple different ways of
+coercing input data, or have multiple internal data representations.
+
+### Type resolution Resources
+
+For GraphQL to function correctly, we must be able to resolve types of
+concrete objects. This is because the GraphQL system allows you to
+specify abstract interfaces and unions. An example from the above
+schema is the `Node` interface which is implemented by `Ship` and
+`Faction` among other things. If we are trying to materialize a node,
+the GraphQL must have a way to figure out the type of the object it is
+materializing. This is handled by the type resolution mapping:
+
+    -module(resolve_resource).
+    
+    -export([execute/1]).
+    
+    %% The following is probably included from a header file in a real
+    %% implementation
+    -record(ship, {id, name}).
+    -record(faction, {id, name}).
+    
+    execute(#ship{}) -> {ok, <<"Ship">>};
+    execute(#faction{}) -> {ok, <<"Faction">>};
+    execute(Obj) ->
+        {error, unknown_type}.
+        
+
+### Output object Resources
+
+TODO
+
+** DEFAULT VALUES
+
+# System Architecture
 
 Most other GraphQL servers provide no type->module mapping. Rather,
 they rely on binding of individual functions to fields. The
@@ -271,6 +516,23 @@ checking and validation once and for all at load time. In addition it
 provides a security measure: clients in production can only call a
 pre-validated set of queries if such desired.
 
+# Tips & Tricks
+
+GraphQL has some very neat Javascript tooling which plugs into the
+introspection of a GraphQL server and provides additional
+functionality:
+
+* GraphiQL - Provides a query interface with autocompletion,
+  documentation, debugging, ways to execute queries and so on. It is
+  highly recommended you add such a system in staging and production
+  as it is indispensable if you are trying to figure out a new query
+  or why a given query returned a specific kind of error.
+
+Additionally, Relay Modern provides specifications for cache
+refreshing, pagination, mutation specifications and so on. It is
+recommended you implement those parts in your system as it is part of
+a de-facto standard for how GraphQL servers tend to operate.
+
 # Status
 
 Currently, the code implements all of the October 2016 GraphQL
@@ -283,3 +545,18 @@ specification, except for a few areas:
   completed on the code base. There is a fairly good plan for its
   implementation at present, but we've not had the need to implement
   the parallel behavior yet.
+* The system still needs a specification for sending work to worker
+  processes through a system based on "promises". This allows you to
+  coalesce data loading, and database JOINS dynamically which speeds
+  up queries.
+* The code is somewhat rough in places and needs some refactoring.
+
+# Tests
+
+The GraphQL project has an extensive test suite. We prefer adding
+regressions to the suite as we experience them. Some of the tests are
+taken from the the official GraphQL repository and translated. More
+work is definitely needed, but in general new functionality should be
+provided together with a test case that demonstrates the new
+functionality.
+
