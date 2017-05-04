@@ -194,7 +194,10 @@ schema and rejects schemas which are nonsensical.
 
 ### Query
 
-A query is treated as a compiler chain:
+A query is treated as a compiler chain, which is a design that fits
+Erlang well. Compilers rely a lot on pattern matching, so we can
+process a query symbolically by matching on it and gradually
+transforming it into a *query plan* which can then be executed.
 
 * A *lexer* tokenizes the query
 * A *parser* constructs an AST of the query from the token stream
@@ -208,7 +211,8 @@ A query is treated as a compiler chain:
   type-correct and thus *executable*, but are still malformed because
   they have nonsensical parts in them. The validator phase rejects
   such queries.
-* An *executor* runs the query.
+* A *query plan* is formed.
+* An *executor* runs the *query plan*.
 
 Of these tasks, only the execution phase in the end is
 performance-critical. Clients can pre-load query documents to the
