@@ -31,6 +31,11 @@ also acts as a contract-checker. This ensures:
 * The contract documents the API
 * The contract describes how the client can query data. This is the
   closest to HATEOAS we will probably get without going there.
+* Queries tend to be large and all-encompassing. This means we don't
+  pay the round-trip-time for a request/response like you do in e.g.,
+  HTTP and HTTP/2 based systems where multiple queries are executed
+  back to back and depends on each other. Almost every query can be
+  handled in a single round trip.
 
 Finally, GraphQL supports *introspection* of its endpoint. This allows
 systems to query the server in order to learn what the schema is. In
@@ -172,6 +177,50 @@ Two materialization calls will be made. One for the field `<<"id">>`
 and one for the field `<<"name">>`. The end result is then
 materialized as a response to the caller.
 
+### Materilization through derivation
+
+A common use of the functions is to *derive* data from existing data.
+Suppose we extend the ship in the following way:
+
+    type Ship {
+      ...
+      capacity : float!
+      load : float!
+      loadRatio : float!
+    }
+
+so a ship has a certain capacity and a current load in its cargo bay.
+We could store the `loadRatio` in the mnesia database and keep it up
+to date. But a more efficient way to handle this is to compute it from
+other data:
+
+    -module(ship).
+
+    -record(ship,
+        { id,
+          name,
+          capacity,
+          load }).
+
+    execute(...) ->
+      ...;
+    execute(Ctx, #ship {
+                   capacity = Cap,
+                   load = Load }, <<"loadRatio">>, _) ->
+        {ok, Load / Cap };
+    ...
+
+This will compute that field if it is requested, but not compute it
+when it is not requested by a client. Many fields in a data set are
+derivable in this fashion. Especially when a schema changes and grows
+over time. Old fields can be derived for backwards compatibility and
+new fields can be added next to it.
+
+In addition, it tends to be more efficient. A sizable portion of
+modern web work is about moving data around. If you have to move less
+data, you decrease the memory and network pressure, which can
+translate to faster service.
+
 ## Architecture
 
 Most other GraphQL servers provide no type->module mapping. Rather,
@@ -221,3 +270,16 @@ server side. The server can then do parsing, elaboration, type
 checking and validation once and for all at load time. In addition it
 provides a security measure: clients in production can only call a
 pre-validated set of queries if such desired.
+
+# Status
+
+Currently, the code implements all of the October 2016 GraphQL
+specification, except for a few areas:
+
+* Some validators are missing and pending implementation. The
+  important validators are present, however.
+* Parametrization inside fragments are not yet implemented fully.
+* Parallelization is postponed until a refactoring phase has been
+  completed on the code base. There is a fairly good plan for its
+  implementation at present, but we've not had the need to implement
+  the parallel behavior yet.
