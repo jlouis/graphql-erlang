@@ -38,7 +38,8 @@ EscapedUnicode      = u{HexDigit}{HexDigit}{HexDigit}{HexDigit}
 EscapedCharacter    = ["\\\/bfnrt]
 StringCharacter     = ([^\"{_LineTerminator}]|\\{EscapedUnicode}|\\{EscapedCharacter})
 StringValue         = "{StringCharacter}*"
-MultiStringValue    = """({StringCharacter}|[^"][^"][^"]|"|{LineTerminator})*"""
+MultiCharacter      = ([^`]|\\{EscapedUnicode}|\\{EscapedCharacter})
+MultiStringValue    = `{MultiCharacter}*`
 
 Rules.
 

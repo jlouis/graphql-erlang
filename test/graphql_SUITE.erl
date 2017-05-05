@@ -181,7 +181,7 @@ parse_schema(Config) ->
                                   'Item' => item_resource,
                                   'Stats' => stats_resource } }, Data) of
         ok ->
-            ok;
+            ok = graphql:validate_schema();
         {error, Reason} ->
             ct:fail(Reason)
     end.

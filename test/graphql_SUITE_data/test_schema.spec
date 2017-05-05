@@ -4,14 +4,14 @@ interface Node {
 
 union Thing = Item | Monster
 
-+description(text: """
-How to represent "colors" in the output""")
++description(text: `
+How to represent "colors" in the output`)
 scalar ColorType
 
-+description(text: """Represents a color in the system""")
++description(text: `Represents a color in the system`)
 scalar Color
 
-+description(text: """How to enter monster stats""")
++description(text: `How to enter monster stats`)
 input StatsInput {
 
 	+description(text: "The attack value of the monster")
