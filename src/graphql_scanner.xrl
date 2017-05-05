@@ -38,15 +38,17 @@ EscapedUnicode      = u{HexDigit}{HexDigit}{HexDigit}{HexDigit}
 EscapedCharacter    = ["\\\/bfnrt]
 StringCharacter     = ([^\"{_LineTerminator}]|\\{EscapedUnicode}|\\{EscapedCharacter})
 StringValue         = "{StringCharacter}*"
+MultiStringValue    = """({StringCharacter}|{WhiteSpace}|{LineTerminator})*"""
 
 Rules.
 
-{Ignored}		: skip_token.
-{Punctuator}	: {token, {list_to_atom(TokenChars), TokenLine}}.
-{IntValue}		: {token, {int, TokenLine, list_to_integer(TokenChars)}}.
-{FloatValue}	: {token, {float, TokenLine, list_to_float(TokenChars)}}.
-{StringValue}	: {token, {bstring, TokenLine, iolist_to_binary(unquote(TokenChars))}}.
-{Name}		    : {token, identifier(TokenChars, TokenLine)}.
+{Ignored}		   : skip_token.
+{Punctuator}	   : {token, {list_to_atom(TokenChars), TokenLine}}.
+{IntValue}		   : {token, {int, TokenLine, list_to_integer(TokenChars)}}.
+{FloatValue}	   : {token, {float, TokenLine, list_to_float(TokenChars)}}.
+{StringValue}	   : {token, {bstring, TokenLine, iolist_to_binary(unquote(TokenChars))}}.
+{MultiStringValue} : {token, {bstring, TokenLine, iolist_to_binary(unquote(TokenChars))}}.
+{Name}		       : {token, identifier(TokenChars, TokenLine)}.
 
 Erlang code.
 
