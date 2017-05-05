@@ -48,7 +48,7 @@ Rules.
 {IntValue}		   : {token, {int, TokenLine, list_to_integer(TokenChars)}}.
 {FloatValue}	   : {token, {float, TokenLine, list_to_float(TokenChars)}}.
 {StringValue}	   : {token, {bstring, TokenLine, iolist_to_binary(unquote(TokenChars))}}.
-{MultiStringValue} : {token, {bstring, TokenLine, iolist_to_binary(unquote(TokenChars))}}.
+{MultiStringValue} : {token, {bstring, TokenLine, iolist_to_binary(unquote_ms(TokenChars))}}.
 {Name}		       : {token, identifier(TokenChars, TokenLine)}.
 
 Erlang code.
@@ -77,3 +77,6 @@ identifier(ID, TokenLine) -> {name, TokenLine, iolist_to_binary(ID)}.
 
 unquote(Str) ->
     string:strip(Str, both, $").
+
+unquote_ms(Str) ->
+    string:strip(Str, both, $`).
