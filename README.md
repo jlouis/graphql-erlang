@@ -25,7 +25,7 @@ also acts as a contract-checker. This ensures:
 
 * No client can provide illegal queries to the server backend. These
   are filtered out by the GraphQL layer.
-* No server can provide illegal respones to the client. These are
+* No server can provide illegal responses to the client. These are
   altered such that the client gets a valid response according to the
   schema by replacing failing nodes with null-values.
 * The contract documents the API

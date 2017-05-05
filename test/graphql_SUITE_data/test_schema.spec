@@ -5,7 +5,7 @@ interface Node {
 union Thing = Item | Monster
 
 +description(text: """
-How to represent colors in the output""")
+How to represent "colors" in the output""")
 scalar ColorType
 
 +description(text: "Represents a color in the system")
