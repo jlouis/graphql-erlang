@@ -241,7 +241,7 @@ database for the join and then producing an object which the
     execute(Ctx, #faction { id = ID }, <<"ships">>, _Args) ->
         {ok, Ships} = ship:lookup_by_faction(ID),
         pagination:build_pagination(Ships).
-        
+
 where the `build_pagination` function returns some object which is a
 generic connection object. It will probably look something along the
 lines of
@@ -257,7 +257,7 @@ lines of
              <<"node">> => #ship{ ... } },
           ...]
     }
-    
+
 which can then be processed further by other resources. Note how we
 are eagerly constructing several objects at once and then exploiting the
 cursor moves of the GraphQL system to materialize the fields which the
@@ -339,7 +339,22 @@ and state tracking variables from `cowboy_rest`.
 
 ## Conventions
 
-* Everything uses binary() by default
+In this GraphQL implementation, the default value for keys are type
+`binary()`. This choice is deliberate, since it makes the code more
+resistent to `atom()` overflow and also avoids some conversions
+between `binary()` and `atom()` values in the system. A later version
+of the library might redesign this aspect, but we are somewhat stuck
+with it for now.
+
+However, there are many places where you can input atom values and
+then have them converted internally by the library into binary values.
+This greatly simplifies a large number of data entry tasks for the
+programmer. The general rules are:
+
+* If you supply a value to the system and it is an atom(), the
+  internal representation is a binary value.
+* If the system hands you a value, it is a binary() value and not an
+  atom().
 
 ## Middlewares
 
@@ -368,7 +383,7 @@ and run them one by one. As an example, a `clientMutationId` is part
 of the Relay Modern specification and must be present in every
 mutation. You can build your `mutation_resource` such that it runs a
 `maps:take/2` on the argument input, runs the underlying mutation, and
-then adds back the `clientMutationId` afterwards. 
+then adds back the `clientMutationId` afterwards.
 
 ## Schema Extensions
 
@@ -398,11 +413,11 @@ is often enough to provide a default scalar module in the mapping and
 then implement two functions to handle the scalars:
 
     -module(scalar_resource).
-    
+
     -export(
       [input/2,
        output/2]).
-       
+
     -spec input(Type, Value) -> {ok, Coerced} | {error, Reason}
       when
         Type :: binary(),
@@ -414,7 +429,7 @@ then implement two functions to handle the scalars:
     input(Ty, V) ->
        error_logger:info_report({coercing_generic_scalar, Ty, V}),
        {ok, V}.
-       
+
     -spec output(Type, Value) -> {ok, Coerced} | {error, Reason}
       when
         Type :: binary(),
@@ -446,25 +461,91 @@ the GraphQL must have a way to figure out the type of the object it is
 materializing. This is handled by the type resolution mapping:
 
     -module(resolve_resource).
-    
+
     -export([execute/1]).
-    
+
     %% The following is probably included from a header file in a real
     %% implementation
     -record(ship, {id, name}).
     -record(faction, {id, name}).
-    
+
     execute(#ship{}) -> {ok, <<"Ship">>};
     execute(#faction{}) -> {ok, <<"Faction">>};
     execute(Obj) ->
         {error, unknown_type}.
-        
+
 
 ### Output object Resources
 
-TODO
+Each (output) object is mapped onto an Erlang module responsible for
+handling field requests in that object. The module looks like:
 
-** DEFAULT VALUES
+    -module(object_resource).
+
+    -export([execute/4]).
+
+    execute(Ctx, SrcObj, <<"f">>, Args) ->
+        {ok, 42};
+    execute(Ctx, SrcObj, Field, Args) ->
+        default
+
+The only function which is needed is the `execute/4` function which is
+called by the system whenever a field is requested in that object. The
+4 parameters are as follows:
+
+* `Ctx` - The *context* of the query. It contains information
+  pertaining to the current position in the Graph, as well as
+  user-supplied information from the start of the request. It is
+  commonly used as a read-only store for authentication/authorization
+  data, so you can limit what certain users can see.
+* `SrcObj` - The *current* object on which we are operating. Imagine
+  we have two ships, a B-wing and an X-wing. Even if we request the
+  same fields on the two ships, the `SrcObj` is going to be different.
+  GraphQL often proceeds by having certain fields *fetch* objects out
+  of a backing store and then moving the *cursor* onto that object and
+  calling the correct object resource for that type. The `SrcObj` is
+  set to point to the object that is currently being operated upon.
+* `Field` - The field in the object which is requested.
+* `Args` - A map of field arguments. See the next section.
+
+#### Field Argument rules
+
+In GraphQL, field arguments follow a specific pattern:
+
+* Clients has no way to input a `null` value. The only thing they can
+  do is to omit a given field in the input. In particular, clients
+  *must* supply a field which is non-null.
+* Servers *always* see every field in the input, even if the client
+  doesn't supply it. If the client does not supply a field, and it has
+  no default value, the server sees a `null` value for that field.
+
+This pattern means there is a clear way for the client to specify "no
+value" and a clear way for the server to work with the case where the
+client specified "no value. It eliminates corner cases where you have
+to figure out what the client meant.
+
+Resolution follows a rather simple pattern in GraphQL. If a client
+omits a field and it has a default value, the default value is input.
+Otherwise `null` is input. Clients *must* supply every non-null field.
+
+On the server side, we handle arguments by supplying a map of KV pairs
+to the execute function. Suppose we have an input such as
+
+    input Point {
+        x = 4.0 float
+        y float
+    }
+
+The server can handle this input by matching directly:
+
+    execute(Ctx, SrcObj, Field,
+        #{ <<"x">> := XVal, <<"y">> := YVal }) ->
+      ...
+
+This will always match. If the client provides the input `{}` which is
+the empty input, `XVal` will be `4.0` due to the default value. And
+`YVal` will be `null`. If the client supplies, e.g., `{ x: 2.0, y: 7.0
+}` the map `#{ <<"x">> => 2.0, <<"y">> => 7.0 }` will be provided.
 
 # System Architecture
 
@@ -559,4 +640,3 @@ taken from the the official GraphQL repository and translated. More
 work is definitely needed, but in general new functionality should be
 provided together with a test case that demonstrates the new
 functionality.
-
