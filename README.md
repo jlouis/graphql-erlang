@@ -9,6 +9,15 @@ endpoints with a single endpoint: one for Graph Queries.
 
 This README provides the system overview and its mode of operation.
 
+## Version
+
+Versioning generally follows semantic versioning.
+
+* 0.8 - First Open Source Release. The version is deliberately set a
+  bit before 1.0 in order to be able to do some changes to the API
+  before releasing a more official version with full backwards
+  compatibility ensured.
+
 ## What is GraphQL
 
 GraphQL is a query language for the web. It allows a client to tell
@@ -691,3 +700,8 @@ taken from the the official GraphQL repository and translated. More
 work is definitely needed, but in general new functionality should be
 provided together with a test case that demonstrates the new
 functionality.
+
+We have the *dungeon* schema which loosely reflects a MUD schema for
+use in a game. It is used to test for regressions in the GraphQL
+specification, and to test for breakage of backwards compatibility.
+
