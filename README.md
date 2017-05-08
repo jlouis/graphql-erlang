@@ -387,7 +387,31 @@ then adds back the `clientMutationId` afterwards.
 
 ## Schema Extensions
 
-TODO
+This GraphQL implementation loosely follows the Apollo extension
+mechanism. We plan to adapt whatever default is eventually chosen by
+the GraphQL people later. You can annotate the specification with
+additional tagging by writing `+Tag(Args)` where `Args` are
+traditional arguments for GraphQL data. These tags are available in
+the context when you execute fields. Some special tags exist:
+
+* `+description(text: String!)` - Used to write in-line documentation
+  on an element in the GraphQL schema. It is also possible to write a
+  multi-line comment through the use of backticks rather than double
+  quotes. GraphQL accepts markdown in a number of description blocks
+  and the backtick only blocks in-line preformatted sections, which is
+  why it what chosen.
+
+As an example, you can write something along the lines of:
+
+    +description(text: "A Ship from the Star Wars universe")
+	type Ship : Node {
+      +description(text: "Unique identity of the ship")
+	  id: ID!
+      +description(text: "A descriptive name of the ship")
+	  name: String
+	}
+
+And the schema parser knows how to transform this into documentation.
 
 ## Resource modules
 
