@@ -547,6 +547,33 @@ the empty input, `XVal` will be `4.0` due to the default value. And
 `YVal` will be `null`. If the client supplies, e.g., `{ x: 2.0, y: 7.0
 }` the map `#{ <<"x">> => 2.0, <<"y">> => 7.0 }` will be provided.
 
+#### Tips & Tricks
+
+The execute function allows you to make object-level generic handling
+of fields. If, for example, your `SrcObj` is a map, you can do generic
+lookups by using the following handler:
+
+    execute(_Ctx, Obj, Field, _Args) ->
+        case maps:get(Field, Obj, not_found) of
+          not_found -> {ok, null};
+          Val -> {ok, Val}
+        end.
+
+As this is very common, the GraphQL system currently supplies a
+shorthand for this:
+
+    execute(_Ctx, _Obj, _Field, _Args) ->
+        default.
+
+*NOTE:* This shorthand may be removed in a future major version as it
+turns out it can be handled quite easily by the programmer in a
+generic way. The assumption a `SrcObj` is of `map()` type is a
+limitation that doesn't necessarily hold true. If your database
+backend is Mnesia, it is likely to be a record for instance.
+
+Another trick is to use generic execution to handle "middlewares" -
+See the appropriate section on Middlewares.
+
 # System Architecture
 
 Most other GraphQL servers provide no type->module mapping. Rather,
