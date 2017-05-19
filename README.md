@@ -9,6 +9,22 @@ endpoints with a single endpoint: one for Graph Queries.
 
 This README provides the system overview and its mode of operation.
 
+# Documentation
+
+This is a big library. In order to ease development, we have provided
+a complete tutorial for GraphQL Erlang:
+
+https://github.com/shopgun/graphql-erlang-tutorial
+
+Also, the tutorial has a book which describes how the tutorial example
+is implemented in detail:
+
+https://shopgun.github.io/graphql-erlang-tutorial/
+
+*NOTE:* Read the tutorial before reading on in this repository if you
+haven't already. This README gives a very quick overview, but the
+canonical documentation is the book at the moment.
+
 ## Version
 
 Versioning generally follows semantic versioning.
