@@ -17,7 +17,7 @@ test:
 	@$(REBAR) ct
 
 test-cover:
-	@$(REBAR) ct --cover
+	@$(REBAR) do ct -c, cover -v
 
 update:
 	@$(REBAR) update
