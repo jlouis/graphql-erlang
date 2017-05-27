@@ -74,59 +74,61 @@ the contract. Either by static code generation, or by type providers.
 The GraphQL world specifies a typed *schema* definition. For instance
 the following taken from the Relay Modern specification:
 
-	interface Node {
-	  id: ID!
-	}
+```graphql
+interface Node {
+  id: ID!
+}
 
-	type Faction : Node {
-	  id: ID!
-	  name: String
-	  ships: ShipConnection
-	}
+type Faction : Node {
+  id: ID!
+  name: String
+  ships: ShipConnection
+}
 
-	type Ship : Node {
-	  id: ID!
-	  name: String
-	}
+type Ship : Node {
+  id: ID!
+  name: String
+}
 
-	type ShipConnection {
-	  edges: [ShipEdge]
-	  pageInfo: PageInfo!
-	}
+type ShipConnection {
+  edges: [ShipEdge]
+  pageInfo: PageInfo!
+}
 
-	type ShipEdge {
-	  cursor: String!
-	  node: Ship
-	}
+type ShipEdge {
+  cursor: String!
+  node: Ship
+}
 
-	type PageInfo {
-	  hasNextPage: Boolean!
-	  hasPreviousPage: Boolean!
-	  startCursor: String
-	  endCursor: String
-	}
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
 
-	type Query {
-	  rebels: Faction
-	  empire: Faction
-	  node(id: ID!): Node
-	}
+type Query {
+  rebels: Faction
+  empire: Faction
+  node(id: ID!): Node
+}
 
-	input IntroduceShipInput {
-	  factionId: String!
-	  shipNamed: String!
-	  clientMutationId: String!
-	}
+input IntroduceShipInput {
+  factionId: String!
+  shipNamed: String!
+  clientMutationId: String!
+}
 
-	type IntroduceShipPayload {
-	  faction: Faction
-	  ship: Ship
-	  clientMutationId: String!
-	}
+type IntroduceShipPayload {
+  faction: Faction
+  ship: Ship
+  clientMutationId: String!
+}
 
-	type Mutation {
-	  introduceShip(input: IntroduceShipInput!): IntroduceShipPayload
-	}
+type Mutation {
+  introduceShip(input: IntroduceShipInput!): IntroduceShipPayload
+}
+```
 
 The schema is a subset of the Star Wars schema given as the typical
 GraphQL example all over the web. The GraphQL world roughly splits the
@@ -139,9 +141,11 @@ the above. Once parsed, a mapping is provided by the programmer which
 maps an output type in the schema to an Erlang module. This module
 must implement a function
 
-    -spec execute(Context, Object, Field, Args) ->
-        {ok, Response}
-      | {error, Reason}.
+```erlang
+-spec execute(Context, Object, Field, Args) ->
+    {ok, Response}
+  | {error, Reason}.
+```
 
 which is used to materialize said object. That is, when you request a
 *field* `F` in the object `O`, a call is made to
@@ -162,24 +166,28 @@ materialize each part of the query.
 
 For example, look at the following query:
 
-    query Q {
-      node(id: "12098141") {
-         ... on Ship {
-           id
-           name
-         }
+```graphql
+query Q {
+  node(id: "12098141") {
+      ... on Ship {
+        id
+        name
       }
-    }
+  }
+}
+```
 
 When this query executes, it will start by a developer provided
 initial object. Typically the empty map `#{}`. Since the `node` field
 is requested, a call is performed to match:
 
-    -module(query).
+```erlang
+-module(query).
 
-    ...
-    execute(Ctx, #{}, <<"node">>, #{ <<"id">> := ID }) ->
-       {ok, Obj} = load_object(ID).
+...
+execute(Ctx, #{}, <<"node">>, #{ <<"id">> := ID }) ->
+    {ok, Obj} = load_object(ID).
+```
 
 Now, since you are requesting the `id` and `name` fields on a `Ship`
 inside the node, the system will make a callback to a type-resolver
@@ -189,14 +197,16 @@ the query would not trigger. Once we know that id "12098141" is a
 Ship, we "move the cursor" to a ship and calls the execute function
 there:
 
-    -module(ship).
+```erlang
+-module(ship).
 
-    -record(ship, { id, name }).
+-record(ship, { id, name }).
 
-    execute(Ctx, #ship{ id = Id }, <<"id">>, _Args) ->
-        {ok, ID};
-    execute(Ctx, #ship{ name = Name }, <<"name">>, _Args) ->
-        {ok, Name}.
+execute(Ctx, #ship{ id = Id }, <<"id">>, _Args) ->
+    {ok, ID};
+execute(Ctx, #ship{ name = Name }, <<"name">>, _Args) ->
+    {ok, Name}.
+```
 
 Two materialization calls will be made. One for the field `<<"id">>`
 and one for the field `<<"name">>`. The end result is then
@@ -207,33 +217,37 @@ materialized as a response to the caller.
 A common use of the functions is to *derive* data from existing data.
 Suppose we extend the ship in the following way:
 
-    type Ship {
-      ...
-      capacity : float!
-      load : float!
-      loadRatio : float!
-    }
+```graphql
+type Ship {
+  ...
+  capacity : float!
+  load : float!
+  loadRatio : float!
+}
+```
 
 so a ship has a certain capacity and a current load in its cargo bay.
 We could store the `loadRatio` in the mnesia database and keep it up
 to date. But a more efficient way to handle this is to compute it from
 other data:
 
-    -module(ship).
+```erlang
+-module(ship).
 
-    -record(ship,
-        { id,
-          name,
-          capacity,
-          load }).
+-record(ship,
+    { id,
+      name,
+      capacity,
+      load }).
 
-    execute(...) ->
-      ...;
-    execute(Ctx, #ship {
-                   capacity = Cap,
-                   load = Load }, <<"loadRatio">>, _) ->
-        {ok, Load / Cap };
-    ...
+execute(...) ->
+  ...;
+execute(Ctx, #ship {
+                capacity = Cap,
+                load = Load }, <<"loadRatio">>, _) ->
+    {ok, Load / Cap };
+...
+```
 
 This will compute that field if it is requested, but not compute it
 when it is not requested by a client. Many fields in a data set are
@@ -250,11 +264,13 @@ translate to faster service.
 
 If we take a look at the `Faction` type, we see the following:
 
-	type Faction : Node {
-	  id: ID!
-	  name: String
-	  ships: ShipConnection
-	}
+```graphql
+type Faction : Node {
+  id: ID!
+  name: String
+  ships: ShipConnection
+}
+```
 
 in this, `ships` is a field referring to a `ShipConnection`. A
 Connection type is Relay Modern standard of how to handle a
@@ -263,25 +279,29 @@ derivation" we would derive this field by looking up the data in the
 database for the join and then producing an object which the
 `ship_connection_resource` can handle. For instance:
 
-    execute(Ctx, #faction { id = ID }, <<"ships">>, _Args) ->
-        {ok, Ships} = ship:lookup_by_faction(ID),
-        pagination:build_pagination(Ships).
+```erlang
+execute(Ctx, #faction { id = ID }, <<"ships">>, _Args) ->
+    {ok, Ships} = ship:lookup_by_faction(ID),
+    pagination:build_pagination(Ships).
+```
 
 where the `build_pagination` function returns some object which is a
 generic connection object. It will probably look something along the
 lines of
 
-    #{
-      '$type' => <<"ShipConnection">>,
-      <<"pageInfo">> => #{
-          <<"hasNextPage">> => false,
-          ...
-      },
-      <<"edges">> => [
-          #{ <<"cursor">> => base64:encode(<<"edge:1">>),
-             <<"node">> => #ship{ ... } },
-          ...]
-    }
+```erlang
+#{
+  '$type' => <<"ShipConnection">>,
+  <<"pageInfo">> => #{
+      <<"hasNextPage">> => false,
+      ...
+  },
+  <<"edges">> => [
+      #{ <<"cursor">> => base64:encode(<<"edge:1">>),
+          <<"node">> => #ship{ ... } },
+      ...]
+}
+```
 
 which can then be processed further by other resources. Note how we
 are eagerly constructing several objects at once and then exploiting the
@@ -302,33 +322,35 @@ programmer. This allows you to debug a bit easier and gives the
 programmer more control over the parts. A typical implementation will
 start by using the schema loader:
 
-    inject() ->
-      {ok, File} = application:get_env(myapp, schema_file),
-      Priv = code:priv_dir(myapp),
-      FName = filename:join([Priv, File]),
-      {ok, SchemaData} = file:read_file(FName),
-      Map = #{
-        scalars => #{ default => scalar_resource },
-        interfaces => #{ default => resolve_resource },
-        unions => #{ default => resolve_resource },
-        objects => #{
-          'Ship' => ship_resource,
-          'Faction' => faction_resource,
-          ...
-          'Query' => query_resource,
-          'Mutation' => mutation_resource
-        }
-      },
-      ok = graphql:load_schema(Map, SchemaData),
-          Root = {root,
-          #{
-            query => 'Query',
-            mutation => 'Mutation',
-            interfaces => []
-          }},
-      ok = graphql:insert_schema_definition(Root),
-      ok = graphql:validate_schema(),
-      ok.
+```erlang
+inject() ->
+  {ok, File} = application:get_env(myapp, schema_file),
+  Priv = code:priv_dir(myapp),
+  FName = filename:join([Priv, File]),
+  {ok, SchemaData} = file:read_file(FName),
+  Map = #{
+    scalars => #{ default => scalar_resource },
+    interfaces => #{ default => resolve_resource },
+    unions => #{ default => resolve_resource },
+    objects => #{
+      'Ship' => ship_resource,
+      'Faction' => faction_resource,
+      ...
+      'Query' => query_resource,
+      'Mutation' => mutation_resource
+    }
+  },
+  ok = graphql:load_schema(Map, SchemaData),
+      Root = {root,
+      #{
+        query => 'Query',
+        mutation => 'Mutation',
+        interfaces => []
+      }},
+  ok = graphql:insert_schema_definition(Root),
+  ok = graphql:validate_schema(),
+  ok.
+```
 
 This will set up the schema in the code by reading it from a file on
 disk. Each of the `_resource` names refers to modules which implements
@@ -340,27 +362,29 @@ operation name in `OpName` and parameter variables for the given op in
 `Vars`. The variables `Req` and `State` are standard cowboy request
 and state tracking variables from `cowboy_rest`.
 
-    run(Doc, OpName, Vars, Req, State) ->
-      case graphql:parse(Doc) of
-        {ok, AST} ->
-          try
-             Elaborated = graphql:elaborate(AST),
-             {ok, #{fun_env := FunEnv,
-                    ast := AST2 }} = graphql:type_check(Elaborated),
-             ok = graphql:validate(AST2),
-             Coerced = graphql:type_check_params(FunEnv, OpName, Vars),
-             Ctx = #{ params => Coerced, operation_name => OpName },
-             Response = graphql:execute(Ctx, AST2),
-             Req2 = cowboy_req:set_resp_body(encode_json(Response), Req),
-             {ok, Reply} = cowboy_req:reply(200, Req2),
-             {halt, Reply, State}
-          catch
-               throw:Err ->
-                   err(400, Err, Req, State)
-          end;
-        {error, Error} ->
-           err(400, {parser_error, Error}, Req, State)
-      end.
+```erlang
+run(Doc, OpName, Vars, Req, State) ->
+  case graphql:parse(Doc) of
+    {ok, AST} ->
+      try
+          Elaborated = graphql:elaborate(AST),
+          {ok, #{fun_env := FunEnv,
+                ast := AST2 }} = graphql:type_check(Elaborated),
+          ok = graphql:validate(AST2),
+          Coerced = graphql:type_check_params(FunEnv, OpName, Vars),
+          Ctx = #{ params => Coerced, operation_name => OpName },
+          Response = graphql:execute(Ctx, AST2),
+          Req2 = cowboy_req:set_resp_body(encode_json(Response), Req),
+          {ok, Reply} = cowboy_req:reply(200, Req2),
+          {halt, Reply, State}
+      catch
+            throw:Err ->
+                err(400, Err, Req, State)
+      end;
+    {error, Error} ->
+        err(400, {parser_error, Error}, Req, State)
+  end.
+```
 
 ## Conventions
 
@@ -393,9 +417,11 @@ As a result, you can implement middlewares by using the `execute/4`
 function as a wrapper. For instance you could define a mutation
 function as:
 
-    execute(Ctx, Obj, Field, Args) ->
-        AnnotCtx = perform_authentication(Ctx),
-        execute_field(AnnotCtx, Obj, Field, Args).
+```erlang
+execute(Ctx, Obj, Field, Args) ->
+    AnnotCtx = perform_authentication(Ctx),
+    execute_field(AnnotCtx, Obj, Field, Args).
+```
 
 The reason this works so well is because we are able to use pattern
 matching on `execute/4` functions and then specialize them. If we had
@@ -428,13 +454,15 @@ the context when you execute fields. Some special tags exist:
 
 As an example, you can write something along the lines of:
 
-    +description(text: "A Ship from the Star Wars universe")
-	type Ship : Node {
-      +description(text: "Unique identity of the ship")
-	  id: ID!
-      +description(text: "A descriptive name of the ship")
-	  name: String
-	}
+```graphql
++description(text: "A Ship from the Star Wars universe")
+    type Ship : Node {
+  +description(text: "Unique identity of the ship")
+      id: ID!
+  +description(text: "A descriptive name of the ship")
+      name: String
+    }
+```
 
 And the schema parser knows how to transform this into documentation.
 
@@ -454,42 +482,46 @@ enumerations, strings, identifiers and so on. But you can extend the
 set of scalars yourself. The spec will contain something along the
 lines of
 
-    scalar Color
-    scalar DateTime
+```graphql
+scalar Color
+scalar DateTime
+```
 
 and so on. These are mapped onto resource modules handling scalars. It
 is often enough to provide a default scalar module in the mapping and
 then implement two functions to handle the scalars:
 
-    -module(scalar_resource).
+```erlang
+-module(scalar_resource).
 
-    -export(
-      [input/2,
-       output/2]).
+-export(
+  [input/2,
+    output/2]).
 
-    -spec input(Type, Value) -> {ok, Coerced} | {error, Reason}
-      when
-        Type :: binary(),
-        Value :: binary(),
-        Coerced :: any(),
-        Reason :: term().
-    input(<<"Color">>, C) -> color:coerce(C);
-    input(<<"DateTime">>, DT) -> datetime:coerce(DT);
-    input(Ty, V) ->
-       error_logger:info_report({coercing_generic_scalar, Ty, V}),
-       {ok, V}.
+-spec input(Type, Value) -> {ok, Coerced} | {error, Reason}
+  when
+    Type :: binary(),
+    Value :: binary(),
+    Coerced :: any(),
+    Reason :: term().
+input(<<"Color">>, C) -> color:coerce(C);
+input(<<"DateTime">>, DT) -> datetime:coerce(DT);
+input(Ty, V) ->
+    error_logger:info_report({coercing_generic_scalar, Ty, V}),
+    {ok, V}.
 
-    -spec output(Type, Value) -> {ok, Coerced} | {error, Reason}
-      when
-        Type :: binary(),
-        Value :: binary(),
-        Coerced :: any(),
-        Reason :: term().
-    output(<<"Color">>, C) -> color:as_binary(C);
-    output(<<"DateTime">>, DT) -> datetime:as_binary(DT);
-    output(Ty, V) ->
-       error_logger:info_report({output_generic_scalar, Ty, V}),
-       {ok, V}.
+-spec output(Type, Value) -> {ok, Coerced} | {error, Reason}
+  when
+    Type :: binary(),
+    Value :: binary(),
+    Coerced :: any(),
+    Reason :: term().
+output(<<"Color">>, C) -> color:as_binary(C);
+output(<<"DateTime">>, DT) -> datetime:as_binary(DT);
+output(Ty, V) ->
+    error_logger:info_report({output_generic_scalar, Ty, V}),
+    {ok, V}.
+```
 
 Scalar Mappings allow you to have an internal and external
 representation of values. You could for instance read a color such as
@@ -509,19 +541,21 @@ schema is the `Node` interface which is implemented by `Ship` and
 the GraphQL must have a way to figure out the type of the object it is
 materializing. This is handled by the type resolution mapping:
 
-    -module(resolve_resource).
+```erlang
+-module(resolve_resource).
 
-    -export([execute/1]).
+-export([execute/1]).
 
-    %% The following is probably included from a header file in a real
-    %% implementation
-    -record(ship, {id, name}).
-    -record(faction, {id, name}).
+%% The following is probably included from a header file in a real
+%% implementation
+-record(ship, {id, name}).
+-record(faction, {id, name}).
 
-    execute(#ship{}) -> {ok, <<"Ship">>};
-    execute(#faction{}) -> {ok, <<"Faction">>};
-    execute(Obj) ->
-        {error, unknown_type}.
+execute(#ship{}) -> {ok, <<"Ship">>};
+execute(#faction{}) -> {ok, <<"Faction">>};
+execute(Obj) ->
+    {error, unknown_type}.
+```
 
 
 ### Output object Resources
@@ -529,14 +563,16 @@ materializing. This is handled by the type resolution mapping:
 Each (output) object is mapped onto an Erlang module responsible for
 handling field requests in that object. The module looks like:
 
-    -module(object_resource).
+```erlang
+-module(object_resource).
 
-    -export([execute/4]).
+-export([execute/4]).
 
-    execute(Ctx, SrcObj, <<"f">>, Args) ->
-        {ok, 42};
-    execute(Ctx, SrcObj, Field, Args) ->
-        default
+execute(Ctx, SrcObj, <<"f">>, Args) ->
+    {ok, 42};
+execute(Ctx, SrcObj, Field, Args) ->
+    default
+```
 
 The only function which is needed is the `execute/4` function which is
 called by the system whenever a field is requested in that object. The
@@ -580,16 +616,20 @@ Otherwise `null` is input. Clients *must* supply every non-null field.
 On the server side, we handle arguments by supplying a map of KV pairs
 to the execute function. Suppose we have an input such as
 
-    input Point {
-        x = 4.0 float
-        y float
-    }
+```graphql
+input Point {
+    x = 4.0 float
+    y float
+}
+```
 
 The server can handle this input by matching directly:
 
-    execute(Ctx, SrcObj, Field,
-        #{ <<"x">> := XVal, <<"y">> := YVal }) ->
-      ...
+```erlang
+execute(Ctx, SrcObj, Field,
+    #{ <<"x">> := XVal, <<"y">> := YVal }) ->
+  ...
+```
 
 This will always match. If the client provides the input `{}` which is
 the empty input, `XVal` will be `4.0` due to the default value. And
@@ -602,17 +642,21 @@ The execute function allows you to make object-level generic handling
 of fields. If, for example, your `SrcObj` is a map, you can do generic
 lookups by using the following handler:
 
-    execute(_Ctx, Obj, Field, _Args) ->
-        case maps:get(Field, Obj, not_found) of
-          not_found -> {ok, null};
-          Val -> {ok, Val}
-        end.
+```erlang
+execute(_Ctx, Obj, Field, _Args) ->
+    case maps:get(Field, Obj, not_found) of
+      not_found -> {ok, null};
+      Val -> {ok, Val}
+    end.
+```
 
 As this is very common, the GraphQL system currently supplies a
 shorthand for this:
 
-    execute(_Ctx, _Obj, _Field, _Args) ->
-        default.
+```erlang
+execute(_Ctx, _Obj, _Field, _Args) ->
+    default.
+```
 
 *NOTE:* This shorthand may be removed in a future major version as it
 turns out it can be handled quite easily by the programmer in a
@@ -720,4 +764,3 @@ functionality.
 We have the *dungeon* schema which loosely reflects a MUD schema for
 use in a game. It is used to test for regressions in the GraphQL
 specification, and to test for breakage of backwards compatibility.
-
