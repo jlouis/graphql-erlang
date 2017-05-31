@@ -112,7 +112,9 @@ schema_defn(_) -> false.
 
 report_other_entries([]) -> ok;
 report_other_entries(Es) ->
-    lager:warning("Loading graphql schema from file, but it contains non-schema entries: ~p", [Es]),
+    error_logger:error_msg("Loading graphql schema from file, "
+                           "but it contains non-schema entries: ~p",
+                           [Es]),
     ok.
 
 handle_mapping(Map) ->

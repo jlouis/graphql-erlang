@@ -188,7 +188,9 @@ resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectTy
             {error, {wrong_resolver_return, Fun, Name, Wrong}}
     catch
         Cl:Err ->
-            lager:warning("Resolver function error: ~p stacktrace: ~p", [{Cl,Err}, erlang:get_stacktrace()]),
+            error_logger:error_msg(
+              "Resolver function error: ~p stacktrace: ~p~n",
+              [{Cl,Err}, erlang:get_stacktrace()]),
             {error, {resolver_crash, Fun, ObjectType, Name}}
     end.
 
@@ -197,7 +199,6 @@ complete_value(Path, Ctx, Ty, Fields, {ok, {enum, Value}}) ->
 complete_value(Path, Ctx, {scalar, Scalar}, Fields, {ok, Value}) ->
     complete_value(Path, Ctx, output_coerce_type(Scalar), Fields, {ok, Value});
 complete_value(Path, Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
-    lager:warning("Looking up type in executor: ~p", [Ty]),
     SchemaType = graphql_schema:get(Ty),
     complete_value(Path, Ctx, SchemaType, Fields, {ok, Value});
 complete_value(Path, Ctx, {non_null, InnerTy}, Fields, Result) ->
@@ -228,7 +229,9 @@ complete_value(Path, _Ctx, #scalar_type { id = ID, output_coerce = OCoerce, reso
             err(Path, {output_coerce, ID, Value, Reason})
     catch
         Cl:Err ->
-            lager:warning("Output coercer crash: ~p, stack: ~p", [{Cl,Err}, erlang:get_stacktrace()]),
+            error_logger:error_msg(
+              "Output coercer crash: ~p, stack: ~p",
+              [{Cl,Err}, erlang:get_stacktrace()]),
             err(Path, {coerce_crash, ID, Value, {Cl, Err}})
     end;
 complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
@@ -238,7 +241,9 @@ complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Field
             err(Path, {output_coerce, ID, Value, Reason})
     catch
         Cl:Err ->
-            lager:warning("Output coercer crash: ~p, stack: ~p", [{Cl,Err,ID,Value}, erlang:get_stacktrace()]),
+            error_logger:error_msg(
+              "Output coercer crash: ~p, stack: ~p",
+              [{Cl,Err,ID,Value}, erlang:get_stacktrace()]),
             err(Path, {coerce_crash, ID, Value, {Cl, Err}})
     end;
 complete_value(_Path, _Ctx, #enum_type {}, _Fields, {ok, Value}) when is_binary(Value) ->
@@ -273,7 +278,9 @@ resolve_abstract_type(Resolver, Value) when is_function(Resolver, 1) ->
             {error, Reason}
     catch
        Cl:Err ->
-           lager:warning("Resolve_type crashed: ~p", [erlang:get_stacktrace()]),
+            error_logger:error_msg(
+              "Resolve_type crashed: ~p",
+              [erlang:get_stacktrace()]),
            {error, {resolve_type_crash, {Cl,Err}}}
     end.
 
@@ -472,7 +479,6 @@ value(#{ params := Params }, #{ value := {var, ID}}) ->
 value(_Ctx, #{ type := {scalar, STy}, value := V}) ->
     value_scalar(STy, V);
 value(Ctx, #{ type := _, value := V} = M) ->
-    %% lager:info("Resolving: ~p", [M]),
     default_resolution(Ctx, M),
     V.
 
@@ -490,7 +496,9 @@ value_scalar(int, null) -> null;
 value_scalar(float, F) when is_float(F) -> F;
 value_scalar(float, null) -> null;
 value_scalar(Ty, V) ->
-    lager:warning("Scalar resolver missing for built-in type: ~p (value: ~p)", [Ty, V]),
+    error_logger:error_msg(
+      "Report this: Scalar resolver missing for built-in type: ~p (value: ~p)~n",
+      [Ty, V]),
     V.
 
 value_object(_, _, []) -> [];
