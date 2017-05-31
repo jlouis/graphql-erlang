@@ -6,12 +6,12 @@
 
 -export([start_link/0, reset/0]).
 -export([
-	all/0,
-	insert/1, insert/2,
-	load/1,
-	get/1,
-	lookup/1,
-	lookup_enum_type/1]).
+    all/0,
+    insert/1, insert/2,
+    load/1,
+    get/1,
+    lookup/1,
+    lookup_enum_type/1]).
 -export([resolve_root_type/2]).
 
 -export([id/1]).
@@ -53,7 +53,9 @@ insert(S, #{ canonicalize := true }) ->
             end
     catch
         Class:Reason ->
-            lager:warning("Schema canonicalization error: ~p", [erlang:get_stacktrace()]),
+            error_logger:error_msg(
+              "Schema canonicalization error: ~p stacktrace: ~p~n",
+              [{Class,Reason}, erlang:get_stacktrace()]),
             {error, {schema_canonicalize, {Class, Reason}}}
     end;
 insert(S, #{}) ->
@@ -129,8 +131,8 @@ init([]) ->
          [named_table, protected, {read_concurrency, true}, set,
            {keypos, 1}]),
     _Tab = ets:new(?OBJECTS,
-    	[named_table, protected, {read_concurrency, true}, set,
-    	 {keypos, #object_type.id}]),
+        [named_table, protected, {read_concurrency, true}, set,
+         {keypos, #object_type.id}]),
     {ok, #state{}}.
 
 -spec handle_cast(any(), S) -> {noreply, S}
