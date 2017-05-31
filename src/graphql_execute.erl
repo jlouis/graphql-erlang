@@ -200,7 +200,7 @@ complete_value(Path, Ctx, {scalar, Scalar}, Fields, {ok, Value}) ->
     complete_value(Path, Ctx, output_coerce_type(Scalar), Fields, {ok, Value});
 complete_value(Path, Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
     error_logger:warning_msg(
-      "Canary: Type lookup during value completion for: ~p",
+      "Canary: Type lookup during value completion for: ~p~n",
       [Ty]),
     SchemaType = graphql_schema:get(Ty),
     complete_value(Path, Ctx, SchemaType, Fields, {ok, Value});
@@ -233,8 +233,8 @@ complete_value(Path, _Ctx, #scalar_type { id = ID, output_coerce = OCoerce, reso
     catch
         Cl:Err ->
             error_logger:error_msg(
-              "Output coercer crash: ~p, stack: ~p",
-              [{Cl,Err}, erlang:get_stacktrace()]),
+              "Output coercer crash during value completion: ~p, stacktrace: ~p~n",
+              [{Cl,Err,ID,Value}, erlang:get_stacktrace()]),
             err(Path, {coerce_crash, ID, Value, {Cl, Err}})
     end;
 complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
@@ -245,7 +245,7 @@ complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Field
     catch
         Cl:Err ->
             error_logger:error_msg(
-              "Output coercer crash: ~p, stack: ~p",
+              "Output coercer crash during value completion: ~p, stacktrace: ~p~n",
               [{Cl,Err,ID,Value}, erlang:get_stacktrace()]),
             err(Path, {coerce_crash, ID, Value, {Cl, Err}})
     end;
@@ -282,8 +282,8 @@ resolve_abstract_type(Resolver, Value) when is_function(Resolver, 1) ->
     catch
        Cl:Err ->
             error_logger:error_msg(
-              "Resolve_type crashed: ~p",
-              [erlang:get_stacktrace()]),
+              "Type resolver crashed: ~p stacktrace: ~p~n",
+              [{Cl,Err}, erlang:get_stacktrace()]),
            {error, {resolve_type_crash, {Cl,Err}}}
     end.
 

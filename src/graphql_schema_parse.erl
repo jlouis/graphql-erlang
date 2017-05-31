@@ -92,11 +92,11 @@ mk(#{ interfaces := IF }, #p_interface {
        annotations => annotations(Annots),
        fields => Fields
       }}.
-          
+
 fields(Raw) ->
     maps:from_list([field(R) || R <- Raw]).
 
-input_defs(Raw) ->  
+input_defs(Raw) ->
     maps:from_list([input_def(D) || D <- Raw]).
 
 inject(Def) ->
@@ -113,7 +113,7 @@ schema_defn(_) -> false.
 report_other_entries([]) -> ok;
 report_other_entries(Es) ->
     error_logger:error_msg("Loading graphql schema from file, "
-                           "but it contains non-schema entries: ~p",
+                           "but it contains non-schema entries: ~p~n",
                            [Es]),
     ok.
 
@@ -130,15 +130,15 @@ binarize(default) -> default;
 binarize(A) when is_atom(A) -> atom_to_binary(A, utf8).
 
 name({name, _, N}) -> N.
-    
+
 annotations(As) ->
     maps:from_list([annotation(A) || A <- As]).
 
 annotation(#annotation { id = {name, _, T}, args = Args }) ->
     {T, maps:from_list([annotation_arg(Ag) || Ag <- Args])}.
-    
+
 annotation_arg({{name, _, A}, Val}) -> {A, Val}.
-       
+
 description(Annots) ->
     case find(<<"description">>, Annots) of
         not_found ->
@@ -149,7 +149,7 @@ description(Annots) ->
 
 input_def(#p_input_value { id = ID,
                            annotations = Annots,
-                           default = Default, 
+                           default = Default,
                            type = Type }) ->
     Name = name(ID),
     Description = description(Annots),
@@ -186,7 +186,7 @@ variants(Vs) ->
                 {K, #{ value => I, description => "No descriptions supported yet" }}
         end,
     maps:from_list(mapi(F, Vs)).
-                
+
 mapi(F, L) -> mapi(F, L, 0).
 
 mapi(_F, [], _) -> [];
@@ -208,4 +208,3 @@ mapping(Name, Map) ->
             maps:get(default, Map);
         X -> X
     end.
-            
