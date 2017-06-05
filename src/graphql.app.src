@@ -4,8 +4,7 @@
   {registered, []},
   {applications,
    [kernel,
-    stdlib,
-    lager
+    stdlib
    ]},
   {mod, {graphql_app, []}},
   {env,[]},
