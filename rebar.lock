@@ -1,8 +1,1 @@
-[{<<"goldrush">>,
-  {git,"https://github.com/DeadZen/goldrush.git",
-       {ref,"8f1b715d36b650ec1e1f5612c00e28af6ab0de82"}},
-  1},
- {<<"lager">>,
-  {git,"https://github.com/erlang-lager/lager.git",
-       {ref,"92b1548f7f97a7fef257dffc45ef7b14006334e6"}},
-  0}].
+[].
