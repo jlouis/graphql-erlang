@@ -29,7 +29,7 @@ canonical documentation is the book at the moment.
 
 Versioning generally follows semantic versioning.
 
-* 0.8 - First Open Source Release. The version is deliberately set a
+* 0.8.0 - First Open Source Release. The version is deliberately set a
   bit before 1.0 in order to be able to do some changes to the API
   before releasing a more official version with full backwards
   compatibility ensured.
