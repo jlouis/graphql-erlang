@@ -268,7 +268,7 @@ complete_value(Path, Ctx, #object_type{} = Ty, Fields, {ok, Value}) ->
     {Result, Errs} = execute_sset(Path, Ctx, SubSelectionSet, Ty, Value),
     {ok, Result, Errs};
 complete_value(Path, _Ctx, _Ty, _Fields, {error, Reason}) ->
-    {ok, null, [#{ path => Path, reason => Reason }]}.
+    {ok, null, [#{ path => lists:reverse(Path), reason => Reason }]}.
 
 resolve_abstract_type(Module, Value) when is_atom(Module) ->
     resolve_abstract_type(fun Module:execute/1, Value);
