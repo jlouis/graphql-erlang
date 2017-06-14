@@ -1,0 +1,20 @@
+language: erlang
+sudo: false
+
+os: linux
+otp_release: 19.3
+
+matrix:
+  include:
+    - os: linux
+      otp_release: 18.3
+    - os: linux
+      otp_release: 19.3
+    - os: linux
+      otp_release: 20.0-rc1
+
+script: "make compile && make test"
+
+notifications:
+  recipients:
+    - jesper.louis.andersen@gmail.com
