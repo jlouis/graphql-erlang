@@ -479,7 +479,7 @@ multiple_monsters_and_rooms(Config) ->
         <<"monsters">> := [
             #{ <<"id">> := ID1 }, #{ <<"id">> := ID2 } , null ]},
        errors := [
-           #{path := [2, <<"monsters">>, <<"MultipleMonsters">>],
+           #{path := [<<"MultipleMonsters">>, <<"monsters">>, 2],
              reason := not_found}]
      } = run(Config, <<"MultipleMonsters">>, #{ <<"ids">> => [ID1, ID2, ID1000] }),
 
@@ -487,9 +487,9 @@ multiple_monsters_and_rooms(Config) ->
         <<"monsters">> := [
             #{ <<"id">> := ID1 }, null, #{ <<"id">> := ID2 }, null ]},
        errors := [
-                  #{path := [1, <<"monsters">>, <<"MultipleMonstersExprMissing">>],
+                  #{path := [<<"MultipleMonstersExprMissing">>, <<"monsters">>, 1],
                     reason := not_found},
-                  #{path := [3, <<"monsters">>, <<"MultipleMonstersExprMissing">>],
+                  #{path := [<<"MultipleMonstersExprMissing">>, <<"monsters">>, 3],
                     reason := not_found}]
      } = run(Config, <<"MultipleMonstersExprMissing">>, #{}),
 
@@ -503,8 +503,8 @@ multiple_monsters_and_rooms(Config) ->
         <<"rooms">> := null
          },
         errors := [
-                   #{path := [1,<<"rooms">>,<<"MultipleRooms">>], reason := null_value},
-                   #{path := [1,<<"rooms">>,<<"MultipleRooms">>],reason := not_found}]
+                   #{path := [1, <<"rooms">>,<<"MultipleRooms">>], reason := null_value},
+                   #{path := [<<"MultipleRooms">>, <<"rooms">>, 1], reason := not_found}]
       } = run(Config, <<"MultipleRooms">>, #{ <<"ids">> => [Room1, base64:encode(<<"room:2">>)]}),
 
      ok.
