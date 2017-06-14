@@ -13,7 +13,7 @@ matrix:
     - os: linux
       otp_release: 20.0-rc1
 
-script: "make compile && make test"
+script: "make compile test REBAR=./rebar3"
 
 install:
   - wget https://s3.amazonaws.com/rebar3/rebar3 && chmod +x rebar3

@@ -1,4 +1,4 @@
-REBAR   = rebar3
+REBAR ?= rebar3
 PROJECT = graphql
 VERSION = 0.0.1
 
