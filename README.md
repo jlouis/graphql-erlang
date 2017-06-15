@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/shopgun/graphql-erlang.svg?branch=master)](https://travis-ci.org/shopgun/graphql-erlang)
+[![Build Status](https://travis-ci.org/shopgun/graphql-erlang.svg?branch=develop)](https://travis-ci.org/shopgun/graphql-erlang)
 
 # A GraphQL Server library - in Erlang
 
