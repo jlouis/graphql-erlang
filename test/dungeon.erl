@@ -6,7 +6,6 @@
 
 -export([inject/0, start/0, stop/0]).
 
-
 start() ->
     application:load(mnesia),
     ok = mnesia:create_schema([node()]),
