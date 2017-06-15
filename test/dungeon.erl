@@ -2,36 +2,10 @@
 -include_lib("graphql/include/graphql.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
+-include("dungeon.hrl").
+
 -export([inject/0, start/0, stop/0]).
 
--record(sequence, {id, count}).
--record(stats, {
-          shell_scripting = 3,
-          attack = 3,
-          yell = <<"HELO">>
-}).
-
--record(monster, {
-          id,
-          name,
-          color,
-          inventory = ordsets:new(),
-          stats = [],
-          hitpoints,
-          plush_factor = 0.0,
-          properties = [],
-          mood}).
--record(item, {
-	id,
-	name,
-	description,
-	weight,
-	contents }).
--record(room, {
-	id,
-	description,
-	contents = ordsets:new()
-}).
 
 start() ->
     application:load(mnesia),
