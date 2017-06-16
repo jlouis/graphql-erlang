@@ -11,7 +11,7 @@ init_per_suite(Config) ->
     application:ensure_all_started(graphql),
     {ok, Doc} = read_doc(Config, "dungeon.graphql"),
 
-    ok = dungeon:inject(),
+    ok = dungeon:inject(Config),
     ok = dungeon:start(),
     ok = graphql:validate_schema(),
     [{document, Doc} | Config].
@@ -302,19 +302,19 @@ nested_input_object(Config) ->
         <<"yell">> => <<"...">> }]
       },
     #{ data :=
-                      #{<<"introduceMonster">> := #{<<"clientMutationId">> := <<"123">>,
-                                                    <<"monster">> :=
-                                                        #{ <<"color">> := <<"#1BE215">>,
-                                                           <<"hitpoints">> := 9001,
-                                                           <<"mood">> := <<"TRANQUIL">>,
-                                                           <<"name">> := <<"Green Slime">>,
-                                                           <<"id">> := _,
-                                                           <<"plushFactor">> := PF,
-                                                           <<"stats">> := [#{
-                                                            <<"attack">> := 7,
-                                                            <<"shellScripting">> := 5,
-                                                            <<"yell">> := <<"...">> }]}}}} =
-             run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
+           #{<<"introduceMonster">> := #{<<"clientMutationId">> := <<"123">>,
+                                         <<"monster">> :=
+                                             #{ <<"color">> := <<"#1BE215">>,
+                                                <<"hitpoints">> := 9001,
+                                                <<"mood">> := <<"TRANQUIL">>,
+                                                <<"name">> := <<"Green Slime">>,
+                                                <<"id">> := _,
+                                                <<"plushFactor">> := PF,
+                                                <<"stats">> :=
+                                                    [#{ <<"attack">> := 7,
+                                                        <<"shellScripting">> := 5,
+                                                        <<"yell">> := <<"...">> }]}}}} =
+        run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
     true = (PF - 0.01) < 0.00001,
     ok.
     
