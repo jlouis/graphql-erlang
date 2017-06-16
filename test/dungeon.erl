@@ -11,10 +11,18 @@ start() ->
     application:load(mnesia),
     ok = mnesia:create_schema([node()]),
     application:ensure_all_started(mnesia),
-    {atomic, ok} = mnesia:create_table(sequence, [{attributes, record_info(fields, sequence)}]),
-    {atomic, ok} = mnesia:create_table(monster,[{attributes, record_info(fields, monster)}]),
-    {atomic, ok} = mnesia:create_table(item, [{attributes, record_info(fields, item)}]),
-    {atomic, ok} = mnesia:create_table(room, [{attributes, record_info(fields, room)}]),
+    {atomic, ok} = mnesia:create_table(
+                     sequence,
+                     [{attributes, record_info(fields, sequence)}]),
+    {atomic, ok} = mnesia:create_table(
+                     monster,
+                     [{attributes, record_info(fields, monster)}]),
+    {atomic, ok} = mnesia:create_table(
+                     item,
+                     [{attributes, record_info(fields, item)}]),
+    {atomic, ok} = mnesia:create_table(
+                     room,
+                     [{attributes, record_info(fields, room)}]),
     populate(),
     ok.
     
