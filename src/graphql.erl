@@ -43,8 +43,12 @@ load_schema(Mapping, Input) when is_binary(Input) ->
 load_schema(Mapping, Input) when is_list(Input) ->
     case graphql_scanner:string(Input) of
         {ok, Tokens, _EndLine} ->
-            Result = graphql_parser:parse(Tokens),
-            graphql_schema_parse:inject(Mapping, Result);
+            case graphql_parser:parse(Tokens) of
+                {ok, _} = Result ->
+                    graphql_schema_parse:inject(Mapping, Result);
+                {error, Err} ->
+                    {error, Err}
+            end;
         {error, Err, _EndLine} ->
             {error, Err}
     end.
