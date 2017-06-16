@@ -24,7 +24,7 @@ execute(_Ctx, _, <<"room">>, #{ <<"id">> := InputID }) ->
     end;
 execute(_Ctx, _, <<"rooms">>, #{ <<"ids">> := InputIDs }) ->
     {ok, [begin
-              {monster, _} = OID = dungeon:unwrap(ID),
+              {room, _} = OID = dungeon:unwrap(ID),
               dungeon:dirty_load(OID)
           end || ID <- InputIDs]}.
 
