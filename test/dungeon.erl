@@ -4,6 +4,7 @@
 
 -include("dungeon.hrl").
 
+-export([load/1, wrap/1, unwrap/1, insert/1]).
 -export([inject/0, start/0, stop/0]).
 
 start() ->
