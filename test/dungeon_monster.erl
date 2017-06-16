@@ -20,7 +20,7 @@ execute(_Ctx, #monster { id = ID,
         <<"hp">> -> {ok, HP};
         <<"inventory">> -> {ok, [dungeon:load(OID) || OID <- Inventory]};
         <<"mood">> -> {ok, Mood};
-        <<"plusFactor">> -> {ok, PlushFactor};
+        <<"plushFactor">> -> {ok, PlushFactor};
         <<"stats">> -> stats(Stats, Args);
         <<"statsVariantOne">> -> stats(Stats);
         <<"statsVariantTwo">> -> stats(Stats);

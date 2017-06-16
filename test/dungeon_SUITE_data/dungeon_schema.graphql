@@ -1,8 +1,21 @@
 scalar ColorType
 scalar Color
 
-enum Mood = TRANQUIL | DODGY | AGGRESSIVE
-enum Property = BEAST | MECH | DRAGON | PIRATE | MURLOC | TOTEM | DEMON
+enum Mood {
+     TRANQUIL
+     DODGY
+     AGGRESSIVE
+}
+
+enum Property {
+     BEAST
+     MECH
+     DRAGON
+     PIRATE
+     MURLOC
+     TOTEM
+     DEMON
+}
 
 interface Node {
   id : ID!
@@ -54,50 +67,58 @@ union Thing = Item | Monster
 # Inputs and Payloads
 
 input StatsInput {
-  attack : Int!
+  attack : Int! = 7
   yell : String
   shellScripting : Int
 }
 
 input IntroduceMonsterInput {
+  clientMutationId : String
   name : String!
   color : Color!
   hitpoints : Int = 15
-  plusFactor : Float = 0.01
+  plushFactor : Float = 0.01
   mood : Mood = DODGY
-  properties : Property = []
+  properties : [Property] = []
   stats : [StatsInput]
 }
 
 type IntroduceMonsterPayload {
+  clientMutationId : String
   monster : Monster
 }
 
 input IntroduceRoomInput {
+  clientMutationId : String
   description : String!
 }
 
 type IntroduceRoomPayload {
+  clientMutationId : String
   room : Room
 }
 
 input SpawnMinionInput {
+  clientMutationId : String
   monsterId : ID!
   roomId : ID!
 }
 
 type SpawnMinionPayload {
+  clientMutationId : String
   room : Room
   monster : Monster
 }
 
 input IntroduceItemInput {
+  clientMutationId : String
   name : String!
   description : String!
   weight : Float!
 }
 
-type introduceItemPayload {
+type IntroduceItemPayload {
+  clientMutationId : String
   item : Item
 }
 
@@ -115,6 +136,6 @@ type QueryRoot {
   monsters(ids: [ID!]) : [Monster]
   thing(id: ID!) : Thing
   room(id: ID!) : Room
-  rooms(ids: ID!) : [Room!]
+  rooms(ids: [ID!]) : [Room!]
 }
 
