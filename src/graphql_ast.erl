@@ -53,5 +53,6 @@ id(E) ->
 id_(#op { id = ID }) -> ID;
 id_(#field { id = ID }) -> ID;
 id_(#frag_spread { id = ID }) -> ID;
-id_(#frag { id = ID }) -> ID.
-
+id_(#frag { id = ID }) -> ID;
+id_(#vardef { id = ID }) -> ID.
+     
