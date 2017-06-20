@@ -79,7 +79,7 @@ op(Path, #op { vardefs = VDefs, directives = [] } = Op) ->
     RootSchema = root(Path, Op),
     case graphql_schema:lookup(RootSchema) of
         not_found ->
-            graphql_err:abort([Op | Path], {type_not_found, RootSchema});
+            graphql_err:abort([Op | Path], {type_not_found, graphql_ast:name(RootSchema)});
         #object_type{ fields = Fields } = Obj ->
             fields([Op | Path], Op#op{ schema = Obj, vardefs = var_defs([Op | Path], VDefs) }, Fields)
     end;
@@ -112,7 +112,7 @@ vdef_type(N) when is_binary(N) ->
 
 var_defs(Path, VDefs) ->
     [case vdef(V) of
-        not_found -> graphql_err:abort(Path, {type_not_found, V});
+        not_found -> graphql_err:abort(Path, {type_not_found, graphql_ast:id(V)});
         {invalid_input_type, T} -> graphql_err:abort(Path, {not_input_type, T});
         Ty -> V#vardef { ty = Ty }
       end || V <- VDefs].
