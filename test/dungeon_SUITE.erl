@@ -71,7 +71,8 @@ groups() ->
                quoted_input_error,
                input_coerce_error_exception,
                input_coerce_error,
-               invalid_enums
+               invalid_enums,
+               invalid_type_resolution
                ]},
     [Dungeon, Errors].
 
@@ -584,6 +585,16 @@ missing_fragment(Config) ->
 quoted_input_error(Config) ->
     {error, {_Line, graphql_parser, _}} =
         run(Config, "quoted_input.graphql", <<"IMonster">>, #{}).
+
+invalid_type_resolution(Config) ->
+    Input = #{
+      <<"id">> => base64:encode(<<"kraken:1">>)
+     },
+    #{ data := null,
+       errors :=
+           [#{ path := [<<"thing">>,<<"LookupThing">>],
+               reason := kraken}]} = run(Config, <<"LookupThing">>, Input),
+    ok.
 
 invalid_enums(Config) ->
     Input = #{

@@ -153,6 +153,14 @@ query TestFieldMerge($id: Id!) {
   }
 }
 
+query LookupThing($id: Id!) {
+  thing(id: $id) {
+    ... on Monster {
+      id
+    }
+  }
+}
+
 query TestNestedFieldMerge($id: Id!) {
   monster(id: $id) {
     id

@@ -120,6 +120,8 @@ unwrap(X) ->
                <<"item">> -> {item, I};
                <<"monster">> -> {monster, I};
                <<"room">> -> {room, I};
+               %% Invalid type
+               <<"kraken">> -> {kraken, I};
                _ -> undefined
            end
     catch

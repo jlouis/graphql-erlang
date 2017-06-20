@@ -257,12 +257,9 @@ complete_value(_Path, _Ctx, #enum_type { values = Values }, _Fields, {ok, Value}
     #enum_value { val = Result } = maps:get(Value, Values),
     {ok, Result, []};
 complete_value(Path, Ctx, #interface_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
-    {ok, ResolvedType} = resolve_abstract_type(Resolver, Value),
-    complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
+    complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value});
 complete_value(Path, Ctx, #union_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
-    {ok, ResolvedType} = resolve_abstract_type(Resolver, Value),
-    complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
-
+    complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value});
 complete_value(Path, Ctx, #object_type{} = Ty, Fields, {ok, Value}) ->
     SubSelectionSet = merge_selection_sets(Fields),
     {Result, Errs} = execute_sset(Path, Ctx, SubSelectionSet, Ty, Value),
@@ -270,6 +267,15 @@ complete_value(Path, Ctx, #object_type{} = Ty, Fields, {ok, Value}) ->
 complete_value(Path, _Ctx, _Ty, _Fields, {error, Reason}) ->
     {ok, null, [#{ path => lists:reverse(Path), reason => Reason }]}.
 
+%% Complete an abstract value
+complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value}) ->
+    case resolve_abstract_type(Resolver, Value) of
+        {ok, ResolvedType} ->
+            complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
+        {error, Reason} ->
+            err(Path, Reason)
+    end.
+    
 resolve_abstract_type(Module, Value) when is_atom(Module) ->
     resolve_abstract_type(fun Module:execute/1, Value);
 resolve_abstract_type(Resolver, Value) when is_function(Resolver, 1) ->
