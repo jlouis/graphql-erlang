@@ -268,7 +268,8 @@ complete_value(Path, Ctx, #object_type{} = Ty, Fields, {ok, Value}) ->
     {Result, Errs} = execute_sset(Path, Ctx, SubSelectionSet, Ty, Value),
     {ok, Result, Errs};
 complete_value(Path, _Ctx, _Ty, _Fields, {error, Reason}) ->
-    {ok, null, [#{ path => lists:reverse(Path), reason => Reason }]}.
+    {error, ErrList} = err(Path, Reason),
+    {ok, null, ErrList}.
 
 resolve_abstract_type(Module, Value) when is_atom(Module) ->
     resolve_abstract_type(fun Module:execute/1, Value);
@@ -529,7 +530,8 @@ err(Path, Reason) ->
     err(Path, Reason, []).
 
 err(Path, Reason, More) when is_list(More) ->
-    {error, [#{ path => Path, reason => Reason} | More]}.
+    {error, [#{ path => lists:reverse(Path),
+                reason => Reason} | More]}.
 
 
 %% -- CONTEXT CANONICALIZATION ------------

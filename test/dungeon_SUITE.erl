@@ -404,11 +404,15 @@ complex_modifiers(Config) ->
     %% If the list may not be null, make sure the error propagates to the wrapper object.
     #{ data :=
         #{ <<"monster">> := null },
-        errors := [#{path := [<<"statsVariantThree">>, <<"monster">>, <<"MonsterStatsThree">>],
+        errors := [#{path :=
+                         [<<"MonsterStatsThree">>, <<"monster">>, <<"statsVariantThree">>],
                      reason := null_value},
-                   #{path := [0,<<"statsVariantThree">>,<<"monster">>,<<"MonsterStatsThree">>],
+                   #{path :=
+                         [<<"MonsterStatsThree">>, <<"monster">>, <<"statsVariantThree">>, 0],
                      reason := null_value},
-                   #{path := [<<"attack">>, 0,<<"statsVariantThree">>,<<"monster">>,<<"MonsterStatsThree">>],
+                   #{path :=
+                         [<<"MonsterStatsThree">>, <<"monster">>,
+                          <<"statsVariantThree">>, 0, <<"attack">>],
                      reason := null_value}]
      } = run(Config, <<"MonsterStatsThree">>, #{ <<"id">> => MonsterID }),
 
@@ -503,7 +507,7 @@ multiple_monsters_and_rooms(Config) ->
         <<"rooms">> := null
          },
         errors := [
-                   #{path := [1, <<"rooms">>,<<"MultipleRooms">>], reason := null_value},
+                   #{path := [<<"MultipleRooms">>, <<"rooms">>, 1], reason := null_value},
                    #{path := [<<"MultipleRooms">>, <<"rooms">>, 1], reason := not_found}]
       } = run(Config, <<"MultipleRooms">>, #{ <<"ids">> => [Room1, base64:encode(<<"room:2">>)]}),
 
