@@ -62,7 +62,8 @@ groups() ->
                  nested_field_merge,
                  multiple_monsters_and_rooms,
                  include_directive,
-                 introspection
+                 introspection,
+                 get_operation
                  ]},
 
     Errors = {errors, [],
@@ -113,6 +114,18 @@ introspection(Config) ->
         #{ } ->
             ok %% No Errors present, so this is OK
     end.
+
+get_operation(Config) ->
+    GoblinId = base64:encode(<<"monster:1">>),
+    Expected = #{ data => #{<<"monster">> => #{ <<"name">> => <<"goblin">> }}},
+    Q1 = "{ monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { name }}",
+    Expected = th:x(Config, Q1),
+    Q2 = "query Q { monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { name }}",
+    Expected = th:x(Config, Q2),
+    Q3 = "query Q($id : ID!) { monster(id: $id) { name }}",
+    Expected = th:x(Config, Q3, <<"Q">>, #{ <<"id">> => GoblinId }),
+    Expected = th:x(Config, Q3, #{ <<"id">> => GoblinId }),
+    ok.
 
 include_directive(Config) ->
     GoblinID = base64:encode(<<"monster:1">>),
