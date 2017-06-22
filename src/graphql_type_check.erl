@@ -58,7 +58,7 @@ get_operation(FunEnv, undefined, Params) ->
         [] when Params == #{} ->
             undefined;
         [] when Params /= #{} ->
-            grpahql_err:abort([], params_on_unnamed);
+            graphql_err:abort([], params_on_unnamed);
         [{_, TyVarEnv}] ->
             TyVarEnv;
         _ ->

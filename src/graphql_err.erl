@@ -31,6 +31,9 @@ err_msg(selection_on_scalar) ->
     ["Cannot apply a selection set to a scalar field"];
 err_msg({unknown_enum, E}) ->
     ["The enum name ", E, " is not known to the schema"];
+err_msg({not_unique, Op}) ->
+    ["The operation name ",
+     Op, " occurs more than once in query document"];
 err_msg(fieldless_object) ->
     ["The path refers to an Object, but no fields were specified"];
 err_msg({type_mismatch, #{ id := ID, document := Doc, schema := Sch }}) ->

@@ -73,7 +73,8 @@ groups() ->
                input_coerce_error_exception,
                input_coerce_error,
                invalid_enums,
-               invalid_type_resolution
+               invalid_type_resolution,
+               duplicate_validation
                ]},
     [Dungeon, Errors].
 
@@ -115,6 +116,12 @@ introspection(Config) ->
         #{ } ->
             ok %% No Errors present, so this is OK
     end.
+
+duplicate_validation(Config) ->
+    GoblinId = base64:encode(<<"monster:1">>),
+    Q1 = "query Q { monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { name }} ",    
+    {error, _} = th:x(Config, Q1 ++ Q1),
+    ok.
 
 get_operation(Config) ->
     GoblinId = base64:encode(<<"monster:1">>),

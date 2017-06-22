@@ -6,9 +6,13 @@
 
 -spec x(graphql:ast()) -> ok.
 x(AST) -> 
-    ok = unique_operations(AST),
-    ok = no_fragment_cycles(AST),
-    ok.
+    try
+        ok = unique_operations(AST),
+        ok = no_fragment_cycles(AST),
+        ok
+    catch
+        throw:Err -> Err
+    end.
 
 unique_operations({document, Ops}) ->
     OpIDs = [graphql_ast:name(ID) || #op{ id = ID } <- Ops],
@@ -24,7 +28,7 @@ no_fragment_cycles({document, Ops}) ->
     try digraph_utils:cyclic_strong_components(G) of
         [] -> ok;
         Cycles ->
-            err({cycles_in_fragments, Cycles})
+            graphql_err:abort({cycles_in_fragments, Cycles})
     after
         digraph:delete(G)
     end,
@@ -45,8 +49,6 @@ uniq([]) -> ok;
 uniq(L) -> uniq_(L).
 
 uniq_([_]) -> ok;
-uniq_([X,X | _Xs]) -> err({not_unique, X});
+uniq_([X,X | _Xs]) -> graphql_err:abort([], {not_unique, X});
 uniq_([_, X | Xs]) -> uniq([X | Xs]).
 
-%% Errors
-err(Reason) -> exit({validate, Reason}).

@@ -53,7 +53,7 @@ load_schema(Mapping, Input) when is_list(Input) ->
             {error, Err}
     end.
 
--spec validate(ast()) -> ok.
+-spec validate(ast()) -> ok | {error, term()}.
 validate(AST) ->
     graphql_validate:x(AST).
     

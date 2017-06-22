@@ -31,17 +31,21 @@ x(Config, Input, OpName, Params) ->
                CoercedParams = graphql:type_check_params(FunEnv, OpName, Params),
                Track4 = track(type_check_params, Track3),
                Ctx = #{ params => CoercedParams },
-               ok = graphql:validate(AST2),
-               Track5 = track(validate, Track4),
-               Res = case OpName of
-                   undefined -> graphql:execute(Ctx, AST2);
-                   Op -> graphql:execute(Ctx#{ operation_name => Op }, AST2)
-               end,
-               
-               Track6 = track(execute, Track5),
-               ct:log("Result: ~p", [Res]),
-               track_report(Config, Track6),
-               Res
+               case graphql:validate(AST2) of
+                   ok ->
+                       Track5 = track(validate, Track4),
+                       Res = case OpName of
+                                 undefined -> graphql:execute(Ctx, AST2);
+                                 Op -> graphql:execute(Ctx#{ operation_name => Op }, AST2)
+                             end,
+                       
+                       Track6 = track(execute, Track5),
+                       ct:log("Result: ~p", [Res]),
+                       track_report(Config, Track6),
+                       Res;
+                   {error, Reason} ->
+                       {error, Reason}
+               end
             catch
                 throw:{error, Error} -> #{ errors => Error }
             end;
