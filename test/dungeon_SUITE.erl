@@ -120,7 +120,7 @@ introspection(Config) ->
 duplicate_validation(Config) ->
     GoblinId = base64:encode(<<"monster:1">>),
     Q1 = "query Q { monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { name }} ",    
-    {error, _} = th:x(Config, Q1 ++ Q1),
+    #{ errors := _} = th:x(Config, Q1 ++ Q1),
     ok.
 
 get_operation(Config) ->

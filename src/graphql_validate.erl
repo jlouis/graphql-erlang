@@ -6,13 +6,9 @@
 
 -spec x(graphql:ast()) -> ok.
 x(AST) -> 
-    try
-        ok = unique_operations(AST),
-        ok = no_fragment_cycles(AST),
-        ok
-    catch
-        throw:Err -> Err
-    end.
+    ok = unique_operations(AST),
+    ok = no_fragment_cycles(AST),
+    ok.
 
 unique_operations({document, Ops}) ->
     OpIDs = [graphql_ast:name(ID) || #op{ id = ID } <- Ops],
