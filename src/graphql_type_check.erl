@@ -53,17 +53,32 @@ tc_clause(Ctx, Path, #op{} = Op) -> tc_op(Ctx, Path, Op).
 %% input parameters can not be coerced into the parameters expected by
 %% the function scheme, and error occurs.
 
+get_operation(FunEnv, undefined, Params) ->
+    case maps:to_list(FunEnv) of
+        [] when Params == #{} ->
+            undefined;
+        [] when Params /= #{} ->
+            grpahql_err:abort([], params_on_unnamed);
+        [{_, TyVarEnv}] ->
+            TyVarEnv;
+        _ ->
+            %% The error here should happen in the execute phase
+            undefined
+    end;
+get_operation(FunEnv, OpName, _Params) ->
+    maps:get(OpName, FunEnv, not_found).
+
 -spec x_params(any(), any(), any()) -> graphql:param_context().
-x_params(_FunEnv, undefined, #{}) -> #{};
-x_params(_FunEnv, undefined, _) -> graphql_err:abort([], params_on_unnamed);
 x_params(FunEnv, OpName, Params) ->
-    case maps:get(OpName, FunEnv, not_found) of
+    case get_operation(FunEnv, OpName, Params) of
+        undefined ->
+            #{};
         not_found ->
-           graphql_err:abort([], {operation_not_found, OpName});
+            graphql_err:abort([], {operation_not_found, OpName});
         TyVarEnv ->
             tc_params([OpName], TyVarEnv, Params)
     end.
-
+            
 tc_params(Path, TyVarEnv, InitialParams) ->
     F =
       fun(K, V0, PS) ->

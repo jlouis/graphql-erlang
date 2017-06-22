@@ -185,13 +185,16 @@ resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectTy
         default ->
             resolve_field_value(Ctx, ObjectType, Value, Name, FAns, fun ?MODULE:default_resolver/3, Args);
         Wrong ->
-            {error, {wrong_resolver_return, Fun, Name, Wrong}}
+            error_logger:error_msg(
+              "Resolver returned wrong value: ~p(..) -> ~p",
+              [Fun, Wrong]),
+            {error, {wrong_resolver_return, graphql_schema:id(ObjectType), Name}}
     catch
         Cl:Err ->
             error_logger:error_msg(
               "Resolver function error: ~p stacktrace: ~p~n",
               [{Cl,Err}, erlang:get_stacktrace()]),
-            {error, {resolver_crash, Fun, ObjectType, Name}}
+            {error, {resolver_crash, graphql_schema:id(ObjectType), Name}}
     end.
 
 complete_value(Path, Ctx, Ty, Fields, {ok, {enum, Value}}) ->
@@ -265,7 +268,8 @@ complete_value(Path, Ctx, #object_type{} = Ty, Fields, {ok, Value}) ->
     {Result, Errs} = execute_sset(Path, Ctx, SubSelectionSet, Ty, Value),
     {ok, Result, Errs};
 complete_value(Path, _Ctx, _Ty, _Fields, {error, Reason}) ->
-    {ok, null, [#{ path => lists:reverse(Path), reason => Reason }]}.
+    {error, ErrList} = err(Path, Reason),
+    {ok, null, ErrList}.
 
 %% Complete an abstract value
 complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value}) ->
@@ -535,7 +539,8 @@ err(Path, Reason) ->
     err(Path, Reason, []).
 
 err(Path, Reason, More) when is_list(More) ->
-    {error, [#{ path => Path, reason => Reason} | More]}.
+    {error, [#{ path => lists:reverse(Path),
+                reason => Reason} | More]}.
 
 
 %% -- CONTEXT CANONICALIZATION ------------

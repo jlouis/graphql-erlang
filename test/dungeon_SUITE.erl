@@ -62,7 +62,8 @@ groups() ->
                  nested_field_merge,
                  multiple_monsters_and_rooms,
                  include_directive,
-                 introspection
+                 introspection,
+                 get_operation
                  ]},
 
     Errors = {errors, [],
@@ -114,6 +115,18 @@ introspection(Config) ->
         #{ } ->
             ok %% No Errors present, so this is OK
     end.
+
+get_operation(Config) ->
+    GoblinId = base64:encode(<<"monster:1">>),
+    Expected = #{ data => #{<<"monster">> => #{ <<"name">> => <<"goblin">> }}},
+    Q1 = "{ monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { name }}",
+    Expected = th:x(Config, Q1),
+    Q2 = "query Q { monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { name }}",
+    Expected = th:x(Config, Q2),
+    Q3 = "query Q($id : ID!) { monster(id: $id) { name }}",
+    Expected = th:x(Config, Q3, <<"Q">>, #{ <<"id">> => GoblinId }),
+    Expected = th:x(Config, Q3, #{ <<"id">> => GoblinId }),
+    ok.
 
 include_directive(Config) ->
     GoblinID = base64:encode(<<"monster:1">>),
@@ -405,11 +418,15 @@ complex_modifiers(Config) ->
     %% If the list may not be null, make sure the error propagates to the wrapper object.
     #{ data :=
         #{ <<"monster">> := null },
-        errors := [#{path := [<<"statsVariantThree">>, <<"monster">>, <<"MonsterStatsThree">>],
+        errors := [#{path :=
+                         [<<"MonsterStatsThree">>, <<"monster">>, <<"statsVariantThree">>],
                      reason := null_value},
-                   #{path := [0,<<"statsVariantThree">>,<<"monster">>,<<"MonsterStatsThree">>],
+                   #{path :=
+                         [<<"MonsterStatsThree">>, <<"monster">>, <<"statsVariantThree">>, 0],
                      reason := null_value},
-                   #{path := [<<"attack">>, 0,<<"statsVariantThree">>,<<"monster">>,<<"MonsterStatsThree">>],
+                   #{path :=
+                         [<<"MonsterStatsThree">>, <<"monster">>,
+                          <<"statsVariantThree">>, 0, <<"attack">>],
                      reason := null_value}]
      } = run(Config, <<"MonsterStatsThree">>, #{ <<"id">> => MonsterID }),
 
@@ -504,7 +521,7 @@ multiple_monsters_and_rooms(Config) ->
         <<"rooms">> := null
          },
         errors := [
-                   #{path := [1, <<"rooms">>,<<"MultipleRooms">>], reason := null_value},
+                   #{path := [<<"MultipleRooms">>, <<"rooms">>, 1], reason := null_value},
                    #{path := [<<"MultipleRooms">>, <<"rooms">>, 1], reason := not_found}]
       } = run(Config, <<"MultipleRooms">>, #{ <<"ids">> => [Room1, base64:encode(<<"room:2">>)]}),
 
@@ -592,7 +609,7 @@ invalid_type_resolution(Config) ->
      },
     #{ data := null,
        errors :=
-           [#{ path := [<<"thing">>,<<"LookupThing">>],
+           [#{ path := [<<"LookupThing">>, <<"thing">>],
                reason := kraken}]} = run(Config, <<"LookupThing">>, Input),
     ok.
 
