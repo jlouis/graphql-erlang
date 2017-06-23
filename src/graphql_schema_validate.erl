@@ -11,7 +11,13 @@ x() ->
         [x(Obj) || Obj <- Objects],
         ok
     catch
-        throw:Error -> exit(Error)
+        throw:Error ->
+            %% These errors are usually a bug in the programmers code,
+            %% hence they are written to the error_logger as well so
+            %% you get nice error messages for them apart from the
+            %% Erlang term.
+            error_logger:error_msg(format_error(Error)),
+            exit(Error)
     end.
 
 x(Obj) ->
@@ -182,3 +188,13 @@ lookup(Key) ->
     end.
     
 err(Reason) -> throw({invalid, Reason}).
+
+format_error(X) -> iolist_to_binary(err_fmt(X)).
+
+err_fmt({schema_validation, Type, {not_found, NF}}) ->
+    io_lib:format(
+      "Schema Error in type ~p: it refers to a type ~p, "
+      "which is not present in the schema", [Type, NF]);
+err_fmt(X) ->
+    io_lib:format(
+      "Unhandled schema validator error message: ~p", [X]).
