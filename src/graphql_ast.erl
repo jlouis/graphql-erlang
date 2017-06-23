@@ -5,7 +5,7 @@
 
 -export([resolve_type/1, unwrap_to_base_type/1]).
 -export([unwrap_type/1]).
--export([name/1, id/1]).
+-export([name/1, id/1, typename/1]).
 
 -spec resolve_type(graphql_type()) -> tycond().
 resolve_type({scalar, Sc}) -> {scalar, Sc};
@@ -56,3 +56,10 @@ id_(#frag_spread { id = ID }) -> ID;
 id_(#frag { id = ID }) -> ID;
 id_(#vardef { id = ID }) -> ID.
      
+typename(#enum_type { id = ID }) -> ID;
+typename(#interface_type { id = ID }) -> ID;
+typename(#union_type { id = ID }) -> ID;
+typename(#scalar_type { id = ID }) -> ID;
+typename(#input_object_type { id = ID }) -> ID;
+typename(#object_type { id = ID }) -> ID.
+
