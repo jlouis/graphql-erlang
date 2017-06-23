@@ -14,7 +14,9 @@ init_per_suite(Config) ->
     ok = dungeon:inject(Config),
     ok = dungeon:start(),
     ok = graphql:validate_schema(),
-    [{document, Doc} | Config].
+    GoblinId = base64:encode(<<"monster:1">>),
+    [{document, Doc},
+     {goblin_id, GoblinId} | Config].
 
 end_per_suite(_Config) ->
     dungeon:stop(),
@@ -74,7 +76,8 @@ groups() ->
                input_coerce_error,
                invalid_enums,
                invalid_type_resolution,
-               duplicate_validation
+               duplicate_validation,
+               invalid_list_resolver
                ]},
     [Dungeon, Errors].
 
@@ -115,6 +118,17 @@ introspection(Config) ->
             ct:fail(introspection_errors);
         #{ } ->
             ok %% No Errors present, so this is OK
+    end.
+
+invalid_list_resolver(Config) ->
+    GoblinId = ?config(goblin_id, Config),
+    Q1 = "query Q { monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { errorListResolution }} ",
+    try th:x(Config, Q1) of
+        _X ->
+            ct:fail(expected_exit)
+    catch
+        exit:list_resolution_error ->
+            ok
     end.
 
 duplicate_validation(Config) ->
