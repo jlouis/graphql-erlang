@@ -306,8 +306,31 @@ complete_value_scalar( Path,  ID, Value) ->
     err(Path, {output_coerce, ID, Value, not_scalar_type}).
 
 
+assert_list_completion_structure(Ty, Fields, Results) ->
+    ValidResult =
+        fun
+            ({_I, {ok, _}}) -> true;
+            ({_I, {error, _}}) -> true;
+            ({_I, _}) -> false
+        end,
+    {_Ok, Fail} = lists:partition(ValidResult, Results),
+    case Fail of
+        [] ->
+            ok;
+        [{_, R}|_] = Errs ->
+            Name = graphql_ast:typename(Ty),
+            Field = graphql_ast:id(hd(Fields)),
+            error_logger:error_msg(
+              "Error in resolver function: (Object.Field) ~ts.~ts: "
+              "the result ~p doesn't follow the valid list form of "
+              "{ok, _} | {error, _} (~B errors in total)~n",
+              [Name, Field, R, length(Errs)]),
+            exit(list_resolution_error)
+    end.
+
 complete_value_list(Path, Ctx, Ty, Fields, Results) ->
     IndexedResults = index(Results),
+    assert_list_completion_structure(Ty, Fields, IndexedResults),
     Completed = [{I, complete_value([I | Path], Ctx, Ty, Fields, R)} || {I, R} <- IndexedResults],
     case complete_list_value_result(Completed) of
         {error, Reasons} ->

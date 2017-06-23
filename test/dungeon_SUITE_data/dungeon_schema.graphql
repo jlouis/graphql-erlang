@@ -45,6 +45,8 @@ type Monster implements Node {
   statsVariantTwo : [Stats!]
   statsVariantThree : [Stats!]!
   properties : [Property]
+
+  errorListResolution : [Property]
 }
 
 type Room implements Node {

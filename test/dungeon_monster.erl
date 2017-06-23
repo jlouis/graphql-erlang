@@ -26,7 +26,10 @@ execute(_Ctx, #monster { id = ID,
         <<"statsVariantTwo">> -> stats(Stats);
         <<"statsVariantThree">> -> stats(Stats);
         <<"properties">> ->
-            {ok, [{ok, P} || P <- Properties]}
+            {ok, [{ok, P} || P <- Properties]};
+        <<"errorListResolution">> ->
+            %% This produces a wrong return on purpose
+            {ok, [<<"MECH">>, <<"DRAGON">>]}
     end.
 
 color(Color, #{ <<"colorType">> := <<"rgb">> }) ->
