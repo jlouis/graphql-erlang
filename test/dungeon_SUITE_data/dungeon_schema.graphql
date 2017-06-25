@@ -40,6 +40,7 @@ type Monster implements Node {
   hp : Int!
   mood : Mood
   plushFactor : Float!
+  spikyness : Float
   stats(minAttack: Int = 0) : [Stats]
   statsVariantOne : [Stats]!
   statsVariantTwo : [Stats!]

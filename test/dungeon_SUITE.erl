@@ -65,7 +65,8 @@ groups() ->
                  multiple_monsters_and_rooms,
                  include_directive,
                  introspection,
-                 get_operation
+                 get_operation,
+                 coercion_int_float
                  ]},
 
     Errors = {errors, [],
@@ -135,6 +136,13 @@ duplicate_validation(Config) ->
     GoblinId = base64:encode(<<"monster:1">>),
     Q1 = "query Q { monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { name }} ",    
     #{ errors := _} = th:x(Config, Q1 ++ Q1),
+    ok.
+
+coercion_int_float(Config) ->
+    GoblinId = ?config(goblin_id, Config),
+    Expected = #{ data => #{<<"monster">> => #{ <<"spikyness">> => 5.0 }}},
+    Q1 = "{ monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { spikyness }}",
+    Expected = th:x(Config, Q1),
     ok.
 
 get_operation(Config) ->
