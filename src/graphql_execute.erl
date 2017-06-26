@@ -443,10 +443,12 @@ output_coerce_type(int) ->
         (_) -> {ok, null}
       end };
 output_coerce_type(float) ->
-    #scalar_type { id = float, output_coerce = fun
-        (F) when is_float(F) -> {ok, F};
-        (_) -> {ok, null}
-      end };
+    Coercer = fun
+                  (F) when is_float(F) -> {ok, F};
+                  (I) when is_integer(I) -> {ok, float(I)};
+                  (_) -> {ok, null}
+              end,
+    #scalar_type { id = float, output_coerce = Coercer };
 output_coerce_type(#scalar_type{} = SType) -> SType;
 output_coerce_type(UserDefined) when is_binary(UserDefined) ->
     case graphql_schema:lookup(UserDefined) of
@@ -530,6 +532,7 @@ value_scalar(bool, false) -> false;
 value_scalar(int, I) when is_integer(I) -> I;
 value_scalar(int, null) -> null;
 value_scalar(float, F) when is_float(F) -> F;
+value_scalar(float, I) when is_integer(I) -> float(I);
 value_scalar(float, null) -> null;
 value_scalar(Ty, V) ->
     error_logger:error_msg(
