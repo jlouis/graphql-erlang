@@ -629,7 +629,7 @@ missing_fragment(Config) ->
     ok.
 
 quoted_input_error(Config) ->
-    {error, {_Line, graphql_parser, _}} =
+    {error, {parser_error, {_Line, graphql_parser, _}}} =
         run(Config, "quoted_input.graphql", <<"IMonster">>, #{}).
 
 invalid_type_resolution(Config) ->
