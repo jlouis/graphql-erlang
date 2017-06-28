@@ -7,7 +7,7 @@
 -include("graphql_schema.hrl").
 
 -export([x/1, x_params/3]).
-
+-export([err_msg/1]).
 
 %% -- TOP LEVEL TYPE CHECK CODE -------------------------------
 
@@ -58,7 +58,7 @@ get_operation(FunEnv, undefined, Params) ->
         [] when Params == #{} ->
             undefined;
         [] when Params /= #{} ->
-            graphql_err:abort([], params_on_unnamed);
+            err([], unnamed_operation_params);
         [{_, TyVarEnv}] ->
             TyVarEnv;
         _ ->
@@ -74,7 +74,7 @@ x_params(FunEnv, OpName, Params) ->
         undefined ->
             #{};
         not_found ->
-            graphql_err:abort([], {operation_not_found, OpName});
+            err([], {operation_not_found, OpName});
         TyVarEnv ->
             tc_params([OpName], TyVarEnv, Params)
     end.
@@ -90,7 +90,7 @@ tc_params(Path, TyVarEnv, InitialParams) ->
     maps:fold(F, InitialParams, (TyVarEnv)).
 
 tc_param(Path, K, #vardef { ty = {non_null, _}, default = null }, not_found) ->
-    graphql_err:abort([K | Path], missing_non_null_param);
+    err([K | Path], missing_non_null_param);
 tc_param(_Path, _K, #vardef { default = Default }, not_found) ->
     {replace, Default};
 tc_param(Path, K, #vardef { ty = Ty }, Val) ->
@@ -110,9 +110,9 @@ check_param(Path, #enum_type { id = Ty }, V) when is_binary(V) ->
         #enum_type { id = Ty, repr = Repr } ->
             {replace, enum_representation(Repr, V)};
         not_found ->
-            graphql_err:abort(Path, {enum_not_found, Ty, V});
+            err(Path, {enum_not_found, Ty, V});
         OtherTy ->
-            graphql_err:abort(Path, {param_mismatch, {enum, Ty, OtherTy}})
+            err(Path, {param_mismatch, {enum, Ty, OtherTy}})
     end;
 check_param(Path, {list, T}, L) when is_list(L) ->
     %% Build a dummy structure to match the recursor. Unwrap this
@@ -132,29 +132,27 @@ check_param(Path, Ty, V) when is_binary(Ty) ->
         #input_object_type {} = IOType -> check_input_object(Path, IOType, V);
         #enum_type {} = Enum -> check_param(Path, Enum, V);
         _ ->
-            graphql_err:abort(Path, {param_mismatch, Ty, V})
+            err(Path, {not_input_type, Ty, V})
     end;
 %% Everything else are errors
 check_param(Path, Ty, V) ->
-    graphql_err:abort(Path, {param_mismatch, Ty, V}).
+    err(Path, {param_mismatch, Ty, V}).
 
 check_input_object(Path, #input_object_type{ fields = Fields }, Obj) ->
     Coerced = coerce_object(Obj),
     {replace, check_object_fields(Path, maps:to_list(Fields), Coerced, #{})}.
 
-
-
 check_object_fields(Path, [], Obj, Result) ->
     case maps:size(Obj) of
         0 -> Result;
-        K when K > 0 -> graphql_err:abort(Path, {excess_fields_in_object, Obj})
+        K when K > 0 -> err(Path, {excess_fields_in_object, Obj})
     end;
 check_object_fields(Path, [{Name, #schema_arg { ty = Ty, default = Def }} | Next], Obj, Result) ->
     Val = case maps:get(Name, Obj, not_found) of
         not_found ->
             case {Def, Ty} of
                 {null, {non_null, _}} ->
-                    graphql_err:abort([Name | Path], missing_non_null_param);
+                    err([Name | Path], missing_non_null_param);
                 {Def, _} ->
                     Def
             end;
@@ -176,23 +174,35 @@ input_coerce_scalar(_Path, bool, false) -> ok;
 input_coerce_scalar(Path, #scalar_type {} = SType, Val) ->
     input_coercer(Path, SType, Val);
 input_coerce_scalar(Path, Ty, _V) ->
-    graphql_err:abort(Path, {type_mismatch, #{ schema => {scalar, Ty}}}).
+    err(Path, {type_mismatch, #{ schema => {scalar, Ty}}}).
 
 input_coercer(Path, #scalar_type { id = ID, input_coerce = IC, resolve_module = undefined }, Val) ->
     try IC(Val) of
         {ok, NewVal} -> {replace, NewVal};
-        {error, Reason} -> graphql_err:abort(Path, {input_coercion, ID, Val, Reason})
+        {error, Reason} -> err(Path, {input_coercion, ID, Val, Reason})
     catch
         Cl:Err ->
-            graphql_err:abort(Path, {input_coerce_abort, {Cl, Err}})
+            error_logger:error_report(
+              [
+               {input_coercer, graphql_ast:name(ID), Val},
+               {error, Cl, Err},
+               {stack, erlang:get_stacktrace()}
+              ]),
+            err(Path, {input_coerce_abort, {Cl, Err}})
     end;
 input_coercer(Path, #scalar_type { id = ID, resolve_module = RM}, Val) ->
     try RM:input(ID, Val) of
         {ok, NewVal} -> {replace, NewVal};
-        {error, Reason} -> graphql_err:abort(Path, {input_coercion, ID, Val, Reason})
+        {error, Reason} -> err(Path, {input_coercion, ID, Val, Reason})
     catch
         Cl:Err ->
-            graphql_err:abort(Path, {input_coerce_abort, {Cl, Err}})
+            error_logger:error_report(
+              [
+               {input_coercer, ID, Val},
+               {error, Cl, Err},
+               {stack, erlang:get_stacktrace()}
+              ]),
+            err(Path, {input_coerce_abort, {Cl, Err}})
     end.
             
 
@@ -222,7 +232,7 @@ tc_field(#{ fragenv := FE } = Ctx, Path, #frag_spread { id = ID, directives = Ds
     Name = graphql_ast:name(ID),
     case maps:get(Name, FE, not_found) of
         not_found ->
-            graphql_err:abort(Path, {unknown_fragment, Name});
+            err([Name | Path], unknown_fragment);
         _FragTy ->
             %% You can always include a fragspread, as long as it exists
             %% It may be slightly illegal in a given context but this just
@@ -259,18 +269,19 @@ tc_args(Ctx, Path, Args, Schema) ->
         ok ->
           SchemaArgs = maps:to_list(Schema),
           tc_args_(Ctx, Path, NArgs, SchemaArgs, []);
-        {error, Reason} -> graphql_err:abort(Path, Reason)
+        {not_unique, X} ->
+            err(Path, {not_unique, X})
     end.
 
 names(Args) -> [{graphql_ast:name(K), V} || {K, V} <- Args].
 
 tc_args_(_Ctx, _Path, [], [], Acc) -> Acc;
 tc_args_(_Ctx, Path, [_|_] = Args, [], _Acc) ->
-    graphql_err:abort(Path, {excess_args, Args});
+    err(Path, {excess_args, Args});
 tc_args_(Ctx, Path, Args, [{Name, #schema_arg { ty = STy }} = SArg | Next], Acc) ->
     case find_arg(Args, SArg) of
         {error, Reason} ->
-            graphql_err:abort([Name | Path], Reason);
+            err([Name | Path], Reason);
         {ok, {_, #{ type := Ty, value := Val}} = A, NextArgs} ->
             ValueType = value_type(Ctx, Path, Ty, Val),
             SchemaType = schema_type(STy),
@@ -280,10 +291,11 @@ tc_args_(Ctx, Path, Args, [{Name, #schema_arg { ty = STy }} = SArg | Next], Acc)
                 {replace, RVal} ->
                     tc_args_(Ctx, Path, NextArgs, Next, [{Name, {Ty, RVal}} | Acc]);
                 {error, Expected} ->
-                    graphql_err:abort(Path, {type_mismatch, #{ id => Name, schema => Expected }});
+                    err(Path, {type_mismatch,
+                               #{ id => Name, schema => Expected }});
                 {error, Got, Expected} ->
-                     graphql_err:abort(Path, {type_mismatch,
-                          #{ id => Name, document => Got, schema => Expected }})
+                    err(Path, {type_mismatch,
+                               #{ id => Name, document => Got, schema => Expected }})
             end
     end.
 
@@ -306,7 +318,7 @@ find_arg(Args, {Key, #schema_arg { ty = Ty, default = Default }}) ->
 
 uniq([]) -> ok;
 uniq([_]) -> ok;
-uniq([{X, _}, {X, _} | _]) -> {error, {unique, X}};
+uniq([{X, _}, {X, _} | _]) -> {not_unique, X};
 uniq([_ | Next]) -> uniq(Next).
 
 -spec schema_type(binary() | schema_type()) -> schema_type().
@@ -337,8 +349,7 @@ value_type(Ctx, Path, {list, Ty}, Vs) when is_list(Vs) ->
 value_type(#{ varenv := VE }, Path, _, {var, ID}) ->
     Name = graphql_ast:name(ID),
     case maps:get(Name, VE, not_found) of
-        not_found ->
-            graphql_err:abort(Path, {unbound_variable, Name});
+        not_found -> err(Path, {unbound_variable, Name});
         #vardef { ty = Ty } -> Ty
     end;
 value_type(_Ctx, _Path, _, null) -> null;
@@ -346,14 +357,14 @@ value_type(_Ctx, _Path, #enum_type{} = Ty, {enum, _N}) ->
     Ty;
 value_type(_Ctx, Path, _, {enum, N}) ->
     case graphql_schema:lookup_enum_type(N) of
-        not_found -> graphql_err:abort(Path, {unknown_enum, N});
+        not_found -> err(Path, {unknown_enum, N});
         #enum_type {} = Enum -> Enum
     end;
 value_type(_Ctx, Path, {scalar, Tag}, V) ->
     case valid_scalar_value(V) of
         true -> {scalar, Tag, V};
         false ->
-            graphql_err:abort(Path, {invalid_scalar_type, V})
+            err(Path, {invalid_scalar_value, V})
     end;
 value_type(_Ctx, _Path, _, {name, N, _}) -> N;
 value_type(_Ctx, _Path, _, S) when is_binary(S) ->
@@ -364,7 +375,7 @@ value_type(_Ctx, _Path, _, true) -> {scalar, bool, true};
 value_type(_Ctx, _Path, _, false) -> {scalar, bool, false};
 value_type(_Ctx, _Path, _, Obj) when is_map(Obj) -> coerce_object(Obj);
 value_type(_Ctx, Path, Ty, Val) -> 
-    graphql_err:abort(Path, {invalid_value_type_coercion, Ty, Val}).
+    err(Path, {invalid_value_type_coercion, Ty, Val}).
 
 refl_list(_Path, [], _T, Result) ->
     {replace, lists:reverse(Result)};
@@ -431,3 +442,55 @@ enum_representation(atom, V) -> binary_to_atom(V, utf8);
 enum_representation(tagged, V) -> {enum, V}.
 
 id(#op { id = ID }) -> ID.
+
+%% -- Error handling -------------------------------------
+
+err(Path, Msg) ->
+    graphql_err:abort(Path, type_check, Msg).
+
+err_msg(unnamed_operation_params) ->
+    ["Cannot supply parameter lists to unnamed (anonymous) queries"];
+err_msg({operation_not_found, Op}) ->
+    ["Expected an operation ", Op, " but no such operation was found"];
+err_msg(missing_non_null_param) ->
+    ["The parameter is non-null, but was undefined in parameter list"];
+err_msg({enum_not_found, Ty, Val}) ->
+    X = io_lib:format("The value ~p is not a valid enum value for type ", [Val]),
+    [X, graphql_err:format_ty(Ty)];
+err_msg({param_mismatch, {enum, Ty, OtherTy}}) ->
+    ["The enum value is of type ", graphql_err:format_ty(OtherTy),
+     " but used in a context where an enum value"
+     " of type ", graphql_err:format_ty(Ty), " was expected"];
+err_msg({param_mismatch, Ty, V}) ->
+    io_lib:format("The parameter value ~p is not of type ~p", [V, graphql_err:format_ty(Ty)]);
+err_msg({not_input_type, Ty, _}) ->
+    ["The type ", graphql_err:format_ty(Ty), " is a valid input type"];
+err_msg({excess_fields_in_object, Fields}) ->
+    io_lib:format("The object contains unknown fields and values: ~p", [Fields]);
+err_msg({excess_args, Args}) ->
+    io_lib:format("The argument list contains unknown arguments ~p", [Args]);
+err_msg({type_mismatch, #{ id := ID, document := Doc, schema := Sch }}) ->
+    ["Type mismatch on (", ID, "). The query document has a value/variable of type (",
+      graphql_err:format_ty(Doc), ") but the schema expects type (", graphql_err:format_ty(Sch), ")"];
+err_msg({type_mismatch, #{ schema := Sch }}) ->
+    ["Type mismatch, expected (", graphql_err:format_ty(Sch), ")"];
+err_msg({input_coercion, Type, Value, Reason}) ->
+    io_lib:format("Input coercion failed for type ~s with value ~p. The reason it failed is: ~p", [Type, Value, Reason]);
+err_msg({input_coerce_abort, _}) ->
+    ["Input coercer failed due to an internal server error"];
+err_msg(unknown_fragment) ->
+    ["The referenced fragment name is not present in the query document"];
+err_msg({not_unique, X}) ->
+    ["The name ", X, " occurs more than once"];
+err_msg({unbound_variable, Var}) ->
+    ["The document refers to a variable ", Var,
+     " but no such var exists. Perhaps the variable is a typo?"];
+err_msg({unknown_enum, E}) ->
+    ["The enum name ", E, " is not present in the schema"];
+err_msg({invalid_scalar_value, V}) ->
+    io_lib:format("The value ~p is not a valid scalar value", [V]);
+err_msg({invalid_value_type_coercion, Ty, Val}) ->
+    io_lib:format(
+      "The value ~p cannot be coerced into the type ~p",
+      [Val, Ty]).
+

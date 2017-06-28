@@ -618,10 +618,11 @@ missing_fragment(Config) ->
     ID = base64:encode(<<"monster:1">>),
 
     #{errors :=
-          #{key := {unknown_fragment,<<"GoblinFragment">>},
+          #{key := unknown_fragment,
             path := [<<"document">>,
                      <<"GoblinQuery">>,
-                     <<"monster">>]}} =
+                     <<"monster">>,
+                     <<"GoblinFragment">>]}} =
         run(Config,
             "missing_fragment.graphql",
             <<"GoblinQuery">>,

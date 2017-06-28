@@ -5,6 +5,7 @@
 
 -export([abort/2, abort/3]).
 -export([path/1]).
+-export([format_ty/1]).
 
 abort(Path, Msg) ->
     abort(Path, uncategorized, Msg).
@@ -21,51 +22,24 @@ abort(Path, Phase, Msg) ->
 %% -- Error handling dispatch to the module responsible for the error
 err_msg({elaborate, Reason}) ->
     graphql_elaborate:err_msg(Reason);
+err_msg({type_check, Reason}) ->
+    graphql_type_check:err_msg(Reason);
 err_msg({uncategorized, Reason}) ->
     err_uncategorized(Reason).
 
-err_key(elaborate, Key) ->
-    Key;
-err_key(uncategorized, Key) ->
-    Key.
+err_key(type_check, Key) -> Key;
+err_key(elaborate, Key) -> Key;
+err_key(uncategorized, Key) -> Key.
 
-err_uncategorized({unknown_fragment, F}) ->
-    ["Unknown fragment: ", F];
 err_uncategorized({unknown_type, Ty}) ->
     ["Unknown type: ", Ty];
-err_uncategorized({unknown_enum, E}) ->
-    ["The enum name ", E, " is not known to the schema"];
 err_uncategorized({not_unique, Op}) ->
     ["The operation name ",
      Op, " occurs more than once in query document"];
-err_uncategorized({type_mismatch, #{ id := ID, document := Doc, schema := Sch }}) ->
-    ["Type mismatch on (", ID, "). The query document has a value/variable of type (",
-      format_ty(Doc), ") but the schema expects type (", format_ty(Sch), ")"];
-err_uncategorized({type_mismatch, #{ schema := Sch }}) ->
-    ["Type mismatch, expected (", format_ty(Sch), ")"];
-err_uncategorized({enum_not_found, Ty, Val}) ->
-    X = io_lib:format("The value ~p is not a valid enum value for type ", [Val]),
-    [X, format_ty(Ty)];
-err_uncategorized({param_mismatch, Ty, _}) ->
-    ["Parameter is not of type ", format_ty(Ty)];
 err_uncategorized({unknown_enum_type, Val}) ->
     ["The value ", Val, " does not belong to any enum type known to the schema"];
-err_uncategorized({operation_not_found, Op}) ->
-    ["Expected an operation ", Op, " but no such operation was found"];
-err_uncategorized(params_on_unnamed) ->
-    ["Cannot supply parameter lists to unnamed (anonymous) queries"];
 err_uncategorized({selection_on_enum_type, Ty}) ->
     ["Cannot apply a selection set on the enum type ", format_ty(Ty)];
-err_uncategorized(missing_non_null_param) ->
-    ["The parameter is non-null, but was undefined in parameter list"];
-err_uncategorized({unbound_variable, Var}) ->
-    ["The document refers to a variable ", Var, " but no such var exists. Perhaps the variable is a typo?"];
-err_uncategorized({input_coerce_abort, {Class, Reason}}) ->
-    io_lib:format("Input coercer failed with an exception of class ~p and reason ~p", [Class, Reason]);
-err_uncategorized({input_coercion, Type, Value, Reason}) ->
-    io_lib:format("Input coercion failed for type ~s with value ~p. The reason it failed is: ~p", [Type, Value, Reason]);
-err_uncategorized({excess_fields_in_object, Fields}) ->
-    io_lib:format("The object contains unknown fields and values: ~p", [Fields]);
 err_uncategorized(Otherwise) ->
     io_lib:format("General uncategorized error: ~p", [Otherwise]).
 
