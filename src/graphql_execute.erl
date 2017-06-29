@@ -5,6 +5,7 @@
 
 -export([x/1, x/2]).
 -export([default_resolver/3]).
+-export([err_msg/1]).
 
 -spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
 x(X) -> x(#{ params => #{} }, X).
@@ -31,9 +32,13 @@ execute_request(InitialCtx, {document, Operations}) ->
 complete_top_level(Res, []) ->
     #{ data => Res };
 complete_top_level(undefined, Errs) ->
-    #{ errors => Errs };
+    #{ errors => [complete_error(E) || E <- Errs ] };
 complete_top_level(Res, Errs) ->
-    #{ data => Res, errors => Errs}.
+    #{ data => Res,
+       errors => [complete_error(E) || E <- Errs ] }.
+
+complete_error(#{ path := Path, reason := Reason }) ->
+    graphql_err:mk(Path, execute, Reason).
 
 execute_query(Ctx, #op { selection_set = SSet,
                           schema = QType } = Op) ->
@@ -180,7 +185,7 @@ resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectTy
         is_function(Fun, 4) -> Fun(CtxAnnot, Value, Name, Args);
         is_function(Fun, 3) -> Fun(CtxAnnot, Value, Args)
     end) of
-        {error, Reason} -> {error, Reason};
+        {error, Reason} -> {error, {resolver_error, Reason}};
         {ok, Result} -> {ok, Result};
         default ->
             resolve_field_value(Ctx, ObjectType, Value, Name, FAns, fun ?MODULE:default_resolver/3, Args);
@@ -238,7 +243,7 @@ complete_value(Path, _Ctx, #scalar_type { id = ID, output_coerce = OCoerce, reso
             error_logger:error_msg(
               "Output coercer crash during value completion: ~p, stacktrace: ~p~n",
               [{Cl,Err,ID,Value}, erlang:get_stacktrace()]),
-            err(Path, {coerce_crash, ID, Value, {Cl, Err}})
+            err(Path, {output_coerce_abort, ID, Value, {Cl, Err}})
     end;
 complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
     try RM:output(ID, Value) of
@@ -250,7 +255,7 @@ complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Field
             error_logger:error_msg(
               "Output coercer crash during value completion: ~p, stacktrace: ~p~n",
               [{Cl,Err,ID,Value}, erlang:get_stacktrace()]),
-            err(Path, {coerce_crash, ID, Value, {Cl, Err}})
+            err(Path, {output_coerce_abort, ID, Value, {Cl, Err}})
     end;
 complete_value(_Path, _Ctx, #enum_type {}, _Fields, {ok, Value}) when is_binary(Value) ->
     %% TODO: Coercion handling for enumerated values!
@@ -288,7 +293,7 @@ resolve_abstract_type(Resolver, Value) when is_function(Resolver, 1) ->
             Obj = #object_type{} = graphql_schema:get(binarize(Ty)),
             {ok, Obj};
         {error, Reason} ->
-            {error, Reason}
+            {error, {type_resolver_error, Reason}}
     catch
        Cl:Err ->
             error_logger:error_msg(
@@ -304,7 +309,6 @@ complete_value_scalar(_Path, _ID, false) -> {ok, false, []};
 complete_value_scalar(_Path, _ID, null) -> {ok, null, []};
 complete_value_scalar( Path,  ID, Value) -> 
     err(Path, {output_coerce, ID, Value, not_scalar_type}).
-
 
 assert_list_completion_structure(Ty, Fields, Results) ->
     ValidResult =
@@ -325,21 +329,33 @@ assert_list_completion_structure(Ty, Fields, Results) ->
               "the result ~p doesn't follow the valid list form of "
               "{ok, _} | {error, _} (~B errors in total)~n",
               [Name, Field, R, length(Errs)]),
-            exit(list_resolution_error)
+            {error, list_resolution}
     end.
 
 complete_value_list(Path, Ctx, Ty, Fields, Results) ->
     IndexedResults = index(Results),
-    assert_list_completion_structure(Ty, Fields, IndexedResults),
-    Completed = [{I, complete_value([I | Path], Ctx, Ty, Fields, R)} || {I, R} <- IndexedResults],
-    case complete_list_value_result(Completed) of
-        {error, Reasons} ->
-            {ok, null, Reasons};
-        {ok, L} ->
-            {Vals, Errs} = lists:unzip(L),
-            Len = length(Completed),
-            Len = length(Vals),
-            {ok, Vals, lists:concat(Errs)}
+    case assert_list_completion_structure(Ty, Fields, IndexedResults) of
+        {error, list_resolution} ->
+            {error, Errs} = err(Path, list_resolution),
+            {ok, null, Errs};
+        ok ->
+            Wrap = fun(I,R) ->
+                           case complete_value([I|Path], Ctx, Ty, Fields, R) of
+                               {ok, V, Errs} ->
+                                   {ok, V, resolver_error_wrap(Errs)};
+                               {error, Err} -> {error, Err}
+                           end
+                   end,
+            Completed = [{I, Wrap(I, R)} || {I, R} <- IndexedResults],
+            case complete_list_value_result(Completed) of
+                {error, Reasons} ->
+                    {ok, null, Reasons};
+                {ok, L} ->
+                    {Vals, Errs} = lists:unzip(L),
+                    Len = length(Completed),
+                    Len = length(Vals),
+                    {ok, Vals, lists:concat(Errs)}
+            end
     end.
 
 complete_list_value_result(Completed) ->
@@ -349,7 +365,8 @@ complete_list_value_result(Completed) ->
                (_) -> false
            end,
            Completed) of
-        true -> {error, lists:concat([R || {_, {error, R}} <- Completed])};
+        true -> {error, lists:concat(
+                          [R || {_, {error, R}} <- Completed])};
         false -> {ok, [{V, Es} || {_, {ok, V, Es}} <- Completed]}
     end.
 
@@ -402,7 +419,6 @@ resolver_function(#object_type { resolve_module = undefined }, undefined) ->
 resolver_function(#object_type { resolve_module = M }, undefined) ->
     fun M:execute/4.
 
-
 default_resolver(_, none, _) -> {error, no_object};
 default_resolver(_, undefined, _) -> {error, undefined_object};
 default_resolver(_, null, _) ->
@@ -412,7 +428,7 @@ default_resolver(#{ field := Field}, Cur, _Args) ->
     case maps:get(Field, Cur, not_found) of
         {'$lazy', F} when is_function(F, 0) -> F();
         not_found ->
-            {error, not_found};
+            {error, field_not_found};
         V when is_list(V) -> {ok, [ {ok, R} || R <- V ]};
         V -> {ok, V}
     end.
@@ -559,16 +575,6 @@ alias(#field { alias = Alias }) -> name(Alias).
 
 field_type(#field { schema = SF }) -> SF.
 
-%% -- ERROR HANDLING --
-
-err(Path, Reason) ->
-    err(Path, Reason, []).
-
-err(Path, Reason, More) when is_list(More) ->
-    {error, [#{ path => lists:reverse(Path),
-                reason => Reason} | More]}.
-
-
 %% -- CONTEXT CANONICALIZATION ------------
 canon_context(#{ params := Params } = Ctx) ->
      Ctx#{ params := canon_params(Params) }.
@@ -580,3 +586,41 @@ canon_params(Ps) ->
 binarize(A) when is_atom(A) -> atom_to_binary(A, utf8);
 binarize(B) when is_binary(B) -> B;
 binarize(L) when is_list(L) -> list_to_binary(L).
+
+%% -- ERROR HANDLING --
+
+resolver_error_wrap([]) -> [];
+resolver_error_wrap([#{ reason := Reason } = E | Next]) -> 
+    [E#{ reason => {resolver_error, Reason} } | resolver_error_wrap(Next)].
+
+err(Path, Reason) ->
+    err(Path, Reason, []).
+
+err(Path, Reason, More) when is_list(More) ->
+    {error, [#{ path => Path,
+                reason => Reason} | More]}.
+
+err_msg(null_value) ->
+    ["The schema specifies the field is non-null, "
+     "but a null value was returned by the backend"];
+err_msg(not_a_list) ->
+    ["The schema specifies the field is a list, "
+     "but a non-list value was returned by the backend"];
+err_msg({output_coerce, ID, _Value, Reason}) ->
+    io_lib:format("Output coercion failed for type ~s with reason ~p",
+                  [ID, Reason]);
+err_msg({operation_not_found, OpName}) ->
+    ["The operation ", OpName, " was not found in the query document"];
+err_msg({type_resolver_error, Err}) ->
+    io_lib:format("~p", [Err]);
+err_msg({resolver_error, Err}) ->
+    io_lib:format("~p", [Err]);
+err_msg({output_coerce_abort, _ID, _Value, _}) ->
+    ["Internal Server error: output coercer function crashed"];
+err_msg(list_resolution) ->
+    ["Internal Server error: A list is being incorrectly resolved"];
+err_msg(Otherwise) ->
+    io_lib:format("Error in execution: ~p", [Otherwise]).
+
+
+

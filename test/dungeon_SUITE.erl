@@ -124,13 +124,16 @@ introspection(Config) ->
 invalid_list_resolver(Config) ->
     GoblinId = ?config(goblin_id, Config),
     Q1 = "query Q { monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { errorListResolution }} ",
-    try th:x(Config, Q1) of
-        _X ->
-            ct:fail(expected_exit)
-    catch
-        exit:list_resolution_error ->
-            ok
-    end.
+    Expected =
+        #{data => #{<<"monster">> => #{<<"errorListResolution">> => null}},
+          errors =>
+              [#{key => list_resolution,
+                 message =>
+                     <<"Internal Server error: A list is being incorrectly resolved">>,
+                 path =>
+                     [<<"Q">>,<<"monster">>,<<"errorListResolution">>]}]},
+    Expected = th:x(Config, Q1),
+    ok.
 
 duplicate_validation(Config) ->
     GoblinId = base64:encode(<<"monster:1">>),
@@ -449,14 +452,17 @@ complex_modifiers(Config) ->
         #{ <<"monster">> := null },
         errors := [#{path :=
                          [<<"MonsterStatsThree">>, <<"monster">>, <<"statsVariantThree">>],
-                     reason := null_value},
+                     key := null_value, 
+                     message := _} ,
                    #{path :=
                          [<<"MonsterStatsThree">>, <<"monster">>, <<"statsVariantThree">>, 0],
-                     reason := null_value},
+                     key := null_value,
+                     message := _},
                    #{path :=
                          [<<"MonsterStatsThree">>, <<"monster">>,
                           <<"statsVariantThree">>, 0, <<"attack">>],
-                     reason := null_value}]
+                     key := null_value,
+                     message := _}]
      } = run(Config, <<"MonsterStatsThree">>, #{ <<"id">> => MonsterID }),
 
     ok.
@@ -527,7 +533,7 @@ multiple_monsters_and_rooms(Config) ->
             #{ <<"id">> := ID1 }, #{ <<"id">> := ID2 } , null ]},
        errors := [
            #{path := [<<"MultipleMonsters">>, <<"monsters">>, 2],
-             reason := not_found}]
+             message := <<"not_found">> }]
      } = run(Config, <<"MultipleMonsters">>, #{ <<"ids">> => [ID1, ID2, ID1000] }),
 
     #{ data := #{
@@ -535,9 +541,9 @@ multiple_monsters_and_rooms(Config) ->
             #{ <<"id">> := ID1 }, null, #{ <<"id">> := ID2 }, null ]},
        errors := [
                   #{path := [<<"MultipleMonstersExprMissing">>, <<"monsters">>, 1],
-                    reason := not_found},
+                    message := <<"not_found">>},
                   #{path := [<<"MultipleMonstersExprMissing">>, <<"monsters">>, 3],
-                    reason := not_found}]
+                    message := <<"not_found">>}]
      } = run(Config, <<"MultipleMonstersExprMissing">>, #{}),
 
      Room1 = base64:encode(<<"room:1">>),
@@ -546,12 +552,12 @@ multiple_monsters_and_rooms(Config) ->
         <<"rooms">> := [#{<<"id">> := Room1}]}
       } = run(Config, <<"MultipleRooms">>, #{ <<"ids">> => [Room1]}),
 
-     #{ data := #{
-        <<"rooms">> := null
-         },
-        errors := [
-                   #{path := [<<"MultipleRooms">>, <<"rooms">>, 1], reason := null_value},
-                   #{path := [<<"MultipleRooms">>, <<"rooms">>, 1], reason := not_found}]
+     #{ data := #{ <<"rooms">> := null },
+        errors :=
+            [#{path := [<<"MultipleRooms">>, <<"rooms">>, 1],
+               key := null_value },
+             #{path := [<<"MultipleRooms">>, <<"rooms">>, 1],
+               key := not_found } ]
       } = run(Config, <<"MultipleRooms">>, #{ <<"ids">> => [Room1, base64:encode(<<"room:2">>)]}),
 
      ok.
@@ -640,7 +646,9 @@ invalid_type_resolution(Config) ->
     #{ data := null,
        errors :=
            [#{ path := [<<"LookupThing">>, <<"thing">>],
-               reason := kraken}]} = run(Config, <<"LookupThing">>, Input),
+               key := {type_resolver_error, kraken},
+               message := <<"kraken">> }
+             ]} = run(Config, <<"LookupThing">>, Input),
     ok.
 
 invalid_enums(Config) ->

@@ -3,6 +3,7 @@
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
+-export([mk/3]).
 -export([abort/2, abort/3]).
 -export([path/1]).
 -export([format_ty/1]).
@@ -12,35 +13,28 @@ abort(Path, Msg) ->
 
 -spec abort([any()], any()) -> no_return().
 abort(Path, Phase, Msg) ->
-   Err = #{
-      path => path(lists:reverse(Path)),
-      key => err_key(Phase, Msg),
-      message => iolist_to_binary(err_msg({Phase, Msg}))
-   },
+   Err = mk(Path, Phase, Msg),
    throw({error, Err}).
+
+mk(Path, Phase, Msg) ->
+    #{ path => path(lists:reverse(Path)),
+       key => err_key(Phase, Msg),
+       message => iolist_to_binary(err_msg({Phase, Msg}))
+     }.
 
 %% -- Error handling dispatch to the module responsible for the error
 err_msg({elaborate, Reason})     -> graphql_elaborate:err_msg(Reason);
+err_msg({execute, Reason})       -> graphql_execute:err_msg(Reason);
 err_msg({type_check, Reason})    -> graphql_type_check:err_msg(Reason);
 err_msg({validate, Reason})      -> graphql_validate:err_msg(Reason);
-err_msg({uncategorized, Reason}) -> err_uncategorized(Reason).
+err_msg({uncategorized, Reason}) ->
+    io_lib:format("General uncategorized error: ~p", [Reason]).
 
-err_key(type_check, Key)    -> Key;
 err_key(elaborate, Key)     -> Key;
-err_key(uncategorized, Key) -> Key;
-err_key(validate, Key)      -> Key.
-
-err_uncategorized({unknown_type, Ty}) ->
-    ["Unknown type: ", Ty];
-err_uncategorized({not_unique, Op}) ->
-    ["The operation name ",
-     Op, " occurs more than once in query document"];
-err_uncategorized({unknown_enum_type, Val}) ->
-    ["The value ", Val, " does not belong to any enum type known to the schema"];
-err_uncategorized({selection_on_enum_type, Ty}) ->
-    ["Cannot apply a selection set on the enum type ", format_ty(Ty)];
-err_uncategorized(Otherwise) ->
-    io_lib:format("General uncategorized error: ~p", [Otherwise]).
+err_key(execute, Key)       -> Key;
+err_key(type_check, Key)    -> Key;
+err_key(validate, Key)      -> Key;
+err_key(uncategorized, Key) -> Key.
 
 -spec path([Input]) -> [binary()]
   when
@@ -58,7 +52,7 @@ path(Path) ->
            F(#union_type { id = ID }) -> name(ID);
            F(#object_type { id = ID }) -> name(ID);
            F({name, _, _} = Name) -> name(Name);
-           F(I) when is_integer(I) -> integer_to_binary(I);
+           F(I) when is_integer(I) -> I;
            F(B) when is_binary(B) -> B;
            F(L) when is_list(L) ->
                [F(X) || X <- L]
