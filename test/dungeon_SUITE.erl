@@ -603,7 +603,7 @@ nested_field_merge(Config) ->
 unknown_variable(Config) ->
     ID = base64:encode(<<"monster:1">>),
 
-    #{errors :=
+    #{ errors :=
           #{key := {unbound_variable,<<"i">>},
             path := [<<"document">>,
                      <<"GoblinQuery">>,
@@ -617,12 +617,12 @@ unknown_variable(Config) ->
 missing_fragment(Config) ->
     ID = base64:encode(<<"monster:1">>),
 
-    #{errors :=
+    #{ errors :=
           #{key := unknown_fragment,
             path := [<<"document">>,
                      <<"GoblinQuery">>,
                      <<"monster">>,
-                     <<"GoblinFragment">>]}} =
+                     <<"GoblinFragment">>] }} =
         run(Config,
             "missing_fragment.graphql",
             <<"GoblinQuery">>,

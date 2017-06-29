@@ -20,16 +20,15 @@ abort(Path, Phase, Msg) ->
    throw({error, Err}).
 
 %% -- Error handling dispatch to the module responsible for the error
-err_msg({elaborate, Reason}) ->
-    graphql_elaborate:err_msg(Reason);
-err_msg({type_check, Reason}) ->
-    graphql_type_check:err_msg(Reason);
-err_msg({uncategorized, Reason}) ->
-    err_uncategorized(Reason).
+err_msg({elaborate, Reason})     -> graphql_elaborate:err_msg(Reason);
+err_msg({type_check, Reason})    -> graphql_type_check:err_msg(Reason);
+err_msg({validate, Reason})      -> graphql_validate:err_msg(Reason);
+err_msg({uncategorized, Reason}) -> err_uncategorized(Reason).
 
-err_key(type_check, Key) -> Key;
-err_key(elaborate, Key) -> Key;
-err_key(uncategorized, Key) -> Key.
+err_key(type_check, Key)    -> Key;
+err_key(elaborate, Key)     -> Key;
+err_key(uncategorized, Key) -> Key;
+err_key(validate, Key)      -> Key.
 
 err_uncategorized({unknown_type, Ty}) ->
     ["Unknown type: ", Ty];
