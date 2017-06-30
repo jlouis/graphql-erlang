@@ -28,14 +28,20 @@
 -type schema_field() :: #{ atom() => any() }.
 -export_type([schema_field/0]).
 
--spec parse( binary() | string()) -> {ok, ast()} | {error, term()}.
+-spec parse( binary() | string()) ->
+                   {ok, ast()} | {error, {scanner_error | parser_error, term()}}.
 parse(Input) when is_binary(Input) -> parse(binary_to_list(Input));
 parse(Input) when is_list(Input) ->
     case graphql_scanner:string(Input) of
         {ok, Tokens, _EndLine} ->
-            graphql_parser:parse(Tokens);
+            case graphql_parser:parse(Tokens) of
+                {ok, Res} ->
+                    {ok, Res};
+                {error, Err} ->
+                    {error, {parser_error, Err}}
+            end;
         {error, Err, _EndLine} ->
-            {error, Err}
+            {error, {scanner_error, Err}}
     end.
 
 load_schema(Mapping, Input) when is_binary(Input) ->

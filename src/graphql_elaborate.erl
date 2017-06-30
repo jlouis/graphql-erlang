@@ -5,6 +5,7 @@
 
 -export([x/1]).
 -export([mk_varenv/1, mk_funenv/1]).
+-export([err_msg/1]).
 
 -spec x(graphql:ast()) -> graphql:ast().
 x(Doc) -> document(Doc).
@@ -46,8 +47,8 @@ mk_funenv(Ops) ->
     lists:foldl(F, #{}, Ops).
 
 %% -- FRAGMENTS -----------------------------------
-frag(Path, #frag { id = {name, _, _}, directives = [_|_] = Dirs } = F, _) ->
-    graphql_err:abort([F | Path], {directives_on_named_fragment, Dirs});
+frag(Path, #frag { id = {name, _, _}, directives = [_|_] } = F, _) ->
+    err([F | Path], directives_on_named_fragment);
 frag(Path, #frag { ty = undefined, directives = Dirs } = Frag, ObjectType) ->
     frag_(Path,
           Frag#frag {
@@ -59,7 +60,7 @@ frag(Path, #frag { ty = T, directives = Dirs } = F, _ObjecType) ->
     Ty = graphql_ast:name(T),
     case graphql_schema:lookup(Ty) of
         not_found ->
-            graphql_err:abort([F | Path], {type_not_found, Ty});
+            err([F | Path], {type_not_found, Ty});
         Schema ->
             frag_(Path, F#frag { schema = Schema, directives = directives([F|Path], Dirs) })
     end.
@@ -79,12 +80,12 @@ op(Path, #op { vardefs = VDefs, directives = [] } = Op) ->
     RootSchema = root(Path, Op),
     case graphql_schema:lookup(RootSchema) of
         not_found ->
-            graphql_err:abort([Op | Path], {type_not_found, graphql_ast:name(RootSchema)});
+            err([Op | Path], {type_not_found, graphql_ast:name(RootSchema)});
         #object_type{ fields = Fields } = Obj ->
             fields([Op | Path], Op#op{ schema = Obj, vardefs = var_defs([Op | Path], VDefs) }, Fields)
     end;
-op(Path, #op { directives = Dirs } = Op) ->
-    graphql_err:abort([Op | Path], {directives_on_op, Dirs}).
+op(Path, #op { id = {name, _, _}, directives = [_|_] } = Op) ->
+    err([Op | Path], directives_on_op).
 
 
 vdef(#vardef { ty = Ty }) ->
@@ -112,14 +113,14 @@ vdef_type(N) when is_binary(N) ->
 
 var_defs(Path, VDefs) ->
     [case vdef(V) of
-        not_found -> graphql_err:abort(Path, {type_not_found, graphql_ast:id(V)});
-        {invalid_input_type, T} -> graphql_err:abort(Path, {not_input_type, T});
+        not_found -> err(Path, {type_not_found, graphql_ast:id(V)});
+        {invalid_input_type, T} -> err(Path, {not_input_type, T});
         Ty -> V#vardef { ty = Ty }
       end || V <- VDefs].
 
 root(Path, #op { ty = T } = Op) ->
     case graphql_schema:lookup('ROOT') of
-        not_found -> graphql_err:abort([Op | Path], no_root_schema);
+        not_found -> err([Op | Path], no_root_schema);
         Schema -> graphql_schema:resolve_root_type(T, Schema)
     end.
 
@@ -129,11 +130,10 @@ directives(Path, Ds) ->
         [directive(Path, D) || D <- Ds]
     catch
         throw:{unknown, Unknown} ->
-            graphql_err:abort(Path, {unknown_directive, Unknown})
+            err(Path, {unknown_directive, Unknown})
     end.
 
 directive(Path, #directive{ id = ID, args = Args } = D) ->
-    
     Schema = #directive_type { args = SArgs } =
         case graphql_ast:name(ID) of
             <<"include">> -> directive_schema(include);
@@ -188,7 +188,7 @@ field(Path, _OType, #field { id = ID, args = Args, selection_set = SSet, directi
             F#field { schema = {introspection, typename},
                       directives = ElabDirs };
         not_found ->
-            graphql_err:abort(Path, {unknown_field, Name});
+            err([F|Path], unknown_field);
         #schema_field{ ty = Ty, args = SArgs } = SF ->
             Type = field_type(Ty),
             SSet2 = field_lookup([F|Path], Type, SSet),
@@ -221,7 +221,7 @@ field_arg(Path, K, V, SArgs) ->
     N = graphql_ast:name(K),
     case maps:get(N, SArgs, not_found) of
         not_found ->
-            graphql_err:abort(Path, {argument_not_found, N});
+            err(Path, {unknown_argument, N});
         #schema_arg{ ty = Ty } ->
             {K, #{ type => field_arg_type(Ty), value => V}}
     end.
@@ -243,21 +243,21 @@ field_lookup(Path, {non_null, Obj}, SSet) ->
 field_lookup(Path, {list, Obj}, SSet) ->
     field_lookup(Path, Obj, SSet);
 field_lookup(Path, not_found, _SSet) ->
-    graphql_err:abort(Path, entity_not_found);
+    err(Path, unknown_field);
 field_lookup(_Path, {scalar, _}, []) ->
     [];
 field_lookup(Path, {scalar, _}, [_|_]) ->
-    graphql_err:abort(Path, selection_on_scalar);
+    err(Path, selection_on_scalar);
 field_lookup(Path, #scalar_type{}, [_|_]) ->
-    graphql_err:abort(Path, selection_on_scalar);
+    err(Path, selection_on_scalar);
 field_lookup(Path, #scalar_type{}, SSet) ->
     sset(Path, undefined, SSet, #{});
 field_lookup(Path, #object_type{}, []) ->
-    graphql_err:abort(Path, fieldless_object);
+    err(Path, fieldless_object);
 field_lookup(Path, #object_type{ fields = Fields } = OType, SSet) ->
     sset(Path, OType, SSet, Fields);
 field_lookup(Path, #interface_type{}, []) ->
-    graphql_err:abort(Path, fieldless_interface);
+    err(Path, fieldless_interface);
 field_lookup(Path, #interface_type{ fields = Fields } = OType, SSet) ->
     sset(Path, OType, SSet, Fields);
 field_lookup(Path, #union_type{} = OType, SSet) ->
@@ -265,4 +265,36 @@ field_lookup(Path, #union_type{} = OType, SSet) ->
 field_lookup(_Path, #enum_type{}, []) ->
     [];
 field_lookup(Path, #enum_type{}, _SSet) ->
-    graphql_err:abort(Path, selection_set_on_enum).
+    err(Path, selection_on_enum).
+
+%% -- Error Handling
+err(Path, Reason) ->
+    graphql_err:abort(Path, elaborate, Reason).
+
+err_msg({type_not_found, Ty}) ->
+    ["Type not found in schema: ", Ty];
+err_msg({not_input_type, Ty}) ->
+    ["Type ", Ty, " is not an input type but is used in input-context"];
+err_msg(directives_on_op) ->
+    ["No support for directives on operation"];
+err_msg(no_root_schema) ->
+    ["No root schema found. One is required for correct operation"];
+err_msg({unknown_field, F}) ->
+    ["The query refers to a field, ", F, ", which is not present in the schema"];
+err_msg(unknown_field) ->
+    ["The query refers to a field which is not known"];
+err_msg({unknown_argument, N}) ->
+    ["The query refers to an argument, ", N, ", which is not present int the schema"];
+err_msg({unknown_directive, Dir}) ->
+    ["The query uses a directive, ", Dir, ", which is unknown to this GraphQL server"];
+err_msg(selection_on_scalar) ->
+    ["Cannot apply a selection set to a scalar field"];
+err_msg(selection_on_enum) ->     
+    ["Cannot apply a selection set to an enum type"];
+err_msg(fieldless_object) ->
+    ["The path refers to an Object type, but no fields were specified"];
+err_msg(fieldless_interface) ->
+    ["The path refers to an Interface type, but no fields were specified"];
+err_msg(directives_on_named_fragment) ->
+    ["No support for directives on named fragments"].
+

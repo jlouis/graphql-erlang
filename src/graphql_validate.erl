@@ -3,6 +3,7 @@
 -include("graphql_internal.hrl").
 
 -export([x/1]).
+-export([err_msg/1]).
 
 -spec x(graphql:ast()) -> ok.
 x(AST) -> 
@@ -24,7 +25,7 @@ no_fragment_cycles({document, Ops}) ->
     try digraph_utils:cyclic_strong_components(G) of
         [] -> ok;
         Cycles ->
-            graphql_err:abort({cycles_in_fragments, Cycles})
+            err([], {cycles_in_fragments, Cycles})
     after
         digraph:delete(G)
     end,
@@ -42,9 +43,23 @@ frag_link_fields([#frag { id = '...', selection_set = Fields } | Next]) ->
     
 %% Uniqueness among a set of names
 uniq([]) -> ok;
-uniq(L) -> uniq_(L).
+uniq(L) ->
+    case uniq_(L) of
+        ok ->
+            ok;
+        {not_unique, _X} = Err ->
+            err([], Err)
+    end.
 
 uniq_([_]) -> ok;
-uniq_([X,X | _Xs]) -> graphql_err:abort([], {not_unique, X});
+uniq_([X,X | _Xs]) -> {not_unique, X};
 uniq_([_, X | Xs]) -> uniq([X | Xs]).
+
+err(Path, Reason) ->
+    graphql_err:abort(Path, validate, Reason).
+
+err_msg({not_unique, X}) ->
+    ["The name ", X, " is not a unique name"];
+err_msg({cycles_in_fragments, Cycles}) ->
+    io_lib:format("The following fragments contains cycles: ~p", [Cycles]).
 
