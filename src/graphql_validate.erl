@@ -55,6 +55,7 @@ uniq_([_]) -> ok;
 uniq_([X,X | _Xs]) -> {not_unique, X};
 uniq_([_, X | Xs]) -> uniq([X | Xs]).
 
+-spec err([any()], term()) -> no_return().
 err(Path, Reason) ->
     graphql_err:abort(Path, validate, Reason).
 

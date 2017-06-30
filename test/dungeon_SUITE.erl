@@ -558,7 +558,8 @@ multiple_monsters_and_rooms(Config) ->
                key := null_value },
              #{path := [<<"MultipleRooms">>, <<"rooms">>, 1],
                key := not_found } ]
-      } = run(Config, <<"MultipleRooms">>, #{ <<"ids">> => [Room1, base64:encode(<<"room:2">>)]}),
+      } = run(Config, <<"MultipleRooms">>,
+              #{ <<"ids">> => [Room1, base64:encode(<<"room:2">>)]}),
 
      ok.
 

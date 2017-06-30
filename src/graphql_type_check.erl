@@ -445,6 +445,7 @@ id(#op { id = ID }) -> ID.
 
 %% -- Error handling -------------------------------------
 
+-spec err([term()], term()) -> no_return().
 err(Path, Msg) ->
     graphql_err:abort(Path, type_check, Msg).
 
