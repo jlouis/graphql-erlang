@@ -486,58 +486,56 @@ resolve_args_(Ctx, [{ID, Val} | As], Acc) ->
     resolve_args_(Ctx, As, Acc#{ K => V }).
 
 %% Produce a valid value for an argument.
+value(Ctx, {Ty, Val})                     -> value(Ctx, Ty, Val);
+value(Ctx, #{ type := Ty, value := Val }) -> value(Ctx, Ty, Val).
 
-value(Ctx, {Ty, Val}) -> value(Ctx, #{ type => Ty, value => Val});
-value(_Ctx, #{ type := #enum_type { repr = Repr }, value := {enum, E}}) ->
-    N = name(E),
-    case Repr of
-        binary -> N;
-         atom -> binary_to_atom(N, utf8);
-        tagged -> {enum, N}
-    end;
-value(_Ctx, #{ type := Ty, value := {enum, E}}) ->
-    N = name(E),
-    #enum_type { repr = Repr } = graphql_schema:get(Ty),
-    case Repr of
-        binary -> N;
-        atom -> binary_to_atom(N, utf8);
-        tagged -> {enum, N}
-    end;
-value(Ctx, #{ type := {list, Ty}, value := {list, Vals}}) ->
-    [value(Ctx, {Ty, V}) || V <- Vals];
-value(Ctx, #{ type := {list, Ty}, value := Vals}) when is_list(Vals) ->
-    [value(Ctx, {Ty, V}) || V <- Vals];
-value(Ctx, #{ type := {non_null, Ty}, value := V}) ->
-    value(Ctx, #{ type => Ty, value => V});
-value(Ctx, #{ type := ObjTy, value := {object, O}}) ->
-    #input_object_type { fields = FieldEnv } = graphql_schema:get(
-        graphql_ast:unwrap_type(ObjTy)),
-    ObjVals = value_object(Ctx, FieldEnv, O),
-    maps:from_list(ObjVals);
-value(Ctx, #{ type := #input_object_type { fields = FieldEnv },
-              value := O}) when is_map(O) ->
-    ObjVals = value_object(Ctx, FieldEnv, maps:to_list(O)),
-    maps:from_list(ObjVals);
-value(Ctx, #{ type := ObjTy, value := O}) when is_map(O) ->
-    case graphql_schema:get(graphql_ast:unwrap_type(ObjTy)) of
+value(#{ params := Params } = _Ctx, _Ty, {var, ID}) ->
+    %% Parameter expansion and type check is already completed
+    %% at this stage
+    maps:get(name(ID), Params);
+value(Ctx, {non_null, Ty}, Val) ->
+    value(Ctx, Ty, Val);
+value(Ctx, {list, Ty}, Val) ->
+    Vals = case Val of
+               {list, L} -> L;
+               L when is_list(L)  -> L
+           end,
+    [value(Ctx, Ty, V) || V <- Vals];
+value(Ctx, Ty, Val) ->
+    case Ty of
+        #enum_type { repr = Repr } ->
+            case Val of
+                {enum, E} ->
+                    N = name(E),
+                    value_enum(N, Repr);
+                E when is_binary(E) ->
+                    N = name(E),
+                    value_enum(N, Repr);
+                null ->
+                    null
+            end;
         #input_object_type { fields = FieldEnv } ->
-            ObjVals = value_object(Ctx, FieldEnv, maps:to_list(O)),
+            Obj = case Val of
+                      {object, O} -> O;
+                      O when is_map(O) -> maps:to_list(O)
+                  end,
+            ObjVals = value_object(Ctx, FieldEnv, Obj),
             maps:from_list(ObjVals);
         #scalar_type{} ->
-            %% Input coercion has produced a scalar type. In this
-            %% case, we just let the given scalar coercion through
-            O
-    end;
-value(#{ params := Params }, #{ value := {var, ID}}) ->
-    maps:get(name(ID), Params);
-value(_Ctx, #{ type := {scalar, STy}, value := V}) ->
-    value_scalar(STy, V);
-value(Ctx, #{ type := _, value := V} = M) ->
-    default_resolution(Ctx, M),
-    V.
+            %% At this point, scalar conversion has happened earlier, so any
+            %% erlang term is a value scalar value. Just return the value:
+            Val;
+        {scalar, ScalarTy} ->
+            %% Built-in scalars are currently handled specially
+            value_scalar(ScalarTy, Val);
+        Bin when is_binary(Bin) ->
+            LoadedTy = graphql_schema:get(Bin),
+            value(Ctx, LoadedTy, Val)
+    end.
 
-default_resolution(_Ctx, _M) ->
-    phone_home.
+value_enum(N, binary) -> N;
+value_enum(N, atom) -> binary_to_atom(N, utf8);
+value_enum(N, tagged) -> {enum, N}.
 
 value_scalar(string, null) -> null;
 value_scalar(string, S) when is_binary(S) -> S;
