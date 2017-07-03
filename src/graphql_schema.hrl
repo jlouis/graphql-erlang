@@ -20,14 +20,17 @@
          }).
 -type enum_value() :: #enum_value{}.
 
+%% EDIT--Enums--Start
 -record(enum_type, {
           id :: binary(),
           description :: binary(),
           repr = tagged :: tagged | atom | binary,
+	  resolve_module = undefined :: mod(),
           annotations = #{} :: #{ binary() => any() },
           values :: #{ integer() => enum_value() }
          }).
 -type enum_type() :: #enum_type{}.
+%% EDIT--Enums--End
 
 -record(interface_type, {
           id :: binary(),

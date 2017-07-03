@@ -3,6 +3,7 @@
 /src/graphql_scanner.erl
 /test/*.json
 
+*~
 # Nixed from https://github.com/shopgun/erlang-project-template/blob/master/files/gitignore
 *.beam
 *.o

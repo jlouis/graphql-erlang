@@ -54,7 +54,7 @@ inject() ->
         				color => #{ type => 'Color', description => "" }
         			},
         			resolve => fun
-        			    (_, _V, #{ <<"color">> := {enum, C} }) -> {ok, C};
+        			    (_, _V, #{ <<"color">> :=  C }) -> {ok, C};
         			    (_, _V, #{}) -> {error, cannot_resolve_color}
         			end
         		}
@@ -78,14 +78,14 @@ color_from_int(0) -> 0;
 color_from_int(1) -> 1;
 color_from_int(2) -> 2.
 
-color_from_enum({enum, En}) ->
+color_from_enum(En) ->
     case En of
         <<"RED">> -> ?RED;
         <<"GREEN">> -> ?GREEN;
         <<"BLUE">> -> ?BLUE
     end.
 
-color_from_string(X) -> color_from_enum({enum, X}).
+color_from_string(X) -> color_from_enum(X).
 
 color_enum(_Ctx, _, #{
     <<"fromEnum">> := null,

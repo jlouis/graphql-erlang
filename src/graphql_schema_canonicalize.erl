@@ -25,18 +25,35 @@ x({union, #{ id := ID, description := Desc, types := Types } = U}) ->
         types = [c_type(T) || T <- Types],
         resolve_type = Resolver
     };
+
+
+%% EDIT--Start
 x({enum, #{ id := ID, description := Desc, values := VDefs, repr := Repr} = E}) ->
+    {Mod} = enum_resolve(E),
     #enum_type {
     	id = c_id(ID),
     	description = binarize(Desc),
     	annotations = annotations(E),
     	values = map_2(fun c_enum_val/2, VDefs),
-    	repr = c_repr(Repr)
+    	repr = c_repr(Repr),
+        resolve_module = Mod
      };
-x({enum, #{ id := ID, description := Desc, values := VDefs } = E}) ->
-    #enum_type { id = c_id(ID), description = binarize(Desc),
-         annotations = annotations(E),
-    	values = map_2(fun c_enum_val/2, VDefs) };
+
+%% x({enum, #{ id := ID, description := Desc, values := VDefs} = E}) ->
+%%     {Mod} = enum_resolve(E),
+%%     #enum_type {
+%%     	id = c_id(ID),
+%%     	description = binarize(Desc),
+%%     	annotations = annotations(E),
+%%     	values = map_2(fun c_enum_val/2, VDefs),	
+%%        resolve_module = Mod
+%%      };
+
+%% Nice to have this than two seperate fuctions for enums.
+x({enum, #{ id := _ID, description := _Desc, values := _VDefs} = E}) ->
+    x({enum, E#{ repr => binary}});
+%% EDIT--End
+
 x({object, #{ id := ID, fields := FieldDefs, description := Desc } = Obj}) ->
     Interfaces = c_interfaces(Obj),
     ModuleResolver = maps:get(resolve_module, Obj, undefined),
@@ -52,6 +69,8 @@ x({input_object, #{ id := ID, fields := FieldDefs, description := Desc } = IO}) 
     #input_object_type { id = c_id(ID), description = binarize(Desc),
          annotations = annotations(IO),
          fields = map_2(fun c_input_value/2, FieldDefs) };
+
+%% Scalar--START
 x({scalar, #{ id := ID,
               description := Desc} = Data}) ->
     {Mod, InFun, OutFun} = scalar_resolve(Data),
@@ -196,6 +215,15 @@ scalar_resolve(#{}) ->
     {undefined,
      fun(X) -> {ok, X} end,
      fun(X) -> {ok, X} end}.
+
+%% Add enum resolve module here!
+%% EDIT--Start
+enum_resolve(#{ resolve_module := Mod }) when is_atom(Mod) ->
+    {Mod};
+enum_resolve(_) ->
+    {graphql_enum_coerce}.
+
+%% EDIT-End
 
 %% -- Annotations
 annotations(#{ annotations := Annots }) -> Annots;

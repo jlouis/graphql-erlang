@@ -350,6 +350,7 @@ inject() ->
     TypeKind = {enum, #{
                   id => '__TypeKind',
                   description => "The different type schemes (kinds)",
+		  resolve_module => graphql_enum_coerce,
                   values => #{
                     'SCALAR' => #{ value => 1, description => "Scalar types" },
                     'OBJECT' => #{ value => 2, description => "Object types" },
@@ -389,6 +390,7 @@ inject() ->
     DirectiveLocation = {enum, #{
                            id => '__DirectiveLocation',
                            description => "Where a given directive can be used",
+			   resolve_module => graphql_enum_coerce,
                            values => #{
                              'QUERY' => #{ value => 1, description => "Queries" },
                              'MUTATION' => #{ value => 2, description => "Mutations" },

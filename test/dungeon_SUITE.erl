@@ -62,7 +62,9 @@ groups() ->
                  nested_field_merge,
                  multiple_monsters_and_rooms,
                  include_directive,
-                 introspection
+                 introspection,
+                 get_operation,
+		 replace_enum_representation
                  ]},
 
     Errors = {errors, [],
@@ -71,7 +73,9 @@ groups() ->
                quoted_input_error,
                input_coerce_error_exception,
                input_coerce_error,
-               invalid_enums
+               invalid_enums,
+               invalid_type_resolution,
+               duplicate_validation
                ]},
     [Dungeon, Errors].
 
@@ -147,7 +151,7 @@ include_directive(Config) ->
         run(Config, <<"GoblinQueryDirectivesInline">>, #{ <<"fat">> => true }),
 
     ok.
-    
+
 unions(Config) ->
     ct:log("Initial query on the schema"),
     Goblin = base64:encode(<<"monster:1">>),
@@ -183,6 +187,18 @@ scalar_output_coercion(Config) ->
             <<"hitpoints">> := 10 }}} =
         run(Config, <<"ScalarOutputCoercion">>, #{ <<"id">> => Goblin }),
     ok.
+
+%% EDIT-Start
+replace_enum_representation(Config) ->
+      ct:log("Test replace enum representation"),
+      Goblin = base64:encode(<<"monster:1">>),
+      #{ data := #{
+  	 <<"goblin">> := #{
+  	     <<"id">> := Goblin,
+  	     <<"mood">> := <<"DODGY">>}}} =
+  	run(Config, <<"ReplaceEnumRepresentation">>, #{ <<"id">> => Goblin }),
+      ok.
+%% EDIT--End.
 
 populate(Config) ->
     ct:log("Create a monster in the dungeon"),
