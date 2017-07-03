@@ -10,6 +10,7 @@
 
 -type value() ::
 	  name()
+    | null
 	| {int, integer(), pos_integer()}
 	| {float, float(), pos_integer()}
 	| {string, binary(), pos_integer()}
