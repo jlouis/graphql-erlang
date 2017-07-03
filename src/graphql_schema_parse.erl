@@ -51,20 +51,24 @@ mk(#{ objects := OM }, #p_type {
        annotations => annotations(Annots),
        resolve_module => Mod,
        interfaces => Implements }};
-mk(_Map, #p_enum {
-            id = ID,
-            annotations = Annots,
-            variants = Vs }) ->
+
+%% EDIT--Enums--Start
+mk(#{ enums := En }, #p_enum { id = ID,
+			       annotations = Annots,
+			       variants = Vs }) ->
     Name = name(ID),
     Description = description(Annots),
     Variants = variants(Vs),
+    Mod = mapping(Name, En),
     {enum, #{
        id => Name,
        repr => binary,
        description => Description,
        annotations => annotations(Annots),
-       values => Variants
-      }};
+       values => Variants,
+       resolve_module => Mod }};
+%% EDIT--Enums--End
+
 mk(_Map, #p_input_object {
             id = ID,
             annotations = Annots,

@@ -45,41 +45,42 @@ end_per_testcase(_Case, _Config) ->
     ok.
 
 groups() ->
-    Dungeon = {dungeon, [],
-               [
-                 unions,
-                 union_errors,
-                 scalar_output_coercion,
-                 populate,
-                 default_query,
-                 direct_input,
-                 nested_input_object,
-                 inline_fragment,
-                 fragment_over_union_interface,
-                 integer_in_float_context,
-                 scalar_as_expression_coerce,
-                 non_null_field,
-                 complex_modifiers,
-                 simple_field_merge,
-                 nested_field_merge,
-                 multiple_monsters_and_rooms,
-                 include_directive,
-                 introspection,
-                 get_operation,
-                 coercion_int_float
-                 ]},
+    Dungeon =
+        {dungeon, [],
+         [unions,
+          union_errors,
+          scalar_output_coercion,
+          populate,
+          default_query,
+          direct_input,
+          nested_input_object,
+          inline_fragment,
+          fragment_over_union_interface,
+          integer_in_float_context,
+          scalar_as_expression_coerce,
+          non_null_field,
+          complex_modifiers,
+          simple_field_merge,
+          nested_field_merge,
+          multiple_monsters_and_rooms,
+          include_directive,
+          introspection,
+          get_operation,
+          coercion_int_float,
+          replace_enum_representation
+         ]},
 
-    Errors = {errors, [],
-              [unknown_variable,
-               missing_fragment,
-               quoted_input_error,
-               input_coerce_error_exception,
-               input_coerce_error,
-               invalid_enums,
-               invalid_type_resolution,
-               duplicate_validation,
-               invalid_list_resolver
-               ]},
+    Errors =
+        {errors, [],
+         [unknown_variable,
+          missing_fragment,
+          quoted_input_error,
+          input_coerce_error_exception,
+          input_coerce_error,
+          invalid_enums,
+          invalid_type_resolution,
+          duplicate_validation,
+          invalid_list_resolver]},
     [Dungeon, Errors].
 
 all() ->
@@ -193,7 +194,7 @@ include_directive(Config) ->
         run(Config, <<"GoblinQueryDirectivesInline">>, #{ <<"fat">> => true }),
 
     ok.
-    
+
 unions(Config) ->
     ct:log("Initial query on the schema"),
     Goblin = base64:encode(<<"monster:1">>),
@@ -229,6 +230,18 @@ scalar_output_coercion(Config) ->
             <<"hitpoints">> := 10 }}} =
         run(Config, <<"ScalarOutputCoercion">>, #{ <<"id">> => Goblin }),
     ok.
+
+%% EDIT-Start
+replace_enum_representation(Config) ->
+      ct:log("Test replace enum representation"),
+      Goblin = base64:encode(<<"monster:1">>),
+      #{ data := #{
+  	 <<"goblin">> := #{
+  	     <<"id">> := Goblin,
+  	     <<"mood">> := <<"DODGY">>}}} =
+  	run(Config, <<"ReplaceEnumRepresentation">>, #{ <<"id">> => Goblin }),
+      ok.
+%% EDIT--End.
 
 populate(Config) ->
     ct:log("Create a monster in the dungeon"),

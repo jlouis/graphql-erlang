@@ -257,13 +257,22 @@ complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Field
               [{Cl,Err,ID,Value}, erlang:get_stacktrace()]),
             err(Path, {output_coerce_abort, ID, Value, {Cl, Err}})
     end;
-complete_value(_Path, _Ctx, #enum_type {}, _Fields, {ok, Value}) when is_binary(Value) ->
-    %% TODO: Coercion handling for enumerated values!
-    {ok, Value, []};
-complete_value(_Path, _Ctx, #enum_type { values = Values }, _Fields, {ok, Value}) when is_integer(Value) ->
-    %% TODO: Coercion handling for enumerated values!
-    #enum_value { val = Result } = maps:get(Value, Values),
-    {ok, Result, []};
+
+%% EDIT--Start
+complete_value(_Path, _Ctx, #enum_type { id = ID, resolve_module = RM}, _Fields, {ok, Value}) ->
+    try RM:output(ID, Value) of
+	{ok, Result} -> complete_value_enum(_Path, ID, Result);
+	{error, Reason} ->
+	    err(_Path, {ID, Value, Reason})
+    catch
+	Cl:Err ->
+	    error_logger:error_msg(
+	      "crash during value completion: ~p, stacktrace: ~p~n",
+	      [{Cl, Err, ID, Value}, erlang:get_stacktrace()]),
+	     err(_Path, {coerce_crash, ID, Value, {Cl, Err}})
+    end;
+%% EDIT--End
+
 complete_value(Path, Ctx, #interface_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
     complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value});
 complete_value(Path, Ctx, #union_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
@@ -301,6 +310,11 @@ resolve_abstract_type(Resolver, Value) when is_function(Resolver, 1) ->
               [{Cl,Err}, erlang:get_stacktrace()]),
            {error, {resolve_type_crash, {Cl,Err}}}
     end.
+
+%% EDIT-Start
+complete_value_enum(_path, _ID, Result) when is_binary(Result) ->   {ok, Result, []};
+complete_value_enum( Path,  ID, Value) -> err(Path, {ID, Value, not_enum_type}). 
+%% EDIT-End
 
 complete_value_scalar(_Path, _ID, Result) when is_binary(Result) -> {ok, Result, []};
 complete_value_scalar(_Path, _ID, Result) when is_number(Result) -> {ok, Result, []};

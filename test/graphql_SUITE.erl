@@ -173,6 +173,7 @@ parse_schema(Config) ->
                                 interfaces => #{
                                  'Node' => node_resource
                                  },
+				enums => #{default => enum_resource}, 
                                 unions => #{
                                  'Thing' => node_resource
                                  },

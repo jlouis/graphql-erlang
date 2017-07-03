@@ -141,7 +141,7 @@ get_character(ID) ->
 get_friends(#{ <<"friends">> := Friends }) ->
     {ok, [get_character(F) || F <- Friends]}.
     
-get_hero(_Ctx, #{ <<"episode">> := {enum, <<"EMPIRE">>} }) ->
+get_hero(_Ctx, #{ <<"episode">> :=  <<"EMPIRE">> }) ->
     {Humans, _} = star_wars(),
     {ok, maps:get(<<"1000">>, Humans)};
 get_hero(_Ctx, _) ->

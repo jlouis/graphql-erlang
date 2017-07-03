@@ -21,6 +21,7 @@ execute(_Ctx, _, <<"introduceMonster">>, #{ <<"input">> := Input }) ->
        <<"plushFactor">> := PF
     } = Input,
     Ss = input_stats(Stats),
+    {enum, _} = M,
     {atomic, Monster} = dungeon:insert(#monster {
     	properties = Props,
     	plush_factor = PF,

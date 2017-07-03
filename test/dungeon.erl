@@ -78,13 +78,14 @@ populate() ->
         name = <<"goblin">>,
         color = #{ r => 65, g => 146, b => 75},
         hitpoints = 10,
-        mood = <<"DODGY">>,
+        mood = {enum, #{ mood => "dodgy" }},
         stats = [#stats{}] }),
    ok.
 
 mapping_rules() ->
     #{
        scalars => #{ default => dungeon_scalar },
+       enums => #{ 'Mood' => dungeon_enum, default => graphql_enum_coerce },
        interfaces => #{ default => dungeon_type },
        unions => #{ default => dungeon_type },
        objects => #{

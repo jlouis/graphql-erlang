@@ -107,8 +107,8 @@ check_param(Path, #enum_type{} = ETy, {enum, V}) when is_binary(V) ->
     check_param(Path, ETy, V);
 check_param(Path, #enum_type { id = Ty }, V) when is_binary(V) ->
     case graphql_schema:lookup_enum_type(V) of
-        #enum_type { id = Ty, repr = Repr } ->
-            {replace, enum_representation(Repr, V)};
+        #enum_type { id = Ty } = Et ->
+            input_coercer(Path, Et, V);
         not_found ->
             err(Path, {enum_not_found, Ty, V});
         OtherTy ->
@@ -196,15 +196,29 @@ input_coercer(Path, #scalar_type { id = ID, resolve_module = RM}, Val) ->
         {error, Reason} -> err(Path, {input_coercion, ID, Val, Reason})
     catch
         Cl:Err ->
-            error_logger:error_report(
-              [
-               {input_coercer, ID, Val},
-               {error, Cl, Err},
-               {stack, erlang:get_stacktrace()}
-              ]),
+            error_report(ID, Val, Cl, Err),
+            err(Path, {input_coerce_abort, {Cl, Err}})
+
+    end;
+input_coercer(Path, #enum_type { id = ID, resolve_module = undefined }, Val) ->
+    {ok, Val};
+input_coercer(Path, #enum_type { id = ID, resolve_module = RM}, Val) ->
+    try RM:input(ID, Val) of
+        {ok, NewVal} -> {replace, NewVal};
+        {error, Reason} -> graphql_err:abort(Path, {input_coercion, ID, Val, Reason})
+    catch
+        Cl:Err ->
+            error_report(ID, Val, Cl, Err),
             err(Path, {input_coerce_abort, {Cl, Err}})
     end.
-            
+
+error_report(ID, Val, Cl, Err) ->
+  error_logger:error_report(
+    [
+     {input_coercer, ID, Val},
+     {error, Cl, Err},
+     {stack, erlang:get_stacktrace()}
+    ]).
 
 %% -- FRAGMENTS --------------------------------
 
@@ -436,10 +450,6 @@ valid_scalar_value(I) when is_integer(I) -> true;
 valid_scalar_value(true) -> true;
 valid_scalar_value(false) -> true;
 valid_scalar_value(_) -> false.
-
-enum_representation(binary, V) -> V;
-enum_representation(atom, V) -> binary_to_atom(V, utf8);
-enum_representation(tagged, V) -> {enum, V}.
 
 id(#op { id = ID }) -> ID.
 

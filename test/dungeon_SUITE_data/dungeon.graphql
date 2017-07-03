@@ -49,6 +49,13 @@ query ScalarOutputCoercion($id : Id!) {
   }
 }
 
+query ReplaceEnumRepresentation($id : Id!) {
+  goblin: monster(id: $id) {
+    id
+    mood
+  }
+}
+
 query MultipleMonsters($ids : [Id!]) {
     monsters(ids: $ids) {
         id
