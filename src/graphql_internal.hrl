@@ -69,7 +69,7 @@
 	id = 'ROOT' :: name() | 'ROOT',
 	vardefs = [] :: [#vardef{}],
 	directives = [] :: [#directive{}],
-	selection_set = [] :: [#field{}],
+	selection_set = [] :: [#field{} | #frag_spread{}],
 	schema = undefined :: 'undefined' | any()
          }).
 -type op() :: #op{}.
