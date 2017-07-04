@@ -84,8 +84,6 @@ lookup_field(#field { id = ID }, Obj) ->
 
 lookup_field_name(<<"__typename">>, _) -> typename;
 lookup_field_name(N, #object_type { fields = FS }) ->
-    maps:get(N, FS, not_found);
-lookup_field_name(N, #interface_type { fields = FS }) ->
     maps:get(N, FS, not_found).
 
 view_include_skip_directives(_Ctx, []) -> include;
