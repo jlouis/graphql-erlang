@@ -62,7 +62,6 @@ mk(#{ enums := En }, #p_enum { id = ID,
     Mod = mapping(Name, En),
     {enum, #{
        id => Name,
-       repr => binary,
        description => Description,
        annotations => annotations(Annots),
        values => Variants,

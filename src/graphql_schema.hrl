@@ -24,7 +24,6 @@
 -record(enum_type, {
           id :: binary(),
           description :: binary(),
-          repr = tagged :: tagged | atom | binary,
 	  resolve_module = undefined :: mod(),
           annotations = #{} :: #{ binary() => any() },
           values :: #{ integer() => enum_value() }
