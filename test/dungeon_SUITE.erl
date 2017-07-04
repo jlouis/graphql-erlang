@@ -231,7 +231,6 @@ scalar_output_coercion(Config) ->
         run(Config, <<"ScalarOutputCoercion">>, #{ <<"id">> => Goblin }),
     ok.
 
-%% EDIT-Start
 replace_enum_representation(Config) ->
       ct:log("Test replace enum representation"),
       Goblin = base64:encode(<<"monster:1">>),
@@ -241,7 +240,6 @@ replace_enum_representation(Config) ->
   	     <<"mood">> := <<"DODGY">>}}} =
   	run(Config, <<"ReplaceEnumRepresentation">>, #{ <<"id">> => Goblin }),
       ok.
-%% EDIT--End.
 
 populate(Config) ->
     ct:log("Create a monster in the dungeon"),

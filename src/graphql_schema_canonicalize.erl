@@ -195,14 +195,10 @@ scalar_resolve(#{}) ->
      fun(X) -> {ok, X} end,
      fun(X) -> {ok, X} end}.
 
-%% Add enum resolve module here!
-%% EDIT--Start
 enum_resolve(#{ resolve_module := Mod }) when is_atom(Mod) ->
     {Mod};
 enum_resolve(_) ->
     {graphql_enum_coerce}.
-
-%% EDIT-End
 
 %% -- Annotations
 annotations(#{ annotations := Annots }) -> Annots;

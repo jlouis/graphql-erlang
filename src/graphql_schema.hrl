@@ -20,7 +20,6 @@
          }).
 -type enum_value() :: #enum_value{}.
 
-%% EDIT--Enums--Start
 -record(enum_type, {
           id :: binary(),
           description :: binary(),
@@ -29,7 +28,6 @@
           values :: #{ integer() => enum_value() }
          }).
 -type enum_type() :: #enum_type{}.
-%% EDIT--Enums--End
 
 -record(interface_type, {
           id :: binary(),
