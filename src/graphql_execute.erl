@@ -437,10 +437,14 @@ default_resolver(#{ field := Field}, Cur, _Args) ->
 %% -- OUTPUT COERCION ------------------------------------
 
 output_coerce_type(id) ->
-    #scalar_type { id = id, output_coerce = fun
-        (B) when is_binary(B) -> {ok, B};
-        (_) -> {ok, null}
-      end };
+    #scalar_type { id = <<"ID">>,
+                   input_coerce = fun ?MODULE:builtin_input_coercer/1,
+                   description = <<"Builtin output coercer type">>,
+                   output_coerce =
+                       fun
+                           (B) when is_binary(B) -> {ok, B};
+                           (_) -> {ok, null}
+                       end };
 output_coerce_type(string) ->
     #scalar_type { id = <<"String">>,
                    input_coerce = fun ?MODULE:builtin_input_coercer/1,
