@@ -27,7 +27,8 @@ execute_request(InitialCtx, {document, Operations}) ->
         {ok, #op { ty = {mutation, _} } = Op } ->
             execute_mutation(Ctx#{ op_type => mutation }, Op);
         {error, Reason} ->
-            complete_top_level(null, [Reason])
+            {error, Errs} = err([], Reason),
+            complete_top_level(undefined, Errs)
     end.
 
 complete_top_level(Res, []) ->
