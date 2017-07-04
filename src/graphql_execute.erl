@@ -6,6 +6,7 @@
 -export([x/1, x/2]).
 -export([default_resolver/3]).
 -export([err_msg/1]).
+-export([builtin_input_coercer/1]).
 
 -spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
 x(X) -> x(#{ params => #{} }, X).
@@ -441,36 +442,58 @@ output_coerce_type(id) ->
         (_) -> {ok, null}
       end };
 output_coerce_type(string) ->
-    #scalar_type { id = string, output_coerce = fun
-        (B) when is_binary(B) -> {ok, B};
-        (_) -> {ok, null}
-      end };
+    #scalar_type { id = <<"String">>,
+                   input_coerce = fun ?MODULE:builtin_input_coercer/1,
+                   description = <<"Builtin output coercer type">>,
+                   output_coerce =
+                       fun
+                           (B) when is_binary(B) -> {ok, B};
+                           (_) -> {ok, null}
+                       end
+                 };
 output_coerce_type(bool) ->
-    #scalar_type { id = bool, output_coerce = fun
-        (true) -> {ok, true};
-        (<<"true">>) -> {ok, true};
-        (false) -> {ok, false};
-        (<<"false">>) -> {ok, false};
-        (_) -> {ok, null}
-      end };
+    #scalar_type { id = <<"Bool">>,
+                   input_coerce = fun ?MODULE:builtin_input_coercer/1,
+                   description = <<"Builtin output coercer type">>,
+                   output_coerce =
+                       fun
+                           (true) -> {ok, true};
+                           (<<"true">>) -> {ok, true};
+                           (false) -> {ok, false};
+                           (<<"false">>) -> {ok, false};
+                           (_) -> {ok, null}
+                       end
+                 };
 output_coerce_type(int) ->
-    #scalar_type { id = int, output_coerce = fun
-        (I) when is_integer(I) -> {ok, I};
-        (_) -> {ok, null}
-      end };
+    #scalar_type { id = <<"Int">>,
+                   input_coerce = fun ?MODULE:builtin_input_coercer/1,
+                   description = <<"Builtin output coercer type">>,
+                   output_coerce =
+                       fun
+                           (I) when is_integer(I) -> {ok, I};
+                           (_) -> {ok, null}
+                       end
+                 };
 output_coerce_type(float) ->
     Coercer = fun
                   (F) when is_float(F) -> {ok, F};
                   (I) when is_integer(I) -> {ok, float(I)};
                   (_) -> {ok, null}
               end,
-    #scalar_type { id = float, output_coerce = Coercer };
+    #scalar_type { id = <<"Float">>,
+                   output_coerce = Coercer,
+                   input_coerce = fun ?MODULE:builtin_input_coercer/1,
+                   description = <<"Builtin output coercer type">>
+                 };
 output_coerce_type(#scalar_type{} = SType) -> SType;
 output_coerce_type(UserDefined) when is_binary(UserDefined) ->
     case graphql_schema:lookup(UserDefined) of
         #scalar_type{} = SType -> SType;
         not_found -> not_found
     end.
+
+builtin_input_coercer(X) ->
+    {ok, X}.
 
 %% -- LOWER LEVEL RESOLVERS ----------------
 
