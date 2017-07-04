@@ -64,14 +64,14 @@
          }).
 -type directive() :: #directive{}.
 
--record(op, {
-	ty :: undefined | operation_type(),
-	id = 'ROOT' :: name() | 'ROOT',
-	vardefs = [] :: [#vardef{}],
-	directives = [] :: [#directive{}],
-	selection_set = [] :: [#field{} | #frag_spread{}],
-	schema = undefined :: 'undefined' | any()
-         }).
+-record(op,
+        { ty :: undefined | operation_type(),
+          id = 'ROOT' :: name() | 'ROOT',
+          vardefs = [] :: [#vardef{}],
+          directives = [] :: [#directive{}],
+          selection_set = [] :: [#field{} | #frag_spread{}],
+          schema = undefined :: 'undefined' | any()
+        }).
 -type op() :: #op{}.
 
 -type ast() :: {document, [#op{}]}.
