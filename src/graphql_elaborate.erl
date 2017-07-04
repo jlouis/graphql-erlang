@@ -80,7 +80,7 @@ op(Path, #op { vardefs = VDefs, directives = [] } = Op) ->
     RootSchema = root(Path, Op),
     case graphql_schema:lookup(RootSchema) of
         not_found ->
-            err([Op | Path], {type_not_found, graphql_ast:name(RootSchema)});
+            err([Op | Path], {type_not_found, RootSchema});
         #object_type{ fields = Fields } = Obj ->
             fields([Op | Path], Op#op{ schema = Obj, vardefs = var_defs([Op | Path], VDefs) }, Fields)
     end;
