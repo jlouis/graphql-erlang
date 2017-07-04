@@ -161,30 +161,30 @@ star_wars() ->
     	id => <<"1000">>,
     	name => <<"Luke Skywalker">>,
     	friends => [<<"1002">>,<< "1003">>, <<"2000">>, <<"2001">> ],
-    	appearsIn => [ 4, 5, 6 ],
+    	appearsIn => resolve_module([ 4, 5, 6 ]),
     	homePlanet => <<"Tatooine">> },
     Vader = #{
     	id => <<"1001">>,
     	name => <<"Darth Vader">>,
     	friends => <<"1004">>,
-    	appearsIn => [ 4, 5, 6 ],
+    	appearsIn => resolve_module([ 4, 5, 6 ]),
     	homePlanet => <<"Tatooine">> },
     Han = #{
     	id => <<"1002">>,
     	name => <<"Han Solo">>,
     	friends => [<<"1000">>, <<"1003">>, <<"2001">>],
-    	appearsIn => [ 4, 5, 6] },
+    	appearsIn => resolve_module([ 4, 5, 6])},
     Leia = #{
     	id => <<"1003">>,
     	name => <<"Leia Organa">>,
     	friends => [<<"1000">>, <<"1002">>, <<"2000">>, <<"2001">> ],
-    	appearsIn => [ 4, 5, 6],
+    	appearsIn => resolve_module([ 4, 5, 6]),
     	homePlanet => <<"Alderaan">> },
     Tarkin = #{
     	id => <<"1004">>,
     	name => <<"Wilhuff Tarkin">>,
     	friends => [ <<"1001">> ],
-    	appearsIn => [ 4 ] },
+    	appearsIn => resolve_module([ 4 ]) },
     
     HumanData = #{
     	<<"1000">> => c(Luke),
@@ -198,7 +198,7 @@ star_wars() ->
     	id => <<"2000">>,
     	name => <<"C-3PO">>,
     	friends => [ <<"1000">>, <<"1002">>, <<"1003">>, <<"2001">> ],
-    	appearsIn => [ 4, 5, 6 ],
+    	appearsIn => resolve_module([ 4, 5, 6 ]),
     	primaryFunction => <<"Protocol">>
     },
     
@@ -206,7 +206,7 @@ star_wars() ->
     	id => <<"2001">>,
     	name => <<"R2-D2">>,
     	friends => [ <<"1000">>, <<"1002">>, <<"1003">> ],
-    	appearsIn => [ 4, 5, 6 ],
+    	appearsIn => resolve_module([ 4, 5, 6 ]),
     	primaryFunction => <<"AstroMech">>
     },
     	
@@ -221,3 +221,29 @@ c(M) ->
     Unpacked = maps:to_list(M),
     maps:from_list(
     	[{atom_to_binary(K, utf8), V} || {K, V} <- Unpacked]).
+
+resolve_arg(X) ->
+    case X of
+	<<"NEWHOPE">> ->
+ 	    4;
+ 	<<"EMPIRE">> ->
+ 	    5;
+ 	<<"JEDI">> ->
+ 	    6;
+ 	'_' ->
+ 	    {error, {invalid_episode_string, X}};
+	4 ->
+  	    <<"NEWHOPE">>;
+ 	5 ->
+  	    <<"EMPIRE">>;
+  	6 ->
+  	    <<"JEDI">>;
+  	_ ->
+  	    {error, {invalid_episode_int, X}}
+     end.
+
+map(F, [H|T]) -> [F(H)|map(F, T)];
+map(_F, []) -> [].
+
+resolve_module(L) when is_list(L) ->
+    map(fun(X) -> resolve_arg(X) end, L).

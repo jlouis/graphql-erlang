@@ -70,22 +70,35 @@ inject() ->
     ok = graphql:insert_schema_definition(Root),
     ok.
 
--define(RED, 0).
--define(GREEN, 1).
--define(BLUE, 2).
 
-color_from_int(0) -> 0;
-color_from_int(1) -> 1;
-color_from_int(2) -> 2.
-
-color_from_enum(En) ->
-    case En of
-        <<"RED">> -> ?RED;
-        <<"GREEN">> -> ?GREEN;
-        <<"BLUE">> -> ?BLUE
+resolve_module_enum(X) ->
+    case X of
+  	<<"RED">> ->
+ 	    <<"RED">>;
+ 	<<"GREEN">> ->
+ 	    <<"GREEN">>;
+ 	<<"BLUE">> ->
+ 	    <<"BLUE">>
     end.
 
-color_from_string(X) -> color_from_enum(X).
+resolve_module_int(X) ->
+    case X of
+  	0 ->
+ 	    <<"RED">>;
+ 	1 ->
+ 	    <<"GREEN">>;
+ 	2 ->
+ 	    <<"BLUE">>;
+	<<"RED">> ->
+ 	    0;
+ 	<<"GREEN">> ->
+ 	    1;
+	<<"BLUE">> ->
+	    2
+    end.
+
+resolve_module_str(X) ->
+    resolve_module_enum(X).
 
 color_enum(_Ctx, _, #{
     <<"fromEnum">> := null,
@@ -94,22 +107,26 @@ color_enum(_Ctx, _, #{
 color_enum(_Ctx, _, #{
     <<"fromEnum">> := X,
     <<"fromInt">> := null,
-    <<"fromString">> := null}) -> {ok, color_from_enum(X)};
+    <<"fromString">> := null}) -> {ok, resolve_module_enum(X)};
 color_enum(_Ctx, _, #{
     <<"fromEnum">> := null,
     <<"fromInt">> := X,
-    <<"fromString">> := null}) -> {ok, color_from_int(X)};
+    <<"fromString">> := null}) -> {ok, resolve_module_int(X)};
 color_enum(_Ctx, _, #{
     <<"fromEnum">> := null,
     <<"fromInt">> := null,
-    <<"fromString">> := X}) -> {ok, color_from_string(X)}.
+    <<"fromString">> := X}) -> {ok, resolve_module_str(X)}.
 
 color_int(_Ctx, _, #{
     <<"fromEnum">> := null,
     <<"fromInt">> := null }) -> {ok, null};
 color_int(_Ctx, _, #{
     <<"fromEnum">> := null,
-    <<"fromInt">> := X }) when X /= null -> {ok, color_from_int(X)};
+    <<"fromInt">> := X}) when X /= null -> {ok, resolve_module_int(X)};
 color_int(_Ctx, _, #{
     <<"fromEnum">> := X,
-    <<"fromInt">> := null }) when X /= null -> {ok, color_from_enum(X)}.
+    <<"fromInt">> := null }) when X /= null -> {ok, resolve_module_int(X)}.
+
+
+
+
