@@ -90,7 +90,7 @@
           annotations = [] :: [annotation()],
           id :: name(),
           args = [] :: any(),
-          type :: atom(),
+          type :: graphql_type(),
           directives = [] :: [any()]
           }).
 -type p_field_def() :: #p_field_def{}.
