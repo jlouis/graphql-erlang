@@ -34,8 +34,7 @@
 -record(interface_type, {
           id :: binary(),
           description :: binary(),
-          resolve_module :: mod(),
-          resolve_type :: fun ((any()) -> {ok, atom()} | {error, term()}),
+          resolve_type :: mod() | fun ((any()) -> {ok, atom()} | {error, term()}),
           annotations = #{} :: #{ binary() => any() },
           fields :: #{ binary() => schema_field() }
          }).
@@ -44,8 +43,7 @@
 -record(union_type, {
           id :: binary(),
           description :: binary(),
-          resolve_module :: mod(),
-          resolve_type :: fun ((any()) -> {ok, atom()} | {error, term()}),
+          resolve_type :: mod() | fun ((any()) -> {ok, atom()} | {error, term()}),
           annotations = #{} :: #{ binary() => any() },
           types :: [binary()]
          }).
