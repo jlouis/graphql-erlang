@@ -1,7 +1,7 @@
 %% GQL AST Records and types
 
 %% All identifiers in the AST are given like this
--type name() :: {name, binary(), pos_integer()}.
+-type name() :: {name, pos_integer(), binary()}.
 -type tycond() :: name() | binary() | {scalar, string | int | float | id | bool}.
 -type graphql_type() ::
           {non_null, {list, tycond()}}
