@@ -45,7 +45,6 @@ name({var, N}) -> name(N).
 id(E) ->
     case id_(E) of
         {name, _, N} -> N;
-        B when is_binary(B) -> B;
         '...' -> <<"...">>;
         'ROOT' -> <<"ROOT">>
     end.
