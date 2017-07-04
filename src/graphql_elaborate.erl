@@ -268,6 +268,7 @@ field_lookup(Path, #enum_type{}, _SSet) ->
     err(Path, selection_on_enum).
 
 %% -- Error Handling
+-spec err(term(), term()) -> no_return().
 err(Path, Reason) ->
     graphql_err:abort(Path, elaborate, Reason).
 
