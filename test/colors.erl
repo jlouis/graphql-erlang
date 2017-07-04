@@ -71,34 +71,14 @@ inject() ->
     ok.
 
 
-resolve_module_enum(X) ->
-    case X of
-  	<<"RED">> ->
- 	    <<"RED">>;
- 	<<"GREEN">> ->
- 	    <<"GREEN">>;
- 	<<"BLUE">> ->
- 	    <<"BLUE">>
-    end.
+resolve_input({enum, X}) when is_binary(X) -> resolve_input(X);
+resolve_input(<<"RED">>) -> 0;
+resolve_input(<<"GREEN">>) -> 1;
+resolve_input(<<"BLUE">>) -> 2.
 
-resolve_module_int(X) ->
-    case X of
-  	0 ->
- 	    <<"RED">>;
- 	1 ->
- 	    <<"GREEN">>;
- 	2 ->
- 	    <<"BLUE">>;
-	<<"RED">> ->
- 	    0;
- 	<<"GREEN">> ->
- 	    1;
-	<<"BLUE">> ->
-	    2
-    end.
-
-resolve_module_str(X) ->
-    resolve_module_enum(X).
+resolve_output(0) -> <<"RED">>;
+resolve_output(1) -> <<"GREEN">>;
+resolve_output(2) -> <<"BLUE">>.
 
 color_enum(_Ctx, _, #{
     <<"fromEnum">> := null,
@@ -107,25 +87,28 @@ color_enum(_Ctx, _, #{
 color_enum(_Ctx, _, #{
     <<"fromEnum">> := X,
     <<"fromInt">> := null,
-    <<"fromString">> := null}) -> {ok, resolve_module_enum(X)};
+    <<"fromString">> := null}) -> {ok, resolve_output(
+                                         resolve_input(X))};
 color_enum(_Ctx, _, #{
     <<"fromEnum">> := null,
     <<"fromInt">> := X,
-    <<"fromString">> := null}) -> {ok, resolve_module_int(X)};
+    <<"fromString">> := null})
+  when X >= 0 andalso X < 3 -> {ok, resolve_output(X)};
 color_enum(_Ctx, _, #{
     <<"fromEnum">> := null,
     <<"fromInt">> := null,
-    <<"fromString">> := X}) -> {ok, resolve_module_str(X)}.
+    <<"fromString">> := X}) -> {ok, resolve_output(
+                                      resolve_input(X))}.
 
 color_int(_Ctx, _, #{
     <<"fromEnum">> := null,
     <<"fromInt">> := null }) -> {ok, null};
 color_int(_Ctx, _, #{
     <<"fromEnum">> := null,
-    <<"fromInt">> := X}) when X /= null -> {ok, resolve_module_int(X)};
+    <<"fromInt">> := X}) when X /= null -> {ok, X};
 color_int(_Ctx, _, #{
     <<"fromEnum">> := X,
-    <<"fromInt">> := null }) when X /= null -> {ok, resolve_module_int(X)}.
+    <<"fromInt">> := null }) when X /= null -> {ok, resolve_input(X)}.
 
 
 
