@@ -517,17 +517,6 @@ value(Ctx, {list, Ty}, Val) ->
     [value(Ctx, Ty, V) || V <- Vals];
 value(Ctx, Ty, Val) ->
     case Ty of
-        #enum_type { repr = Repr } ->
-            case Val of
-                {enum, E} ->
-                    N = name(E),
-                    value_enum(N, Repr);
-                E when is_binary(E) ->
-                    N = name(E),
-                    value_enum(N, Repr);
-                null ->
-                    null
-            end;
         #input_object_type { fields = FieldEnv } ->
             Obj = case Val of
                       {object, O} -> O;
@@ -539,6 +528,8 @@ value(Ctx, Ty, Val) ->
             %% At this point, scalar conversion has happened earlier, so any
             %% erlang term is a value scalar value. Just return the value:
             Val;
+        #enum_type {} ->
+            Val;
         {scalar, ScalarTy} ->
             %% Built-in scalars are currently handled specially
             value_scalar(ScalarTy, Val);
@@ -546,10 +537,6 @@ value(Ctx, Ty, Val) ->
             LoadedTy = graphql_schema:get(Bin),
             value(Ctx, LoadedTy, Val)
     end.
-
-value_enum(N, binary) -> N;
-value_enum(N, atom) -> binary_to_atom(N, utf8);
-value_enum(N, tagged) -> {enum, N}.
 
 value_scalar(string, null) -> null;
 value_scalar(string, S) when is_binary(S) -> S;
