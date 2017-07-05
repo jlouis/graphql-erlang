@@ -184,7 +184,7 @@ input_coercer(Path, #scalar_type { id = ID, input_coerce = IC, resolve_module = 
         Cl:Err ->
             error_logger:error_report(
               [
-               {input_coercer, graphql_ast:name(ID), Val},
+               {input_coercer, ID, Val},
                {error, Cl, Err},
                {stack, erlang:get_stacktrace()}
               ]),
@@ -455,6 +455,7 @@ id(#op { id = ID }) -> ID.
 
 %% -- Error handling -------------------------------------
 
+-spec err([term()], term()) -> no_return().
 err(Path, Msg) ->
     graphql_err:abort(Path, type_check, Msg).
 

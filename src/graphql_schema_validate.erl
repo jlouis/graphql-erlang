@@ -189,7 +189,9 @@ lookup(Key) ->
     
 err(Reason) -> throw({invalid, Reason}).
 
-format_error(X) -> iolist_to_binary(err_fmt(X)).
+format_error(X) -> binary_to_list(
+                     iolist_to_binary(
+                       err_fmt(X))).
 
 err_fmt({schema_validation, Type, {not_found, NF}}) ->
     io_lib:format(

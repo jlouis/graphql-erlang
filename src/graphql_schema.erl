@@ -49,7 +49,8 @@ insert(S, #{ canonicalize := true }) ->
             case gen_server:call(?MODULE, {insert, Rec}) of
                 true -> ok;
                 false ->
-                    {error, already_exists, id(S)}
+                    Identify = fun({_, #{ id := ID }}) -> ID end,
+                    {error, already_exists, Identify(S)}
             end
     catch
         Class:Reason ->
