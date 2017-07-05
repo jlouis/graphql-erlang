@@ -1,5 +1,4 @@
 %% Schema definitions
-
 -type mod() :: atom().
 -type schema_base_type() :: scalar_type()
                           | binary()

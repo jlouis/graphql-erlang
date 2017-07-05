@@ -1,6 +1,6 @@
 {application, graphql,
  [{description, "Application for handling GraphQL queries"},
-  {vsn, "0.8.0"},
+  {vsn, "0.9.0"},
   {registered, []},
   {applications,
    [kernel,
