@@ -26,33 +26,15 @@ x({union, #{ id := ID, description := Desc, types := Types } = U}) ->
         resolve_type = Resolver
     };
 
-
-%% EDIT--Start
-x({enum, #{ id := ID, description := Desc, values := VDefs, repr := Repr} = E}) ->
+x({enum, #{ id := ID, description := Desc, values := VDefs} = E}) ->
     {Mod} = enum_resolve(E),
     #enum_type {
     	id = c_id(ID),
     	description = binarize(Desc),
     	annotations = annotations(E),
     	values = map_2(fun c_enum_val/2, VDefs),
-    	repr = c_repr(Repr),
         resolve_module = Mod
      };
-
-%% x({enum, #{ id := ID, description := Desc, values := VDefs} = E}) ->
-%%     {Mod} = enum_resolve(E),
-%%     #enum_type {
-%%     	id = c_id(ID),
-%%     	description = binarize(Desc),
-%%     	annotations = annotations(E),
-%%     	values = map_2(fun c_enum_val/2, VDefs),	
-%%        resolve_module = Mod
-%%      };
-
-%% Nice to have this than two seperate fuctions for enums.
-x({enum, #{ id := _ID, description := _Desc, values := _VDefs} = E}) ->
-    x({enum, E#{ repr => binary}});
-%% EDIT--End
 
 x({object, #{ id := ID, fields := FieldDefs, description := Desc } = Obj}) ->
     Interfaces = c_interfaces(Obj),
@@ -105,9 +87,6 @@ c_enum_val(K, #{ value := V, description := Desc } = Map) ->
         description = binarize(Desc),
         deprecation = deprecation(Map) }}.
 
-c_repr(atom) -> atom;
-c_repr(binary) -> binary;
-c_repr(tagged) -> tagged.
 
 %% -- FIELDS ----------
 
@@ -216,14 +195,10 @@ scalar_resolve(#{}) ->
      fun(X) -> {ok, X} end,
      fun(X) -> {ok, X} end}.
 
-%% Add enum resolve module here!
-%% EDIT--Start
 enum_resolve(#{ resolve_module := Mod }) when is_atom(Mod) ->
     {Mod};
 enum_resolve(_) ->
     {graphql_enum_coerce}.
-
-%% EDIT-End
 
 %% -- Annotations
 annotations(#{ annotations := Annots }) -> Annots;
