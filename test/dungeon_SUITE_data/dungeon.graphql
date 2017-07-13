@@ -195,6 +195,9 @@ mutation IntroduceMonster($input: IntroduceMonsterInput!) {
     clientMutationId
     monster {
       ...FatMonsterFragment
+      stats {
+          attack
+      }
     }
   }
 }

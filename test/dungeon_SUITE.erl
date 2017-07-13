@@ -343,7 +343,8 @@ direct_input(Config) ->
                 <<"color">> := <<"#FFFFFF">>,
                 <<"hitpoints">> := 5,
                 <<"properties">> := [<<"DRAGON">>, <<"MURLOC">>],
-                <<"mood">> := <<"AGGRESSIVE">>}
+                <<"mood">> := <<"AGGRESSIVE">>,
+                <<"stats">> := null}
         }}} = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input}),
     ok.
 
