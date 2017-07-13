@@ -53,6 +53,7 @@ groups() ->
           populate,
           default_query,
           direct_input,
+          fixed_input,
           nested_input_object,
           inline_fragment,
           fragment_over_union_interface,
@@ -346,6 +347,22 @@ direct_input(Config) ->
                 <<"mood">> := <<"AGGRESSIVE">>,
                 <<"stats">> := null}
         }}} = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input}),
+    ok.
+
+fixed_input(Config) ->
+    #{ data := #{
+        <<"introduceMonsterFatFixedInput">> := #{
+            <<"clientMutationId">> := "123",
+            <<"monster">> := #{
+                <<"id">> := _,
+                <<"name">> := <<"Yellow Slime">>,
+                <<"color">> := <<"#ffff33">>,
+                <<"hitpoints">> := 1337,
+                <<"plushFactor">> := 0.01,
+                <<"properties">> := [],
+                <<"mood">> := <<"DODGY">>,
+               <<"stats">> := null}
+        }}} = run(Config, <<"IntroduceMonsterFatFixedInput">>, #{ }),
     ok.
 
 nested_input_object(Config) ->

@@ -217,6 +217,25 @@ mutation IntroduceMonsterFat($input: IntroduceMonsterInput!) {
   }
 }
 
+mutation IntroduceMonsterFatFixedInput {
+    introduceMonster(input: {
+      clientMutationId: "123",
+      name: "Yellow Slime",
+      color: "#ffff33",
+      hitpoints: 1337
+    }) {
+      clientMutationId,
+      monster {
+        ...FatMonsterFragment
+        plushFactor
+        properties
+        stats {
+          attack
+        }
+      }
+    }
+}
+
 mutation IntroduceMonsterFatExpr {
   introduceMonster(input:
     { clientMutationId: "123",
