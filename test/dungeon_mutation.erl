@@ -67,7 +67,7 @@ execute(_Ctx, _, <<"spawnMinion">>, #{ <<"input">> := Input }) ->
     
 
 %% -- INTERNAL FUNCTIONS ----------------------------
-input_stats(null) -> [];
+input_stats(null) -> null;
 input_stats([]) -> [];
 input_stats([#{ <<"attack">> := Attack,
                 <<"shellScripting">> := SHScript,
