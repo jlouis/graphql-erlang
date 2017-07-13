@@ -351,12 +351,12 @@ direct_input(Config) ->
 
 fixed_input(Config) ->
     #{ data := #{
-        <<"introduceMonsterFatFixedInput">> := #{
-            <<"clientMutationId">> := "123",
+        <<"introduceMonster">> := #{
+            <<"clientMutationId">> := <<"123">>,
             <<"monster">> := #{
                 <<"id">> := _,
                 <<"name">> := <<"Yellow Slime">>,
-                <<"color">> := <<"#ffff33">>,
+                <<"color">> := <<"#FFFF33">>,
                 <<"hitpoints">> := 1337,
                 <<"plushFactor">> := 0.01,
                 <<"properties">> := [],
