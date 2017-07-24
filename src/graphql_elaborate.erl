@@ -94,7 +94,7 @@ vdef(#vardef { ty = Ty }) ->
     catch
         throw:Err -> Err
     end.
-    
+
 vdef_type({non_null, Ty}) ->
     {non_null, vdef_type(Ty)};
 vdef_type({list, Ty}) ->
@@ -287,12 +287,12 @@ err_msg({unknown_field, F}) ->
 err_msg(unknown_field) ->
     ["The query refers to a field which is not known"];
 err_msg({unknown_argument, N}) ->
-    ["The query refers to an argument, ", N, ", which is not present int the schema"];
+    ["The query refers to an argument, ", N, ", which is not present in the schema"];
 err_msg({unknown_directive, Dir}) ->
     ["The query uses a directive, ", Dir, ", which is unknown to this GraphQL server"];
 err_msg(selection_on_scalar) ->
     ["Cannot apply a selection set to a scalar field"];
-err_msg(selection_on_enum) ->     
+err_msg(selection_on_enum) ->
     ["Cannot apply a selection set to an enum type"];
 err_msg(fieldless_object) ->
     ["The path refers to an Object type, but no fields were specified"];
