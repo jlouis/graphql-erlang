@@ -18,7 +18,7 @@
          validate_schema/0
 ]).
 
--type json() :: number() | binary() | [map()] | true | false | null | #{ binary() => json() }.
+-type json() :: number() | binary() | true | false | null | #{ binary() | atom() => json() } | [json()] .
 -type param_context() :: json().
 
 -type schema_definition() :: {atom(), #{ atom() => term() }}.
