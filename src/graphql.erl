@@ -18,7 +18,7 @@
          validate_schema/0
 ]).
 
--type json() :: number() | binary() | true | false | null | #{ binary() => json() }.
+-type json() :: number() | binary() | [map()] | true | false | null | #{ binary() => json() }.
 -type param_context() :: json().
 
 -type schema_definition() :: {atom(), #{ atom() => term() }}.
@@ -62,7 +62,7 @@ load_schema(Mapping, Input) when is_list(Input) ->
 -spec validate(ast()) -> ok | {error, term()}.
 validate(AST) ->
     graphql_validate:x(AST).
-    
+
 -spec type_check(ast()) -> {ok, #{ atom() => term() }}.
 type_check(AST) ->
     graphql_type_check:x(AST).
