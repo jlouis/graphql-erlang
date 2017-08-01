@@ -200,7 +200,7 @@ input_coercer(Path, #scalar_type { id = ID, resolve_module = RM}, Val) ->
             err(Path, {input_coerce_abort, {Cl, Err}})
 
     end;
-input_coercer(Path, #enum_type { id = ID, resolve_module = undefined }, Val) ->
+input_coercer(_Path, #enum_type { resolve_module = undefined }, Val) ->
     {ok, Val};
 input_coercer(Path, #enum_type { id = ID, resolve_module = RM}, Val) ->
     try RM:input(ID, Val) of
