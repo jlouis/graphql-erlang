@@ -259,15 +259,15 @@ complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Field
     end;
 complete_value(_Path, _Ctx, #enum_type { id = ID, resolve_module = RM}, _Fields, {ok, Value}) ->
     try RM:output(ID, Value) of
-	{ok, Result} -> complete_value_enum(_Path, ID, Result);
-	{error, Reason} ->
-	    err(_Path, {ID, Value, Reason})
+    {ok, Result} -> complete_value_enum(_Path, ID, Result);
+    {error, Reason} ->
+        err(_Path, {ID, Value, Reason})
     catch
-	Cl:Err ->
-	    error_logger:error_msg(
-	      "crash during value completion: ~p, stacktrace: ~p~n",
-	      [{Cl, Err, ID, Value}, erlang:get_stacktrace()]),
-	     err(_Path, {coerce_crash, ID, Value, {Cl, Err}})
+    Cl:Err ->
+        error_logger:error_msg(
+          "crash during value completion: ~p, stacktrace: ~p~n",
+          [{Cl, Err, ID, Value}, erlang:get_stacktrace()]),
+         err(_Path, {coerce_crash, ID, Value, {Cl, Err}})
     end;
 complete_value(Path, Ctx, #interface_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
     complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value});
@@ -289,7 +289,7 @@ complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value}) ->
         {error, Reason} ->
             err(Path, Reason)
     end.
-    
+
 resolve_abstract_type(Module, Value) when is_atom(Module) ->
     resolve_abstract_type(fun Module:execute/1, Value);
 resolve_abstract_type(Resolver, Value) when is_function(Resolver, 1) ->
@@ -308,14 +308,14 @@ resolve_abstract_type(Resolver, Value) when is_function(Resolver, 1) ->
     end.
 
 complete_value_enum(_path, _ID, Result) when is_binary(Result) ->   {ok, Result, []};
-complete_value_enum( Path,  ID, Value) -> err(Path, {ID, Value, not_enum_type}). 
+complete_value_enum( Path,  ID, Value) -> err(Path, {ID, Value, not_enum_type}).
 
 complete_value_scalar(_Path, _ID, Result) when is_binary(Result) -> {ok, Result, []};
 complete_value_scalar(_Path, _ID, Result) when is_number(Result) -> {ok, Result, []};
 complete_value_scalar(_Path, _ID, true) -> {ok, true, []};
 complete_value_scalar(_Path, _ID, false) -> {ok, false, []};
 complete_value_scalar(_Path, _ID, null) -> {ok, null, []};
-complete_value_scalar( Path,  ID, Value) -> 
+complete_value_scalar( Path,  ID, Value) ->
     err(Path, {output_coerce, ID, Value, not_scalar_type}).
 
 assert_list_completion_structure(Ty, Fields, Results) ->
@@ -611,7 +611,7 @@ binarize(L) when is_list(L) -> list_to_binary(L).
 %% -- ERROR HANDLING --
 
 resolver_error_wrap([]) -> [];
-resolver_error_wrap([#{ reason := Reason } = E | Next]) -> 
+resolver_error_wrap([#{ reason := Reason } = E | Next]) ->
     [E#{ reason => {resolver_error, Reason} } | resolver_error_wrap(Next)].
 
 err(Path, Reason) ->
@@ -642,6 +642,3 @@ err_msg(list_resolution) ->
     ["Internal Server error: A list is being incorrectly resolved"];
 err_msg(Otherwise) ->
     io_lib:format("Error in execution: ~p", [Otherwise]).
-
-
-
