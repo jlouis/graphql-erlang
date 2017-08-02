@@ -78,7 +78,7 @@ x_params(FunEnv, OpName, Params) ->
         TyVarEnv ->
             tc_params([OpName], TyVarEnv, Params)
     end.
-            
+
 tc_params(Path, TyVarEnv, InitialParams) ->
     F =
       fun(K, V0, PS) ->
@@ -190,27 +190,29 @@ input_coercer(Path, #scalar_type { id = ID, input_coerce = IC, resolve_module = 
               ]),
             err(Path, {input_coerce_abort, {Cl, Err}})
     end;
-input_coercer(Path, #scalar_type { id = ID, resolve_module = RM}, Val) ->
-    try RM:input(ID, Val) of
-        {ok, NewVal} -> {replace, NewVal};
-        {error, Reason} -> err(Path, {input_coercion, ID, Val, Reason})
-    catch
-        Cl:Err ->
-            error_report(ID, Val, Cl, Err),
-            err(Path, {input_coerce_abort, {Cl, Err}})
+input_coercer(Path, #scalar_type { id = ID, resolve_module = RM}, Value) ->
+       complete_value_scalar(Path, ID, RM, Value);
 
-    end;
-input_coercer(Path, #enum_type { id = ID, resolve_module = undefined }, Val) ->
-    {ok, Val};
-input_coercer(Path, #enum_type { id = ID, resolve_module = RM}, Val) ->
-    try RM:input(ID, Val) of
-        {ok, NewVal} -> {replace, NewVal};
-        {error, Reason} -> graphql_err:abort(Path, {input_coercion, ID, Val, Reason})
+input_coercer(_Path, #enum_type { id = _ID, resolve_module = undefined }, Value) ->
+    {ok, Value};
+
+input_coercer(Path, #enum_type { id = ID, resolve_module = RM}, Value) ->
+   complete_value_scalar(Path, ID, RM, Value).
+
+complete_value_scalar(Path, ID, RM, Value) ->
+    try RM:input(ID, Value) of
+        {ok, NewVal} ->
+            {replace, NewVal};
+
+        {error, Reason} ->
+            graphql_err:abort(Path, {input_coercion, ID, Value, Reason})
+
     catch
         Cl:Err ->
-            error_report(ID, Val, Cl, Err),
+            error_report(ID, Value, Cl, Err),
             err(Path, {input_coerce_abort, {Cl, Err}})
     end.
+
 
 error_report(ID, Val, Cl, Err) ->
   error_logger:error_report(
@@ -254,7 +256,7 @@ tc_field(#{ fragenv := FE } = Ctx, Path, #frag_spread { id = ID, directives = Ds
             FSpread#frag_spread { directives = tc_directives(Ctx, Path, Ds) }
     end;
 tc_field(Ctx, Path, #frag { id = '...', selection_set = SSet, directives = Ds} = InlineFrag) ->
-    
+
     InlineFrag#frag {
         directives = tc_directives(Ctx, [InlineFrag | Path], Ds),
         selection_set = tc_sset(Ctx, [InlineFrag | Path], SSet)
@@ -388,7 +390,7 @@ value_type(_Ctx, _Path, _, F) when is_float(F) -> {scalar, float, F};
 value_type(_Ctx, _Path, _, true) -> {scalar, bool, true};
 value_type(_Ctx, _Path, _, false) -> {scalar, bool, false};
 value_type(_Ctx, _Path, _, Obj) when is_map(Obj) -> coerce_object(Obj);
-value_type(_Ctx, Path, Ty, Val) -> 
+value_type(_Ctx, Path, Ty, Val) ->
     err(Path, {invalid_value_type_coercion, Ty, Val}).
 
 refl_list(_Path, [], _T, Result) ->
