@@ -8,7 +8,7 @@ execute(_Ctx, #monster {id = ID, name = <<"Auxiliary Undead">>}, <<"id">>, _Args
     {ok, WrappedId} = dungeon:wrap({monster, ID}),
     {ok, WrappedId, [{my_auxiliary_data, true}]};
 % default
-execute(_Ctx, #monster { id = ID,
+execute(Ctx, #monster { id = ID,
                          name = Name,
                          hitpoints = HP,
                          inventory = Inventory,
@@ -19,12 +19,24 @@ execute(_Ctx, #monster { id = ID,
                          color = Color}, Field, Args) ->
     case Field of
         <<"id">> -> dungeon:wrap({monster, ID});
-        <<"name">> -> {ok, Name};
+        <<"name">> ->
+            NameToken = graphql:token(Ctx),
+            spawn_link(fun() ->
+                               timer:sleep(30),
+                               graphql:reply_cast(NameToken, {ok, Name})
+                       end),
+            {defer, NameToken};
         <<"color">> -> color(Color, Args);
         <<"hitpoints">> -> {ok, HP};
         <<"hp">> -> {ok, HP};
         <<"inventory">> -> {ok, [dungeon:load(OID) || OID <- Inventory]};
-        <<"mood">> -> {ok, Mood};
+        <<"mood">> ->
+            MoodToken = graphql:token(Ctx),
+            spawn_link(fun() ->
+                               timer:sleep(40),
+                               graphql:reply_cast(MoodToken, {ok, Mood})
+                       end),
+            {defer, MoodToken};
         <<"plushFactor">> -> {ok, PlushFactor};
         <<"spikyness">> -> {ok, 5};
         <<"stats">> -> stats(Stats, Args);

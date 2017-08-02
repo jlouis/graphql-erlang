@@ -91,15 +91,18 @@ execute_sset(Path, Ctx, SSet, Type, Value) ->
             {null, Errors}
     end.
 
+token_ref({'$graphql_token', _, Ref}) -> Ref.
+
 execute_sset_defers(Map, Errs, []) ->
     {Map, Errs};
 execute_sset_defers(Map, Errs, [D|Ds]) ->
-    {Key, {defer, {_TokenProc, TokenRef}, {P, Cx, ElaboratedTy, Fields}}} = D,
+    {Key, {defer, Token, {P, Cx, ElaboratedTy, Fields}}} = D,
+    TokenRef = token_ref(Token),
     receive
         {'$graphql_reply', TokenRef, ResolvedValue} ->
             case complete_value(P, Cx, ElaboratedTy, Fields, ResolvedValue) of
                 {ok, Result, FieldErrs} ->
-                    execute_sset_defers([{Key, Result} | Map],
+                    execute_sset_defers(Map#{ Key => Result },
                                         FieldErrs ++ Errs,
                                         Ds);
                 {error, Errors} ->
