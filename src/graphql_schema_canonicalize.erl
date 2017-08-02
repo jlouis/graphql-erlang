@@ -26,12 +26,12 @@ x({union, #{ id := ID, description := Desc, types := Types } = U}) ->
         resolve_type = Resolver
     };
 
-x({enum, #{ id := ID, description := Desc, values := VDefs} = E}) ->
-    ModuleResolver = enum_resolve(E),
+x({enum, #{ id := ID, description := Desc, values := VDefs} = Enum}) ->
+    ModuleResolver = enum_resolve(Enum),
     #enum_type {
     	id = c_id(ID),
     	description = binarize(Desc),
-    	annotations = annotations(E),
+    	annotations = annotations(Enum),
     	values = map_2(fun c_enum_val/2, VDefs),
         resolve_module = ModuleResolver
      };
@@ -53,21 +53,13 @@ x({input_object, #{ id := ID, fields := FieldDefs, description := Desc } = IO}) 
          fields = map_2(fun c_input_value/2, FieldDefs) };
 
 %% Scalar--START
-%% user defined scalars path
-x({scalar, #{ id := ID, description := Desc, resolve_module := ResolverModule} = Data}) ->
-    #scalar_type {
-       id = c_id(ID),
-       description = binarize(Desc),
-       annotations = annotations(Data),
-       resolve_module = ResolverModule };
 
-%% graphql-erlang default scalars path
-x({scalar, #{ id := ID, description := Desc} = Data}) ->
-    ModuleResolver = scalar_resolve(ID),
+x({scalar, #{ id := ID, description := Desc} = Scalar}) ->
+    ModuleResolver = scalar_resolve(Scalar),
     #scalar_type {
        id = c_id(ID),
        description = binarize(Desc),
-       annotations = annotations(Data),
+       annotations = annotations(Scalar),
        resolve_module = ModuleResolver }.
 
 %% -- ROOT -------------
@@ -184,19 +176,22 @@ map_2(F, M) ->
     Unpacked = maps:to_list(M),
     maps:from_list([F(K, V) || {K, V} <- Unpacked]).
 
-scalar_resolve('ID') ->
+scalar_resolve(#{ resolve_module := ModuleResolver }) when is_atom(ModuleResolver) ->
+    ModuleResolver;
+
+scalar_resolve(#{ id := 'ID'}) ->
      graphql_scalar_binary_coerce;
 
-scalar_resolve('String') ->
+scalar_resolve(#{ id := 'String'}) ->
      graphql_scalar_binary_coerce;
 
-scalar_resolve('Bool') ->
+scalar_resolve(#{ id := 'Bool'}) ->
      graphql_scalar_bool_coerce;
 
-scalar_resolve('Int') ->
+scalar_resolve(#{ id := 'Int'}) ->
      graphql_scalar_integer_coerce;
 
-scalar_resolve('Float') ->
+scalar_resolve(#{ id := 'Float'}) ->
      graphql_scalar_float_coerce;
 
 scalar_resolve(_) ->
