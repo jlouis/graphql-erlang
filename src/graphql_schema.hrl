@@ -24,7 +24,7 @@
 -record(enum_type,
         { id :: binary(),
           description :: binary(),
-	  resolve_module = undefined :: mod(),
+          resolve_module = graphql_enum_coerce :: mod(),
           annotations = #{} :: #{ binary() => any() },
           values :: #{ integer() => enum_value() }
         }).
@@ -75,8 +75,8 @@
         { id :: binary(),
           description :: binary(),
           annotations = #{} :: #{ binary() => any() },
-          resolve_module = undefined :: mod(),
-          output_coerce :: fun ((any()) -> {ok, any()} | {error, any()}),
+          resolve_module = graphql_enum_coerce :: mod(),
+          output_coerce :: undefined | fun ((any()) -> {ok, any()} | {error, any()}),
           input_coerce  :: fun((any()) -> {ok, any()} | {error, any()})
         }).
 -type scalar_type() :: #scalar_type{}.
