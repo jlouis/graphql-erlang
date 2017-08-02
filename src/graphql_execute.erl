@@ -8,6 +8,8 @@
 -export([err_msg/1]).
 -export([builtin_input_coercer/1]).
 
+-define(DEFER_TIMEOUT, 5000). %% @todo: Get rid of this timeout. It is temporary
+
 -spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
 x(X) -> x(#{ params => #{} }, X).
 
@@ -59,27 +61,56 @@ collect_auxiliary_data() ->
     end.
 
 execute_query(Ctx, #op { selection_set = SSet,
-                          schema = QType } = Op) ->
+                         schema = QType } = Op) ->
     #object_type{} = QType,
     {Res, Errs} =
-        execute_sset([graphql_ast:id(Op)], Ctx, SSet, QType, none),
+        execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self() },
+                     SSet, QType, none),
     complete_top_level(Res, Errs).
 
 execute_mutation(Ctx, #op { selection_set = SSet,
-                             schema = QType } = Op) ->
+                            schema = QType } = Op) ->
     #object_type{} = QType,
     {Res, Errs} =
-        execute_sset([graphql_ast:id(Op)], Ctx, SSet, QType, none),
+        execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self() },
+                     SSet, QType, none),
     complete_top_level(Res, Errs).
 
 execute_sset(Path, Ctx, SSet, Type, Value) ->
     GroupedFields = collect_fields(Path, Ctx, Type, SSet),
-    try execute_sset(Path, Ctx, GroupedFields, Type, Value, [], [], []) of
-        {Map, Errs, _Defers} ->
-            {Map, Errs}
+    try
+        case execute_sset(Path, Ctx, GroupedFields, Type, Value, [], [], []) of
+            {Map, Errs, []} ->
+                {Map, Errs};
+            {Map, Errs, Defers} ->
+                execute_sset_defers(Map, Errs, Defers)
+        end
     catch
-        throw:{null, Errors, Defers} ->
+        throw:{null, Errors, Ds} ->
+            %% @todo: Cancel defers, or at least consider a way of doing so!
             {null, Errors}
+    end.
+
+execute_sset_defers(Map, Errs, []) ->
+    {Map, Errs};
+execute_sset_defers(Map, Errs, [D|Ds]) ->
+    {Key, {defer, {_TokenProc, TokenRef}, {P, Cx, ElaboratedTy, Fields}}} = D,
+    receive
+        {'$graphql_reply', TokenRef, ResolvedValue} ->
+            case complete_value(P, Cx, ElaboratedTy, Fields, ResolvedValue) of
+                {ok, Result, FieldErrs} ->
+                    execute_sset_defers([{Key, Result} | Map],
+                                        FieldErrs ++ Errs,
+                                        Ds);
+                {error, Errors} ->
+                    throw({null, Errors, Ds})
+                %% I currently don't think defer can happen here, so leave it
+                %% out for now
+            end
+    after ?DEFER_TIMEOUT ->
+            error_logger:error_msg("DEFER TIMEOUT!"),
+            %% @todo: Should add the timeout to the list of errors here
+            {null, Errs}
     end.
 
 execute_sset(_Path, _Ctx, [], _Type, _Value, Map, Errs, Defers) ->
@@ -95,7 +126,7 @@ execute_sset(Path, Ctx, [{Key, [F|_] = Fields} | Next], Type, Value, Map, Errs, 
                     {ok, Result, FieldErrs} ->
                         {[{Key, Result} | Map], FieldErrs ++ Errs, Defers};
                     {defer, _Token, _DeferData} = Def ->
-                        {Map, Errs, [Def | Defers]};
+                        {Map, Errs, [{Key, Def} | Defers]};
                     {error, Errors} ->
                         throw({null, Errors, Defers})
                 end
