@@ -79,7 +79,7 @@ groups() ->
         star_wars_query_aliases,
         star_wars_fragments,
         star_wars_typename,
-        
+
         %% Validation tests
         star_wars_complex,
         star_wars_non_existent_field,
@@ -89,7 +89,7 @@ groups() ->
         star_wars_object_field_in_inline_fragments,
         star_wars_object_field_in_fragments
     ]},
-    
+
     EnumType = {enum_type, [shuffle, parallel], [
         enum_input,
         enum_output,
@@ -115,20 +115,21 @@ groups() ->
        is_supports_type
     ]},
 
-    Validation = {validation, [parallel], [
-    	v_5_1_1_1,
-    	v_5_1_2_1,
-    	v_5_2_1,
-    	v_5_2_3,
-    	v_5_3_1,
-    	v_5_3_2,
-    	v_5_4_1_1,
-    	v_5_4_1_2,
-    	v_5_4_1_3,
-	v_5_4_2_1,
-	v_5_4_2_2,
-	v_5_4_2_3_1
-    ]},
+    Validation =
+        {validation, [parallel],
+         [ v_5_1_1_1
+         , v_5_1_2_1
+         , v_5_2_1
+         , v_5_2_3
+         , v_5_3_1
+         , v_5_3_2
+         , v_5_4_1_1
+         , v_5_4_1_2
+         , v_5_4_1_3
+         , v_5_4_2_1
+         , v_5_4_2_2
+         , v_5_4_2_3_1
+         ]},
 
     [Basic, SW, EnumType, Schema, SchemaTest, Validation, Introspection].
 
@@ -173,7 +174,7 @@ parse_schema(Config) ->
                                 interfaces => #{
                                  'Node' => node_resource
                                  },
-				enums => #{default => enum_resource}, 
+                enums => #{default => enum_resource},
                                 unions => #{
                                  'Thing' => node_resource
                                  },
@@ -198,7 +199,7 @@ star_wars_hero(Config) ->
         "}",
     #{ data :=
         #{ <<"hero">> := #{ <<"name">> := <<"R2-D2">> } } } = th:x(Config, Q1),
-    
+
     Q2 =
        "query HeroNameQuery {"
        "  hero(episode: EMPIRE) {"
@@ -208,7 +209,7 @@ star_wars_hero(Config) ->
     #{ data :=
         #{ <<"hero">> := #{ <<"name">> := <<"Luke Skywalker">> } } } = th:x(Config, Q2),
     ok.
-    
+
 star_wars_friends(Config) ->
     Q1 =
       "query HeroNameAndFriendsQuery {"
@@ -226,8 +227,8 @@ star_wars_friends(Config) ->
                 #{ <<"name">> := <<"Luke Skywalker">> },
                 #{ <<"name">> := <<"Han Solo">> },
                 #{ <<"name">> := <<"Leia Organa">> } ] } } } = th:x(Config, Q1),
-                
-    Q2 = 
+
+    Q2 =
       "query NestedQuery {"
       "  hero {"
       "      name"
@@ -325,11 +326,11 @@ star_wars_fragments(Config) ->
       "   leia: human(id: \"1003\") { name homePlanet } }",
     Expected = #{ data => #{
           <<"luke">> => #{
-          	<<"name">> => <<"Luke Skywalker">>,
-          	<<"homePlanet">> => <<"Tatooine">> },
+            <<"name">> => <<"Luke Skywalker">>,
+            <<"homePlanet">> => <<"Tatooine">> },
           <<"leia">> => #{
-          	<<"name">> => <<"Leia Organa">>,
-          	<<"homePlanet">> => <<"Alderaan">> } } },
+            <<"name">> => <<"Leia Organa">>,
+            <<"homePlanet">> => <<"Alderaan">> } } },
     Expected = th:x(Config, Q1),
     Q2 =
       "query UseFragment {"
@@ -341,7 +342,7 @@ star_wars_fragments(Config) ->
       "    homePlanet"
       "}",
     Expected = th:x(Config, Q2),
-    
+
     ok.
 
 star_wars_typename(Config) ->
@@ -355,7 +356,7 @@ star_wars_typename(Config) ->
     }},
     Expected = th:x(Config, Q1),
     ok.
-    
+
 %% -- STAR WARS™ VALIDATION ------------------------------
 
 star_wars_complex(Config) ->
@@ -460,7 +461,7 @@ enum_no_literal_int(Config) ->
     Q1 = "{ colorEnum(fromInt: GREEN) }",
     th:errors(th:x(Config, Q1)),
     ok.
-    
+
 enum_accept_json(Config) ->
     Q1 = "query test($color: Color!) { colorEnum(fromEnum: $color) }",
     #{ data :=
@@ -479,7 +480,7 @@ enum_no_accept_internal_query(Config) ->
     Q1 = "query test($color: Color!) { colorEnum(fromEnum: $color) }",
     th:errors(th:x(Config, Q1, <<"test">>, #{ <<"color">> => 2 })),
     ok.
-    
+
 enum_no_accept_internal_query_2(Config) ->
     Q1 = "query test($color: String!) { colorEnum(fromEnum: $color) }",
     th:errors(th:x(Config, Q1, <<"test">>, #{ <<"color">> => <<"BLUE">> })),
@@ -500,14 +501,14 @@ enum_internal_zero(Config) ->
 enum_input_nullable(Config) ->
     Q1 = "{ colorEnum colorInt }",
     #{ data := #{
-    	<<"colorEnum">> := null,
-    	<<"colorInt">> := null
+        <<"colorEnum">> := null,
+        <<"colorInt">> := null
     }} = th:x(Config, Q1),
     ok.
 
 %% -- SCHEMA TEST --------------------------------
 schema_test(Config) ->
-    Q = 
+    Q =
       "{ feed { id, title }, "
       "  article(id: 1) { ...articleFields, author { id, name, pic(width: 640, height: 480) {"
       "     url, width, height }, recentArticle { ...articleFields, keywords }}}} "
@@ -557,12 +558,12 @@ v_5_1_1_1(_Config) ->
       "query getDogName { dog { name } } "
       "query getOwnerName { dog { owner { name } } }",
     true = th:v(Q1),
-    
+
     Q2 =
       "query getName { dog { name } } "
       "query getName { dog { owner { name } } }",
     false = th:v(Q2),
-    
+
     Q3 =
       "query dogOperation { dog { name } } "
       "mutation dogOperation { mutateDog { id } } ",
@@ -581,27 +582,27 @@ v_5_2_1(_Config) ->
       "{ dog { ...fieldNotDefined } } "
       "fragment fieldNotDefined on Dog { meowVolume }",
     false = th:v(Q1),
-    
+
     Q2 =
       "{ dog { ...lyingFragment } } "
       "fragment lyingFragment on Dog { barkVolume: kawVolume }",
     false = th:v(Q2),
-    
+
     Q3 =
       "{ dog { ...PetFragment } } "
       "fragment PetFragment on Pet { name }",
     true = th:v(Q3),
-    
+
     Q4 =
       "{ dog { ...PetFragment } } "
       "fragment PetFragment on Pet { nickname }",
     false = th:v(Q4),
-    
+
     Q5 =
       "{ dog { ...Fragment } } "
       "fragment Fragment on CatOrDog { __typename ... on Pet { name } ... on Dog { barkVolume } }",
     true = th:v(Q5),
-    
+
     Q6 =
       "{ dog { ...Fragment } } "
       "fragment Fragment on CatOrDog { name barkVolume }",
@@ -612,11 +613,11 @@ v_5_2_3(_Config) ->
     Q1 =
        "{ dog { ...scalarSelection } } fragment scalarSelection on Dog { barkVolume }",
     true = th:v(Q1),
-    
+
     Q2 =
        "{ dog { ...Fragment }} fragment Fragment on Dog { barkVolume { sinceWhen }}",
     false = th:v(Q2),
-    
+
     false = th:v("query Q { human } }"),
     false = th:v("query Q { pet } }"),
     false = th:v("query Q { catOrDog } }"),
@@ -625,13 +626,13 @@ v_5_2_3(_Config) ->
 v_5_3_1(_Config) ->
     true = th:v(
       "{ dog { ...F } } fragment F on Dog { doesKnowCommand(dogCommand: SIT) }"),
-      
+
     false = th:v(
       "{ dog { ...F } } fragment F on Dog { doesKnowCommand(command: CLEAN_UP_HOUSE) }"),
-    
+
     true = th:v(
       "{ dog { ...F } } fragment F on Arguments { multipleReqs(x: 1, y: 2) }"),
-    
+
     true = th:v(
       "{ dog { ...F } } fragment F on Arguments { multipleReqs(y:1, x: 2) }"),
 
@@ -640,7 +641,7 @@ v_5_3_1(_Config) ->
 v_5_3_2(_Config) ->
     true = th:v(
       "{ dog { ...F } } fragment F on Dog { doesKnowCommand(dogCommand: SIT) }"),
-      
+
     false = th:v(
       "{ dog { ...F } } fragment F on Dog { doesKnowCommand(dogCommand: SIT, dogCommand: HEEL) }"),
     ok.
@@ -651,7 +652,7 @@ v_5_4_1_1(_Config) ->
         "fragment fragOne on Dog { name } "
         "fragment fragTwo on Dog { owner { name } }",
     true = th:v(Q1),
-    
+
     Q2 =
         "{ dog { ...fragOne } } "
         "fragment fragOne on Dog { name } "
@@ -663,21 +664,21 @@ v_5_4_1_2(_Config) ->
     Q1 =
         "{ dog { ...correctType } } fragment correctType on Dog { name }",
     true = th:v(Q1),
-    
+
     Q2 =
         "{ dog { ...inlineFragment } } fragment inlineFragment on Dog { ... on Dog { name } }",
     true = th:v(Q2),
-    
+
     %% Note: This doesn't validate if we have no directives support. The test case will fail once
     %% we have it in which case the test here should pass.
     Q3 =
         "{ dog { ...inlineFragment2 } } fragment inlineFragment2 on Dog { ... @include(if: true) { name } }",
     false = th:v(Q3),
-    
+
     Q4 =
         "{ dog { ...F } } fragment F on NotInSchema { name }",
     false = th:v(Q4),
-    
+
     Q5 =
         "{ dog { ...F } } fragment F on Dog { ... on NotInSchema { name } }",
     false = th:v(Q5),
@@ -690,7 +691,7 @@ v_5_4_1_3(_Config) ->
       "{ dog { ...F } } fragment F on Pet { name }"),
     true = th:v(
       "{ dog { ...F } } fragment F on CatOrDog { ... on Dog { name } }"),
-      
+
     false = th:v(
       "{ dog { ...F } } fragment F on Int { something }"),
     false = th:v(
@@ -709,7 +710,7 @@ v_5_4_2_2(_Config) ->
       "fragment nameFragment on Dog { name ...barkVolumeFragment } "
       "fragment barkVolumeFragment on Dog { barkVolume ...nameFragment }",
     false = th:v(Q1),
-    
+
     Q2 =
       "{ dog { ...dogFragment } } "
       "fragment dogFragment on Dog { name owner { ...ownerFragment } } "
@@ -720,26 +721,25 @@ v_5_4_2_2(_Config) ->
 v_5_4_2_3_1(_Config) ->
    true = th:v(
      "{ dog { ...F } } fragment F on Dog { ... on Dog { barkVolume } }"),
-   
+
    false = th:v(
      "{ dog { ...F } } fragment F on Dog { ... on Cat { meowVolume } }"),
-     
+
    ok.
 
 %% -- INTERNALS ----------------------------------
 
 is_schema() ->
     Test = {object, #{
-    	id => 'TestType',
-    	description => "A simple test object.",
-    	fields => #{
-    		testField => #{ type => string, description => "A test field" }
-    	}
+        id => 'TestType',
+        description => "A simple test object.",
+        fields => #{
+            testField => #{ type => string, description => "A test field" }
+        }
     }},
     Schema = {root, #{
-    	query => 'TestType'
+        query => 'TestType'
     }},
     ok = graphql:insert_schema_definition(Test),
     ok = graphql:insert_schema_definition(Schema),
     ok.
-

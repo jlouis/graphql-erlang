@@ -69,7 +69,7 @@ query MultipleMonstersExpr {
 }
 
 query MultipleMonstersExprMissing {
-    monsters(ids: ["bW9uc3Rlcjox", "bW9uc3RlcjoxMDAw", "bW9uc3Rlcjoy", "bW9uc3RlcjoxMDAx"]) {
+    monsters(ids: ["bW9uc3Rlcjox", "bW9uc3Rlcjoz", "bW9uc3Rlcjoy", "bW9uc3Rlcjo0"]) {
         id
     }
 }
@@ -239,7 +239,7 @@ mutation IntroduceMonsterFatFixedInput {
 mutation IntroduceMonsterFatExpr {
   introduceMonster(input:
     { clientMutationId: "123",
-      name: "Green Slime", 
+      name: "Green Slime",
       color: "#1be215",
       hitpoints: 9001,
       mood: TRANQUIL,

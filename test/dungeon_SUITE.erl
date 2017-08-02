@@ -10,13 +10,21 @@ suite() ->
 init_per_suite(Config) ->
     application:ensure_all_started(graphql),
     {ok, Doc} = read_doc(Config, "dungeon.graphql"),
-
     ok = dungeon:inject(Config),
     ok = dungeon:start(),
     ok = graphql:validate_schema(),
-    GoblinId = base64:encode(<<"monster:1">>),
-    [{document, Doc},
-     {goblin_id, GoblinId} | Config].
+    GoblinId1 = base64:encode(<<"monster:1">>),
+    GoblinId2 = base64:encode(<<"monster:2">>),
+    NonExistentGoblinId1 = base64:encode(<<"monster:3">>),
+    RoomId = base64:encode(<<"room:1">>),
+    NonExistentRoom = base64:encode(<<"room:2">>),
+    [ {document, Doc}
+    , {known_goblin_id_1, GoblinId1}
+    , {known_goblin_id_2, GoblinId2}
+    , {known_non_existent_goblin_id_1, NonExistentGoblinId1}
+    , {known_room_id, RoomId}
+    , {known_non_existent_room_id, NonExistentRoom}
+    | Config].
 
 end_per_suite(_Config) ->
     dungeon:stop(),
@@ -47,52 +55,56 @@ end_per_testcase(_Case, _Config) ->
 groups() ->
     Dungeon =
         {dungeon, [],
-         [unions,
-          union_errors,
-          scalar_output_coercion,
-          populate,
-          default_query,
-          direct_input,
-          fixed_input,
-          nested_input_object,
-          inline_fragment,
-          fragment_over_union_interface,
-          integer_in_float_context,
-          scalar_as_expression_coerce,
-          non_null_field,
-          complex_modifiers,
-          simple_field_merge,
-          nested_field_merge,
-          multiple_monsters_and_rooms,
-          include_directive,
-          introspection,
-          get_operation,
-          coercion_int_float,
-          replace_enum_representation
+         [ unions
+         , union_errors
+         , scalar_output_coercion
+         , populate
+         , default_query
+         , direct_input
+         , fixed_input
+         , nested_input_object
+         , inline_fragment
+         , fragment_over_union_interface
+         , integer_in_float_context
+         , scalar_as_expression_coerce
+         , non_null_field
+         , complex_modifiers
+         , simple_field_merge
+         , nested_field_merge
+         , multiple_monsters_and_rooms
+         , include_directive
+         , introspection
+         , get_operation
+         , coercion_int_float
+         , replace_enum_representation
          ]},
-
     Errors =
         {errors, [],
-         [unknown_variable,
-          missing_fragment,
-          quoted_input_error,
-          input_coerce_error_exception,
-          input_coerce_error,
-          invalid_enums,
-          invalid_type_resolution,
-          duplicate_validation,
-          invalid_list_resolver]},
-    [Dungeon, Errors].
+         [ unknown_variable
+         , missing_fragment
+         , quoted_input_error
+         , input_coerce_error_exception
+         , input_coerce_error
+         , invalid_enums
+         , invalid_type_resolution
+         , duplicate_validation
+         , invalid_list_resolver
+         ]},
+    %% Groups
+    [ Dungeon
+    , Errors
+    ].
 
 all() ->
-    [{group, dungeon},
-     {group, errors}].
-    
+    [ {group, dungeon}
+    , {group, errors}
+    ].
+
 read_doc(Config, File) ->
     DocFile = filename:join(
                 [?config(data_dir, Config), File]),
     file:read_file(DocFile).
-    
+
 run(Config, Q, Params) ->
     Doc = ?config(document, Config),
     th:x(Config, Doc, Q, Params).
@@ -102,14 +114,13 @@ run(Config, File, Q, Params) ->
     th:x(Config, Doc, Q, Params).
 
 default_query(Config) ->
-    Goblin = base64:encode(<<"monster:1">>),
-    #{ data := #{ <<"goblin">> := #{ <<"id">> := Goblin, <<"name">> := <<"goblin">>, <<"hitpoints">> := 10 }}} =
+    ID = ?config(known_goblin_id_1, Config),
+    #{ data := #{ <<"goblin">> := #{ <<"id">> := ID, <<"name">> := <<"goblin">>, <<"hitpoints">> := 10 }}} =
         run(Config, <<"GoblinQuery">>, #{}),
-    #{ data := #{ <<"goblin">> := #{ <<"id">> := Goblin, <<"name">> := <<"goblin">>, <<"stats">> := [#{ <<"attack">> := 3 }] }}} =
+    #{ data := #{ <<"goblin">> := #{ <<"id">> := ID, <<"name">> := <<"goblin">>, <<"stats">> := [#{ <<"attack">> := 3 }] }}} =
         run(Config, <<"MinGoblin">>, #{<<"minAttack">> => 0 }),
-    #{ data := #{ <<"goblin">> := #{ <<"id">> := Goblin, <<"name">> := <<"goblin">>, <<"stats">> := [] }}} =
+    #{ data := #{ <<"goblin">> := #{ <<"id">> := ID, <<"name">> := <<"goblin">>, <<"stats">> := [] }}} =
         run(Config, <<"MinGoblin">>, #{<<"minAttack">> => 30 }),
-    
     ok.
 
 introspection(Config) ->
@@ -124,7 +135,7 @@ introspection(Config) ->
     end.
 
 invalid_list_resolver(Config) ->
-    GoblinId = ?config(goblin_id, Config),
+    GoblinId = ?config(known_goblin_id_1, Config),
     Q1 = "query Q { monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { errorListResolution }} ",
     Expected =
         #{data => #{<<"monster">> => #{<<"errorListResolution">> => null}},
@@ -138,20 +149,20 @@ invalid_list_resolver(Config) ->
     ok.
 
 duplicate_validation(Config) ->
-    GoblinId = base64:encode(<<"monster:1">>),
-    Q1 = "query Q { monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { name }} ",    
+    GoblinId = ?config(known_goblin_id_1, Config),
+    Q1 = "query Q { monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { name }} ",
     #{ errors := _} = th:x(Config, Q1 ++ Q1),
     ok.
 
 coercion_int_float(Config) ->
-    GoblinId = ?config(goblin_id, Config),
+    GoblinId = ?config(known_goblin_id_1, Config),
     Expected = #{ data => #{<<"monster">> => #{ <<"spikyness">> => 5.0 }}},
     Q1 = "{ monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { spikyness }}",
     Expected = th:x(Config, Q1),
     ok.
 
 get_operation(Config) ->
-    GoblinId = base64:encode(<<"monster:1">>),
+    GoblinId = ?config(known_goblin_id_1, Config),
     Expected = #{ data => #{<<"monster">> => #{ <<"name">> => <<"goblin">> }}},
     Q1 = "{ monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { name }}",
     Expected = th:x(Config, Q1),
@@ -163,7 +174,7 @@ get_operation(Config) ->
     ok.
 
 include_directive(Config) ->
-    GoblinID = base64:encode(<<"monster:1">>),
+    GoblinId = ?config(known_goblin_id_1, Config),
     case run(Config, <<"GoblinQueryDirectives">>,
              #{ <<"fat">> => false }) of
         #{ data := #{ <<"goblin">> := Goblin }} ->
@@ -178,7 +189,7 @@ include_directive(Config) ->
              <<"name">> := <<"goblin">>,
              <<"hitpoints">> := 10 }}} =
         run(Config, <<"GoblinQueryDirectives">>, #{ <<"fat">> => true }),
-    
+
     ct:log("Do check for inline fragments of no type designator"),
     case run(Config, <<"GoblinQueryDirectivesInline">>,
              #{ <<"fat">> => false }) of
@@ -193,54 +204,69 @@ include_directive(Config) ->
              <<"name">> := <<"goblin">>,
              <<"hitpoints">> := 10 }}} =
         run(Config, <<"GoblinQueryDirectivesInline">>, #{ <<"fat">> => true }),
-
     ok.
 
 unions(Config) ->
     ct:log("Initial query on the schema"),
-    Goblin = base64:encode(<<"monster:1">>),
+    Monster = dungeon:create(monster, [{name, <<"goblin">>}, {hitpoints, 10}]),
+    [{GoblinId, Goblin}] = dungeon:batch_create([{Monster, insert}]),
+    OpaqueId = dungeon:opaque_id(GoblinId),
     Expected1 = #{ data => #{
                      <<"goblin">> => #{
-                         <<"id">> => Goblin,
-                         <<"name">> => <<"goblin">>,
-                         <<"hitpoints">> => 10 }}},
-    Expected1 = run(Config, <<"GoblinQuery">>, #{ <<"id">> => Goblin }),
+                     <<"id">> => OpaqueId,
+                     <<"name">> => <<"goblin">>,
+                     <<"hitpoints">> => 10 }}},
+    Expected1 = run(Config, <<"GoblinQuery">>, #{<<"id">> => OpaqueId}),
     ct:log("Same query, but on items"),
     Expected2 = #{ data => #{
                      <<"goblin">> => #{
-                         <<"id">> => Goblin,
+                         <<"id">> => OpaqueId,
                          <<"name">> => <<"goblin">>,
                          <<"hitpoints">> => 10 }}},
-    Expected2 = run(Config, <<"GoblinThingQuery">>, #{ <<"id">> => Goblin }),
+    Expected2 = run(Config, <<"GoblinThingQuery">>, #{ <<"id">> => OpaqueId }),
     ok.
 
 union_errors(Config) ->
     ct:log("You may not request fields on unions"),
-    Q1 = "{ goblin: thing(id: \"bW9uc3Rlcjox\") { id } }",
+    Monster = dungeon:create(monster),
+    [{GoblinId, Goblin}] = dungeon:batch_create([{Monster, insert}]),
+    OpaqueId = dungeon:opaque_id(GoblinId),
+    Query = iolist_to_binary(["{ goblin: thing(id: \"", OpaqueId ,"\") { id } }"]),
+    Q1 = binary_to_list(Query),
     th:errors(th:x(Config, Q1)),
     ok.
 
 scalar_output_coercion(Config) ->
     ct:log("Test output coercion"),
-    Goblin = base64:encode(<<"monster:1">>),
+    Monster =
+        dungeon:create(monster, [ {name, <<"goblin">>}
+                                , {color, #{ r => 65, g => 146, b => 75}}
+                                , {hitpoints, 10}
+                                ]),
+    [{GoblinId, Goblin}] = dungeon:batch_create([{Monster, insert}]),
+    OpaqueId = dungeon:opaque_id(GoblinId),
     #{ data := #{
         <<"goblin">> := #{
-            <<"id">> := Goblin,
+            <<"id">> := OpaqueId,
             <<"name">> := <<"goblin">>,
             <<"color">> := <<"#41924B">>,
             <<"hitpoints">> := 10 }}} =
-        run(Config, <<"ScalarOutputCoercion">>, #{ <<"id">> => Goblin }),
+        run(Config, <<"ScalarOutputCoercion">>, #{ <<"id">> => OpaqueId }),
     ok.
 
 replace_enum_representation(Config) ->
-      ct:log("Test replace enum representation"),
-      Goblin = base64:encode(<<"monster:1">>),
-      #{ data := #{
-  	 <<"goblin">> := #{
-  	     <<"id">> := Goblin,
-  	     <<"mood">> := <<"DODGY">>}}} =
-  	run(Config, <<"ReplaceEnumRepresentation">>, #{ <<"id">> => Goblin }),
-      ok.
+    ct:log("Test replace enum representation"),
+    Monster = dungeon:create(monster, [{mood, "dodgy"}]),
+    [{GoblinId, Goblin}] = dungeon:batch_create([{Monster, insert}]),
+    OpaqueId = dungeon:opaque_id(GoblinId),
+    #{ data := #{
+         <<"goblin">> := #{
+             <<"id">> := OpaqueId,
+             <<"mood">> := <<"DODGY">>
+            }
+        }} =
+        run(Config, <<"ReplaceEnumRepresentation">>, #{ <<"id">> => OpaqueId }),
+    ok.
 
 populate(Config) ->
     ct:log("Create a monster in the dungeon"),
@@ -269,19 +295,19 @@ populate(Config) ->
       <<"hitpoints">> => 30
      },
     th:errors(run(Config, <<"IntroduceMonster">>, #{ <<"input">> => MissingNameInput })),
-    
+
     ct:log("Missing an input field should lead to failure"),
     th:errors(run(Config, <<"IntroduceMonster">>, #{})),
-    
+
     ct:log("Using the wrong type should lead to failure"),
     th:errors(run(Config, <<"IntroduceMonster">>,
         #{ <<"input">> => Input#{ <<"hitpoints">> := <<"hello">> }})),
 
     ct:log("Creating with a default parameter"),
     HobgoblinInput = #{
-    	<<"clientMutationId">> => <<"MUTID">>,
-    	<<"name">> => <<"hobgoblin">>,
-    	<<"color">> => <<"#266A2E">>
+        <<"clientMutationId">> => <<"MUTID">>,
+        <<"name">> => <<"hobgoblin">>,
+        <<"color">> => <<"#266A2E">>
     },
     #{ data := #{
                      <<"introduceMonster">> := #{
@@ -294,8 +320,9 @@ populate(Config) ->
                          <<"mood">> := <<"DODGY">>
                        }
          }}} = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => HobgoblinInput }),
-    
+
     ct:log("Create a room"),
+    ExpectedRoomId = dungeon:next_id(room),
     RoomInput = #{
         <<"clientMutationId">> => <<"MUTID">>,
         <<"description">> => <<"This is the dungeon entrance">> },
@@ -303,11 +330,11 @@ populate(Config) ->
                      <<"introduceRoom">> => #{
                        <<"clientMutationId">> => <<"MUTID">>,
                        <<"room">> => #{
-                         <<"id">> => base64:encode(<<"room:1">>),
+                         <<"id">> => ExpectedRoomId,
                          <<"description">> => <<"This is the dungeon entrance">> }
                       }}},
     ExpectedR = run(Config, <<"IntroduceRoom">>, #{ <<"input">> => RoomInput }),
-    
+
     ct:log("Put a monster in a room"),
     SpawnInput = #{
         <<"clientMutationId">> => <<"MUTID">>,
@@ -392,7 +419,7 @@ nested_input_object(Config) ->
         run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
     true = (PF - 0.01) < 0.00001,
     ok.
-    
+
 integer_in_float_context(Config) ->
     Input = #{
       <<"clientMutationId">> => <<"123">>,
@@ -481,7 +508,7 @@ complex_modifiers(Config) ->
         #{ <<"monster">> := null },
         errors := [#{path :=
                          [<<"MonsterStatsThree">>, <<"monster">>, <<"statsVariantThree">>],
-                     key := null_value, 
+                     key := null_value,
                      message := _} ,
                    #{path :=
                          [<<"MonsterStatsThree">>, <<"monster">>, <<"statsVariantThree">>, 0],
@@ -493,7 +520,6 @@ complex_modifiers(Config) ->
                      key := null_value,
                      message := _}]
      } = run(Config, <<"MonsterStatsThree">>, #{ <<"id">> => MonsterID }),
-
     ok.
 
 non_null_field(Config) ->
@@ -521,7 +547,7 @@ non_null_field(Config) ->
              run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
     true = (PF - 1.0) < 0.00001,
     ok.
-  
+
 scalar_as_expression_coerce(Config) ->
     ct:log("When inputtting a scalar as an expression, it must coerce"),
     #{ data :=
@@ -543,9 +569,9 @@ scalar_as_expression_coerce(Config) ->
     ok.
 
 multiple_monsters_and_rooms(Config) ->
-    ID1 = base64:encode(<<"monster:1">>),
-    ID2 = base64:encode(<<"monster:2">>),
-    ID1000 = base64:encode(<<"monster:1000">>),
+    ID1 = ?config(known_goblin_id_1, Config),
+    ID2 = ?config(known_goblin_id_2, Config),
+    IDMissing = ?config(known_non_existent_goblin_id_1, Config),
 
     #{ data := #{
         <<"monsters">> := [
@@ -563,7 +589,7 @@ multiple_monsters_and_rooms(Config) ->
        errors := [
            #{path := [<<"MultipleMonsters">>, <<"monsters">>, 2],
              message := <<"not_found">> }]
-     } = run(Config, <<"MultipleMonsters">>, #{ <<"ids">> => [ID1, ID2, ID1000] }),
+     } = run(Config, <<"MultipleMonsters">>, #{ <<"ids">> => [ID1, ID2, IDMissing] }),
 
     #{ data := #{
         <<"monsters">> := [
@@ -575,25 +601,25 @@ multiple_monsters_and_rooms(Config) ->
                     message := <<"not_found">>}]
      } = run(Config, <<"MultipleMonstersExprMissing">>, #{}),
 
-     Room1 = base64:encode(<<"room:1">>),
+    Room1 = ?config(known_room_id, Config),
+    NonExistentRoom = ?config(known_non_existent_room_id, Config),
 
-     #{ data := #{
-        <<"rooms">> := [#{<<"id">> := Room1}]}
-      } = run(Config, <<"MultipleRooms">>, #{ <<"ids">> => [Room1]}),
+    #{ data := #{
+         <<"rooms">> := [#{<<"id">> := Room1}]}
+     } = run(Config, <<"MultipleRooms">>, #{ <<"ids">> => [Room1]}),
 
-     #{ data := #{ <<"rooms">> := null },
-        errors :=
-            [#{path := [<<"MultipleRooms">>, <<"rooms">>, 1],
-               key := null_value },
-             #{path := [<<"MultipleRooms">>, <<"rooms">>, 1],
-               key := not_found } ]
-      } = run(Config, <<"MultipleRooms">>,
-              #{ <<"ids">> => [Room1, base64:encode(<<"room:2">>)]}),
-
-     ok.
+    #{ data := #{ <<"rooms">> := null },
+       errors :=
+           [#{path := [<<"MultipleRooms">>, <<"rooms">>, 1],
+              key := null_value },
+            #{path := [<<"MultipleRooms">>, <<"rooms">>, 1],
+              key := not_found } ]
+     } = run(Config, <<"MultipleRooms">>,
+             #{ <<"ids">> => [Room1, base64:encode(<<"room:2">>)]}),
+    ok.
 
 inline_fragment(Config) ->
-    ID = base64:encode(<<"monster:1">>),
+    ID = ?config(known_goblin_id_1, Config),
     Expected = #{ data => #{
         <<"thing">> => #{
             <<"id">> => ID,
@@ -603,10 +629,10 @@ inline_fragment(Config) ->
     ok.
 
 fragment_over_union_interface(Config) ->
-    ID = base64:encode(<<"monster:1">>),
+    ID = ?config(known_goblin_id_1, Config),
     Expected = #{ data => #{
-    	<<"monster">> => #{
-    		<<"id">> => ID }}},
+        <<"monster">> => #{
+            <<"id">> => ID }}},
     Expected = run(Config, <<"FragmentOverUnion1">>, #{ <<"id">> => ID }),
     ct:log("Same as before, but on a named fragment instead"),
     Expected = run(Config, <<"FragmentOverUnion2">>, #{ <<"id">> => ID }),
@@ -615,16 +641,16 @@ fragment_over_union_interface(Config) ->
     ok.
 
 simple_field_merge(Config) ->
-    ID = base64:encode(<<"monster:1">>),
+    ID = ?config(known_goblin_id_1, Config),
     Expected = #{ data => #{
-    	<<"monster">> => #{
-    		<<"id">> => ID,
-    		<<"hitpoints">> => 10 }}},
+        <<"monster">> => #{
+            <<"id">> => ID,
+            <<"hitpoints">> => 10 }}},
     Expected = run(Config, <<"TestFieldMerge">>, #{ <<"id">> => ID }),
     ok.
 
 nested_field_merge(Config) ->
-    ID = base64:encode(<<"monster:1">>),
+    ID = ?config(known_goblin_id_1, Config),
     #{ data := #{
       <<"monster">> := #{
           <<"id">> := ID,
@@ -637,8 +663,7 @@ nested_field_merge(Config) ->
     ok.
 
 unknown_variable(Config) ->
-    ID = base64:encode(<<"monster:1">>),
-
+    ID = ?config(known_goblin_id_1, Config),
     #{ errors :=
           #{key := {unbound_variable,<<"i">>},
             path := [<<"document">>,
@@ -651,8 +676,7 @@ unknown_variable(Config) ->
     ok.
 
 missing_fragment(Config) ->
-    ID = base64:encode(<<"monster:1">>),
-
+    ID = ?config(known_goblin_id_1, Config),
     #{ errors :=
           #{key := unknown_fragment,
             path := [<<"document">>,
@@ -720,7 +744,7 @@ invalid_enums(Config) ->
             path := [<<"document">>,<<"IMonster">>,<<"introduceMonster">>, <<"mood">>]}} =
                 run(Config, "invalid_enum_2.graphql", <<"IMonster">>, #{}),
     ok.
-      
+
 input_coerce_error(Config) ->
     Input = #{
       <<"clientMutationId">> => <<"MUTID">>,
