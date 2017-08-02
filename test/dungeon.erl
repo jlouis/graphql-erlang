@@ -8,6 +8,8 @@
 -export([dirty_load/1, load/1, wrap/1, unwrap/1, insert/1]).
 -export([inject/1, start/0, stop/0]).
 
+-export([insert/2, reserve_number/1, create/1, create/2, batch_create/1, opaque_id/1, next_id/1]).
+
 start() ->
     application:load(mnesia),
     ok = mnesia:create_schema([node()]),
@@ -26,7 +28,7 @@ start() ->
                      [{attributes, record_info(fields, room)}]),
     populate(),
     ok.
-    
+
 stop() ->
     application:stop(mnesia).
 
@@ -36,12 +38,79 @@ set_id(#room{} = R, ID) -> R#room { id = ID }.
 insert(Input) ->
     Fun = fun() ->
                   Tab = element(1, Input),
-                  ID = mnesia:dirty_update_counter({sequence, Tab}, 1),
-                  Record = set_id(Input, ID),
+                  Id = mnesia:dirty_update_counter({sequence, Tab}, 1),
+                  Record = set_id(Input, Id),
                   ok = mnesia:write(Record),
                   Record
           end,
     mnesia:transaction(Fun).
+
+insert(Input, {Type, Id}) when element(1, Input) =:= Type ->
+    Fun = fun() ->
+                  Record = set_id(Input, Id),
+                  ok = mnesia:write(Record),
+                  Record
+          end,
+    mnesia:transaction(Fun).
+
+next_id(Tab) ->
+    Fun = fun() ->
+                  [{sequence, Tab, Id}] = mnesia:dirty_read(sequence, Tab),
+                  {ok, Wrapped} = wrap({Tab, Id + 1}),
+                  Wrapped
+          end,
+    {atomic, Id} = mnesia:transaction(Fun),
+    Id.
+
+reserve_number(Input) ->
+    Tab = element(1, Input),
+    Fun =
+        fun() ->
+            mnesia:dirty_update_counter({sequence, Tab}, 1)
+        end,
+    {atomic, Id} = mnesia:transaction(Fun),
+    {Tab, Id}.
+
+
+create(monster, Opts) ->
+    Name = proplists:get_value(name, Opts, <<"goblin">>),
+    Mood = proplists:get_value(mood, Opts, "dodgy"),
+    Color = proplists:get_value(color, Opts, #{ r => 65, g => 146, b => 75}),
+    HitPoints = proplists:get_value(hitpoints, Opts, 10),
+    #monster { name = Name
+             , color = Color
+             , hitpoints = HitPoints
+             , mood = {enum, #{ mood => Mood }}
+             , stats = [#stats{}] };
+create(room, Opts) ->
+    Desc = proplists:get_value(desc, Opts, <<"hallway">>),
+    #room { description = Desc
+          }.
+
+
+create(Type) -> create(Type, []).
+
+batch_create(Spec) when is_map(Spec) ->
+    maps:fold(
+      fun(K, V, Acc) when is_list(V) ->
+              Acc#{K => [do_create(Item) || Item <- V]}
+      end, #{}, Spec);
+batch_create(Spec) when is_list(Spec) ->
+    [do_create(Item) || Item <- Spec].
+
+
+do_create({Data, reserve}) ->
+    Id = reserve_number(Data),
+    {Id, reserved};
+do_create({Data, insert}) ->
+    Id = reserve_number(Data),
+    {atomic, Entry} = insert(Data, Id),
+    {Id, Entry}.
+
+opaque_id({Type, Id}) ->
+    BinId = integer_to_binary(Id),
+    BinType = atom_to_binary(Type, utf8),
+    base64:encode(<<BinType/binary, ":", BinId/binary>>).
 
 %update(Record) ->
 %    mnesia:transaction(
@@ -49,12 +118,12 @@ insert(Input) ->
 %        ok = mnesia:write(Record),
 %        Record
 %      end).
- 
+
 load({room, ID}) ->
     load_txn(qlc:q([R || R <- mnesia:table(room), R#room.id == ID]));
 load({monster, ID}) ->
     load_txn(qlc:q([M || M <- mnesia:table(monster), M#monster.id == ID])).
-    
+
 dirty_load(OID) ->
     case mnesia:dirty_read(OID) of
         [] -> {error, not_found};
@@ -74,12 +143,33 @@ populate() ->
                 mnesia:write(#sequence { id = room, count = 0 })
         end,
     {atomic, _} = mnesia:transaction(Fun),
-    {atomic, _} = insert(#monster {
-        name = <<"goblin">>,
-        color = #{ r => 65, g => 146, b => 75},
-        hitpoints = 10,
-        mood = {enum, #{ mood => "dodgy" }},
-        stats = [#stats{}] }),
+    Spec = #{
+       rooms =>
+          [ {create(room, [{desc, <<"This is the dungeon entrance">>}]), insert }
+          , {create(room, [{desc, <<"Reserved room">>}]), reserve } ]
+     , monsters =>
+          [ {create(monster, [ {name, <<"goblin">>}
+                             , {color, #{ r => 65, g => 146, b => 75}}
+                             , {hitpoints, 10}
+                             , {mood, {enum, #{ mood => "dodgy" }}}
+                             ]), insert}
+          , {create(monster, [ {name, <<"orc">>}
+                             , {color, #{ r => 65, g => 146, b => 75}}
+                             , {hitpoints, 30}
+                             , {mood, {enum, #{ mood => "aggressive" }}}
+                             ]), insert}
+          , {create(monster, [ {name, <<"reserved goblin">>}
+                             , {color, #{ r => 65, g => 146, b => 75}}
+                             , {hitpoints, 5}
+                             , {mood, {enum, #{ mood => "dodgy" }}}
+                             ]), reserve}
+          ]
+     },
+    batch_create(Spec),
+    {atomic, _} = mnesia:transaction(fun() ->
+        mnesia:write(#sequence { id = monster, count = 1000 }),
+        mnesia:write(#sequence { id = room, count = 1000 })
+    end),
    ok.
 
 mapping_rules() ->
@@ -98,14 +188,14 @@ mapping_rules() ->
          'MutationRoot' => dungeon_mutation,
          default => dungeon_object }
      }.
-    
+
 inject(Config) ->
     DataDir = ?config(data_dir, Config),
     SchemaFile = filename:join([DataDir, "dungeon_schema.graphql"]),
     {ok, SchemaData} = file:read_file(SchemaFile),
     Mapping = mapping_rules(),
     ok = graphql:load_schema(Mapping, SchemaData),
-    
+
     Schema = {root, #{
                 query => 'QueryRoot',
                 mutation => 'MutationRoot',
@@ -133,4 +223,3 @@ wrap({Type, ID}) ->
     TBin = atom_to_binary(Type, utf8),
     IDBin = integer_to_binary(ID),
     {ok, base64:encode(<<TBin/binary, ":", IDBin/binary>>)}.
-

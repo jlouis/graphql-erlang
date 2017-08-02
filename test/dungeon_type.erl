@@ -5,7 +5,7 @@
 
 execute(#monster{}) -> {ok, 'Monster'};
 execute(kraken) -> {error, kraken};
-execute(X) -> 
+execute(X) ->
     case dungeon:unwrap(X) of
         {Ty, _} -> object_type(Ty)
     end.

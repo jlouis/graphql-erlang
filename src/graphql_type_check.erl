@@ -491,4 +491,3 @@ err_msg({invalid_value_type_coercion, Ty, Val}) ->
     io_lib:format(
       "The value ~p cannot be coerced into the type ~p",
       [Val, Ty]).
-

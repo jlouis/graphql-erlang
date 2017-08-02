@@ -31,16 +31,33 @@ execute_request(InitialCtx, {document, Operations}) ->
             complete_top_level(undefined, Errs)
     end.
 
-complete_top_level(Res, []) ->
-    #{ data => Res };
-complete_top_level(undefined, Errs) ->
+
+complete_top_level(undefined, Errs) when is_list(Errs) ->
     #{ errors => [complete_error(E) || E <- Errs ] };
+complete_top_level(Res, []) ->
+    Aux = collect_auxiliary_data(),
+    Result = #{ data => Res },
+    decorate_top_level(Result, aux, Aux);
 complete_top_level(Res, Errs) ->
-    #{ data => Res,
-       errors => [complete_error(E) || E <- Errs ] }.
+    Errors = [complete_error(E) || E <- Errs ],
+    Aux = collect_auxiliary_data(),
+    Result = #{ data => Res, errors => Errors },
+    decorate_top_level(Result, aux, Aux).
 
 complete_error(#{ path := Path, reason := Reason }) ->
     graphql_err:mk(Path, execute, Reason).
+
+decorate_top_level(Map, _, []) -> Map; % noop
+decorate_top_level(Map, aux, AuxiliaryDataList) ->
+    Map#{aux => AuxiliaryDataList}.
+
+collect_auxiliary_data() ->
+    receive
+        {'$auxiliary_data', AuxiliaryDataList} ->
+            AuxiliaryDataList ++ collect_auxiliary_data()
+    after 0 ->
+        []
+    end.
 
 execute_query(Ctx, #op { selection_set = SSet,
                           schema = QType } = Op) ->
@@ -187,6 +204,9 @@ resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectTy
     end) of
         {error, Reason} -> {error, {resolver_error, Reason}};
         {ok, Result} -> {ok, Result};
+        {ok, Result, AuxiliaryDataList} when is_list(AuxiliaryDataList) ->
+            self() ! {'$auxiliary_data', AuxiliaryDataList},
+            {ok, Result};
         default ->
             resolve_field_value(Ctx, ObjectType, Value, Name, FAns, fun ?MODULE:default_resolver/3, Args);
         Wrong ->
@@ -595,6 +615,3 @@ err_msg(list_resolution) ->
     ["Internal Server error: A list is being incorrectly resolved"];
 err_msg(Otherwise) ->
     io_lib:format("Error in execution: ~p", [Otherwise]).
-
-
-
