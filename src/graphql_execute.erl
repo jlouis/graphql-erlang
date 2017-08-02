@@ -31,7 +31,6 @@ execute_request(InitialCtx, {document, Operations}) ->
             complete_top_level(undefined, Errs)
     end.
 
-
 complete_top_level(undefined, Errs) when is_list(Errs) ->
     #{ errors => [complete_error(E) || E <- Errs ] };
 complete_top_level(Res, []) ->
@@ -188,8 +187,12 @@ execute_field(Path, Ctx, ObjType, Value, [F|_] = Fields, #schema_field { annotat
     #schema_field { ty = ElaboratedTy } = field_type(F),
     Args = resolve_args(Ctx, F),
     Fun = resolver_function(ObjType, RF),
-    ResolvedValue = resolve_field_value(Ctx, ObjType, Value, Name, FAns, Fun, Args),
-    complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue).
+    case resolve_field_value(Ctx, ObjType, Value, Name, FAns, Fun, Args) of
+        {defer, Token} ->
+            {defer, Token, Path, Ctx, ElaboratedTy, Fields};
+        ResolvedValue ->
+            complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue)
+    end.
 
 resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectType, Value, Name, FAns, Fun, Args) ->
     CtxAnnot = Ctx#{
@@ -207,6 +210,7 @@ resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectTy
         {ok, Result, AuxiliaryDataList} when is_list(AuxiliaryDataList) ->
             self() ! {'$auxiliary_data', AuxiliaryDataList},
             {ok, Result};
+        {defer, Token} -> {defer, Token};
         default ->
             resolve_field_value(Ctx, ObjectType, Value, Name, FAns, fun ?MODULE:default_resolver/3, Args);
         Wrong ->
