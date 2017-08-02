@@ -189,6 +189,13 @@ fragment MonsterFragmentNested2 on Monster {
     stats { shellScripting }
 }
 
+query TestAuxiliaryData($id: Id!) {
+  monster(id: $id) {
+    id
+    name
+  }
+}
+
 ## MUTATIONS
 mutation IntroduceMonster($input: IntroduceMonsterInput!) {
   introduceMonster(input: $input) {

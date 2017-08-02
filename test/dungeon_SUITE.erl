@@ -77,6 +77,7 @@ groups() ->
          , get_operation
          , coercion_int_float
          , replace_enum_representation
+         , auxiliary_data
          ]},
     Errors =
         {errors, [],
@@ -660,7 +661,18 @@ nested_field_merge(Config) ->
               <<"yell">> := <<"HELO">> }]
     }}} = run(Config, <<"TestNestedFieldMerge">>, #{ <<"id">> => ID }),
     ok.
-    ok.
+
+auxiliary_data(Config) ->
+    Monster = dungeon:create(monster, [{name, <<"Auxiliary Undead">>}]),
+    [{GoblinId, _Goblin}] = dungeon:batch_create([{Monster, insert}]),
+    {ok, OpaqueId} = dungeon:wrap(GoblinId),
+    Expected = #{
+      aux => [{my_auxiliary_data, true}],
+      data => #{ <<"monster">> => #{ <<"id">> => OpaqueId
+                                   , <<"name">> => <<"Auxiliary Undead">>}
+               }
+     },
+    Expected = run(Config, <<"TestAuxiliaryData">>, #{<<"id">> => OpaqueId}).
 
 unknown_variable(Config) ->
     ID = ?config(known_goblin_id_1, Config),
