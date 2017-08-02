@@ -485,7 +485,7 @@ value(#{ params := Params } = _Ctx, _Ty, {var, ID}) ->
     %% Parameter expansion and type check is already completed
     %% at this stage
     maps:get(name(ID), Params);
-value(Ctx, _Ty, null) ->
+value(_Ctx, _Ty, null) ->
     null;
 value(Ctx, {non_null, Ty}, Val) ->
     value(Ctx, Ty, Val);

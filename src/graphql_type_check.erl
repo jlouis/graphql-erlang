@@ -191,13 +191,13 @@ input_coercer(Path, #scalar_type { id = ID, input_coerce = IC, resolve_module = 
             err(Path, {input_coerce_abort, {Cl, Err}})
     end;
 input_coercer(Path, #scalar_type { id = ID, resolve_module = RM}, Value) ->
-       complete_value_scalar(Path, ID, RM, Value);
+    complete_value_scalar(Path, ID, RM, Value);
 
 input_coercer(_Path, #enum_type { id = _ID, resolve_module = undefined }, Value) ->
     {ok, Value};
 
 input_coercer(Path, #enum_type { id = ID, resolve_module = RM}, Value) ->
-   complete_value_scalar(Path, ID, RM, Value).
+    complete_value_scalar(Path, ID, RM, Value).
 
 complete_value_scalar(Path, ID, RM, Value) ->
     try RM:input(ID, Value) of
