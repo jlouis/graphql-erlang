@@ -78,27 +78,29 @@ execute_sset(Path, Ctx, SSet, Type, Value) ->
         {Map, Errs, _Defers} ->
             {Map, Errs}
     catch
-        throw:{null, Errors} ->
+        throw:{null, Errors, Defers} ->
             {null, Errors}
     end.
 
 execute_sset(_Path, _Ctx, [], _Type, _Value, Map, Errs, Defers) ->
     {maps:from_list(lists:reverse(Map)), Errs, Defers};
 execute_sset(Path, Ctx, [{Key, [F|_] = Fields} | Next], Type, Value, Map, Errs, Defers) ->
-    {Map2, Errs2} =
+    {Map2, Errs2, Defers2} =
         case lookup_field(F, Type) of
-            null -> {Map, Errs};
-            not_found -> {Map, Errs};
-            typename -> {[{Key, typename(Type)} | Map], Errs};
+            null -> {Map, Errs, Defers};
+            not_found -> {Map, Errs, Defers};
+            typename -> {[{Key, typename(Type)} | Map], Errs, Defers};
             FieldType ->
                 case execute_field([Key | Path], Ctx, Type, Value, Fields, FieldType) of
                     {ok, Result, FieldErrs} ->
-                        {[{Key, Result} | Map], FieldErrs ++ Errs};
+                        {[{Key, Result} | Map], FieldErrs ++ Errs, Defers};
+                    {defer, _Token, _DeferData} = Def ->
+                        {Map, Errs, [Def | Defers]};
                     {error, Errors} ->
-                        throw({null, Errors})
+                        throw({null, Errors, Defers})
                 end
         end,
-    execute_sset(Path, Ctx, Next, Type, Value, Map2, Errs2, Defers).
+    execute_sset(Path, Ctx, Next, Type, Value, Map2, Errs2, Defers2).
 
 typename(#object_type { id = ID }) -> ID.
 
@@ -196,7 +198,7 @@ execute_field(Path, Ctx, ObjType, Value, [F|_] = Fields, #schema_field { annotat
     Fun = resolver_function(ObjType, RF),
     case resolve_field_value(Ctx, ObjType, Value, Name, FAns, Fun, Args) of
         {defer, Token} ->
-            {defer, Token, Path, Ctx, ElaboratedTy, Fields};
+            {defer, Token, {Path, Ctx, ElaboratedTy, Fields}};
         ResolvedValue ->
             complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue)
     end.
