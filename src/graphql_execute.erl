@@ -74,20 +74,20 @@ execute_mutation(Ctx, #op { selection_set = SSet,
 
 execute_sset(Path, Ctx, SSet, Type, Value) ->
     GroupedFields = collect_fields(Path, Ctx, Type, SSet),
-    execute_sset(Path, Ctx, GroupedFields, Type, Value, [], []).
+    execute_sset(Path, Ctx, GroupedFields, Type, Value, [], [], []).
 
-execute_sset(_Path, _Ctx, [], _Type, _Value, Map, Errs) ->
+execute_sset(_Path, _Ctx, [], _Type, _Value, Map, Errs, Defers) ->
     {maps:from_list(lists:reverse(Map)), Errs};
-execute_sset(Path, Ctx, [{Key, [F|_] = Fields} | Next], Type, Value, Map, Errs) ->
+execute_sset(Path, Ctx, [{Key, [F|_] = Fields} | Next], Type, Value, Map, Errs, Defers) ->
     case lookup_field(F, Type) of
-        null -> execute_sset(Path, Ctx, Next, Type, Value, Map, Errs);
-        not_found -> execute_sset(Path, Ctx, Next, Type, Value, Map, Errs);
+        null -> execute_sset(Path, Ctx, Next, Type, Value, Map, Errs, Defers);
+        not_found -> execute_sset(Path, Ctx, Next, Type, Value, Map, Errs, Defers);
         typename ->
-            execute_sset(Path, Ctx, Next, Type, Value, [{Key, typename(Type)} | Map], Errs);
+            execute_sset(Path, Ctx, Next, Type, Value, [{Key, typename(Type)} | Map], Errs, Defers);
         FieldType ->
             case execute_field([Key | Path], Ctx, Type, Value, Fields, FieldType) of
                 {ok, Result, FieldErrs} ->
-                    execute_sset(Path, Ctx, Next, Type, Value, [{Key, Result} | Map], FieldErrs ++ Errs);
+                    execute_sset(Path, Ctx, Next, Type, Value, [{Key, Result} | Map], FieldErrs ++ Errs, Defers);
                 {error, Errors} ->
                     {null, Errors}
             end
