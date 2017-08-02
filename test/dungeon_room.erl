@@ -5,7 +5,7 @@
 
 execute(_Ctx, #room { id = ID,
                       description = Desc,
-                      contents = Contents }, F, A) ->
+                      contents = Contents }, F, _A) ->
     case F of
         <<"id">> -> dungeon:wrap({room, ID});
         <<"description">> -> {ok, Desc};

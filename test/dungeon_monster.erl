@@ -3,6 +3,11 @@
 
 -export([execute/4]).
 
+% this path is used for testing auxiliary data
+execute(_Ctx, #monster {id = ID, name = <<"Auxiliary Undead">>}, <<"id">>, _Args) ->
+    {ok, WrappedId} = dungeon:wrap({monster, ID}),
+    {ok, WrappedId, [{my_auxiliary_data, true}]};
+% default
 execute(_Ctx, #monster { id = ID,
                          name = Name,
                          hitpoints = HP,
@@ -54,4 +59,3 @@ stats(null, _) ->
 stats(SS, #{ <<"minAttack">> := Min }) ->
     {ok, [{ok, S} || S <- SS,
                      S#stats.attack >= Min]}.
-
