@@ -185,7 +185,7 @@ include_directive(Config) ->
     end,
     #{ data := #{
          <<"goblin">> := #{
-             <<"id">> := GoblinID,
+             <<"id">> := GoblinId,
              <<"name">> := <<"goblin">>,
              <<"hitpoints">> := 10 }}} =
         run(Config, <<"GoblinQueryDirectives">>, #{ <<"fat">> => true }),
@@ -200,7 +200,7 @@ include_directive(Config) ->
     end,
     #{ data := #{
          <<"goblin">> := #{
-             <<"id">> := GoblinID,
+             <<"id">> := GoblinId,
              <<"name">> := <<"goblin">>,
              <<"hitpoints">> := 10 }}} =
         run(Config, <<"GoblinQueryDirectivesInline">>, #{ <<"fat">> => true }),
@@ -209,7 +209,7 @@ include_directive(Config) ->
 unions(Config) ->
     ct:log("Initial query on the schema"),
     Monster = dungeon:create(monster, [{name, <<"goblin">>}, {hitpoints, 10}]),
-    [{GoblinId, Goblin}] = dungeon:batch_create([{Monster, insert}]),
+    [{GoblinId, _Goblin}] = dungeon:batch_create([{Monster, insert}]),
     OpaqueId = dungeon:opaque_id(GoblinId),
     Expected1 = #{ data => #{
                      <<"goblin">> => #{
@@ -229,7 +229,7 @@ unions(Config) ->
 union_errors(Config) ->
     ct:log("You may not request fields on unions"),
     Monster = dungeon:create(monster),
-    [{GoblinId, Goblin}] = dungeon:batch_create([{Monster, insert}]),
+    [{GoblinId, _Goblin}] = dungeon:batch_create([{Monster, insert}]),
     OpaqueId = dungeon:opaque_id(GoblinId),
     Query = iolist_to_binary(["{ goblin: thing(id: \"", OpaqueId ,"\") { id } }"]),
     Q1 = binary_to_list(Query),
@@ -243,7 +243,7 @@ scalar_output_coercion(Config) ->
                                 , {color, #{ r => 65, g => 146, b => 75}}
                                 , {hitpoints, 10}
                                 ]),
-    [{GoblinId, Goblin}] = dungeon:batch_create([{Monster, insert}]),
+    [{GoblinId, _Goblin}] = dungeon:batch_create([{Monster, insert}]),
     OpaqueId = dungeon:opaque_id(GoblinId),
     #{ data := #{
         <<"goblin">> := #{
@@ -257,7 +257,7 @@ scalar_output_coercion(Config) ->
 replace_enum_representation(Config) ->
     ct:log("Test replace enum representation"),
     Monster = dungeon:create(monster, [{mood, "dodgy"}]),
-    [{GoblinId, Goblin}] = dungeon:batch_create([{Monster, insert}]),
+    [{GoblinId, _Goblin}] = dungeon:batch_create([{Monster, insert}]),
     OpaqueId = dungeon:opaque_id(GoblinId),
     #{ data := #{
          <<"goblin">> := #{
@@ -603,11 +603,10 @@ multiple_monsters_and_rooms(Config) ->
 
     Room1 = ?config(known_room_id, Config),
     NonExistentRoom = ?config(known_non_existent_room_id, Config),
-
     #{ data := #{
          <<"rooms">> := [#{<<"id">> := Room1}]}
      } = run(Config, <<"MultipleRooms">>, #{ <<"ids">> => [Room1]}),
-
+    % look for an existing room and a non existing room
     #{ data := #{ <<"rooms">> := null },
        errors :=
            [#{path := [<<"MultipleRooms">>, <<"rooms">>, 1],
@@ -615,7 +614,7 @@ multiple_monsters_and_rooms(Config) ->
             #{path := [<<"MultipleRooms">>, <<"rooms">>, 1],
               key := not_found } ]
      } = run(Config, <<"MultipleRooms">>,
-             #{ <<"ids">> => [Room1, base64:encode(<<"room:2">>)]}),
+             #{ <<"ids">> => [Room1, NonExistentRoom]}),
     ok.
 
 inline_fragment(Config) ->
@@ -659,7 +658,8 @@ nested_field_merge(Config) ->
               <<"attack">> := 3,
               <<"shellScripting">> := 3,
               <<"yell">> := <<"HELO">> }]
-    }}} = Res = run(Config, <<"TestNestedFieldMerge">>, #{ <<"id">> => ID }),
+    }}} = run(Config, <<"TestNestedFieldMerge">>, #{ <<"id">> => ID }),
+    ok.
     ok.
 
 unknown_variable(Config) ->

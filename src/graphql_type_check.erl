@@ -78,7 +78,7 @@ x_params(FunEnv, OpName, Params) ->
         TyVarEnv ->
             tc_params([OpName], TyVarEnv, Params)
     end.
-            
+
 tc_params(Path, TyVarEnv, InitialParams) ->
     F =
       fun(K, V0, PS) ->
@@ -200,7 +200,7 @@ input_coercer(Path, #scalar_type { id = ID, resolve_module = RM}, Val) ->
             err(Path, {input_coerce_abort, {Cl, Err}})
 
     end;
-input_coercer(Path, #enum_type { id = ID, resolve_module = undefined }, Val) ->
+input_coercer(_Path, #enum_type { resolve_module = undefined }, Val) ->
     {ok, Val};
 input_coercer(Path, #enum_type { id = ID, resolve_module = RM}, Val) ->
     try RM:input(ID, Val) of
@@ -254,7 +254,7 @@ tc_field(#{ fragenv := FE } = Ctx, Path, #frag_spread { id = ID, directives = Ds
             FSpread#frag_spread { directives = tc_directives(Ctx, Path, Ds) }
     end;
 tc_field(Ctx, Path, #frag { id = '...', selection_set = SSet, directives = Ds} = InlineFrag) ->
-    
+
     InlineFrag#frag {
         directives = tc_directives(Ctx, [InlineFrag | Path], Ds),
         selection_set = tc_sset(Ctx, [InlineFrag | Path], SSet)
@@ -388,7 +388,7 @@ value_type(_Ctx, _Path, _, F) when is_float(F) -> {scalar, float, F};
 value_type(_Ctx, _Path, _, true) -> {scalar, bool, true};
 value_type(_Ctx, _Path, _, false) -> {scalar, bool, false};
 value_type(_Ctx, _Path, _, Obj) when is_map(Obj) -> coerce_object(Obj);
-value_type(_Ctx, Path, Ty, Val) -> 
+value_type(_Ctx, Path, Ty, Val) ->
     err(Path, {invalid_value_type_coercion, Ty, Val}).
 
 refl_list(_Path, [], _T, Result) ->
@@ -504,4 +504,3 @@ err_msg({invalid_value_type_coercion, Ty, Val}) ->
     io_lib:format(
       "The value ~p cannot be coerced into the type ~p",
       [Val, Ty]).
-

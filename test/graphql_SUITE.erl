@@ -160,7 +160,7 @@ lex_schema(Config) ->
     FName = filename:join([?config(data_dir, Config), "test_schema.spec"]),
     {ok, Data} = file:read_file(FName),
     case graphql_scanner:string(binary_to_list(Data)) of
-        {ok, Token, _EndLine} ->
+        {ok, _Token, _EndLine} ->
             ok;
         {error, Err, _EndLine} ->
             ct:fail({parse_error, Err})
