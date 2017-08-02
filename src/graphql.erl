@@ -23,6 +23,9 @@
          validate_schema/0
 ]).
 
+%% Internal
+-export([token_ref/1]).
+
 -type json() :: number() | binary() | true | false | null | #{ binary() | atom() => json() } | [json()] .
 -type param_context() :: json().
 
@@ -40,6 +43,9 @@
 %% -----------------------------------------------------------------------------------
 token(#{ defer_process := Proc }) ->
     {'$graphql_token', Proc, make_ref()}.
+
+%% @private
+token_ref({'$graphql_token', _, Ref}) -> Ref.
 
 reply_cast({'$graphql_token', Target, Ref}, Data) ->
     Target ! {'$graphql_reply', Ref, Data},
