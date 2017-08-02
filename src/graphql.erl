@@ -11,6 +11,11 @@
          execute/1, execute/2
         ]).
 
+%% Deferred execution
+-export([
+         token/1, reply_cast/2
+         ]).
+
 %% Schema Definitions
 -export([
          load_schema/2,
@@ -25,9 +30,22 @@
 
 -export_type([ast/0, json/0, param_context/0]).
 
+-type graphql_token() :: {'$graphql_token', pid(), reference()}.
+-export_type([graphql_token/0]).
+
 -type schema_field() :: #{ atom() => any() }.
 -export_type([schema_field/0]).
 
+%% TOKENS
+%% -----------------------------------------------------------------------------------
+token(#{ defer_process := Proc }) ->
+    {'$graphql_token', Proc, make_ref()}.
+
+reply_cast({'$graphql_token', Target, Ref}, Data) ->
+    Target ! {'$graphql_reply', Ref, Data},
+    ok.
+
+%% -----------------------------------------------------------------------------------
 -spec parse( binary() | string()) ->
                    {ok, ast()} | {error, {scanner_error | parser_error, term()}}.
 parse(Input) when is_binary(Input) -> parse(binary_to_list(Input));
