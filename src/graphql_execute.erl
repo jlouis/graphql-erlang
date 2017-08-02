@@ -206,7 +206,7 @@ complete_value(Path, Ctx, Ty, Fields, {ok, {enum, Value}}) ->
     complete_value(Path, Ctx, Ty, Fields, {ok, Value});
 
 complete_value(Path, Ctx, {scalar, Scalar}, Fields, {ok, Value}) ->
-    complete_value(Path, Ctx, output_coerce_type(Scalar), Fields, {ok, Value});
+    complete_value(Path, Ctx, scalar_resolve(Scalar), Fields, {ok, Value});
 
 complete_value(Path, Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
     error_logger:warning_msg(
@@ -424,38 +424,33 @@ default_resolver(#{ field := Field}, Cur, _Args) ->
 
 %% -- OUTPUT COERCION ------------------------------------
 
-output_coerce_type(id) ->
+scalar_resolve(id) ->
     #scalar_type { id = <<"ID">>,
-                   input_coerce = fun ?MODULE:builtin_input_coercer/1,
                    description = <<"Builtin output coercer type">>,
                    resolve_module = graphql_scalar_binary_coerce
                    };
-output_coerce_type(string) ->
+scalar_resolve(string) ->
     #scalar_type { id = <<"String">>,
-                   input_coerce = fun ?MODULE:builtin_input_coercer/1,
                    description = <<"Builtin output coercer type">>,
                    resolve_module = graphql_scalar_binary_coerce
                  };
-output_coerce_type(bool) ->
+scalar_resolve(bool) ->
     #scalar_type { id = <<"Bool">>,
-                   input_coerce = fun ?MODULE:builtin_input_coercer/1,
                    description = <<"Builtin output coercer type">>,
                    resolve_module = graphql_scalar_bool_coerce
                  };
-output_coerce_type(int) ->
+scalar_resolve(int) ->
     #scalar_type { id = <<"Int">>,
-                   input_coerce = fun ?MODULE:builtin_input_coercer/1,
                    description = <<"Builtin output coercer type">>,
                    resolve_module = graphql_scalar_integer_coerce
                  };
-output_coerce_type(float) ->
+scalar_resolve(float) ->
     #scalar_type { id = <<"Float">>,
-                   input_coerce = fun ?MODULE:builtin_input_coercer/1,
                    description = <<"Builtin output coercer type">>,
                    resolve_module = graphql_scalar_float_coerce
                  };
-output_coerce_type(#scalar_type{} = SType) -> SType;
-output_coerce_type(UserDefined) when is_binary(UserDefined) ->
+scalar_resolve(#scalar_type{} = SType) -> SType;
+scalar_resolve(UserDefined) when is_binary(UserDefined) ->
     case graphql_schema:lookup(UserDefined) of
         #scalar_type{} = SType -> SType;
         not_found -> not_found

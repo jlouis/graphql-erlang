@@ -19,7 +19,7 @@ mk(#{ scalars := Sc }, #p_scalar { id = ID, annotations = Annots }) ->
        id => Name,
        description => Description,
        annotations => annotations(Annots),
-       coerce_module => Mod
+       resolve_module => Mod
       }};
 mk(#{ unions := Us }, #p_union { id = ID,
                                  annotations = Annots,

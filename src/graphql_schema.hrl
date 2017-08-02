@@ -75,9 +75,7 @@
         { id :: binary(),
           description :: binary(),
           annotations = #{} :: #{ binary() => any() },
-          resolve_module = graphql_enum_coerce :: mod(),
-          output_coerce :: undefined | fun ((any()) -> {ok, any()} | {error, any()}),
-          input_coerce  :: fun((any()) -> {ok, any()} | {error, any()})
+          resolve_module = graphql_enum_coerce :: mod()
         }).
 -type scalar_type() :: #scalar_type{}.
 
