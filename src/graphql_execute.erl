@@ -10,6 +10,17 @@
 
 -define(DEFER_TIMEOUT, 5000). %% @todo: Get rid of this timeout. It is temporary
 
+-record(partial,
+        { obj :: term(),
+          errors :: [term()],
+          deferrals :: term() }).
+
+-record(defer_state,
+        { top_level :: reference(),
+          work = #{} :: #{ reference() => #partial{} },
+          routes = #{} :: #{ reference() => reference() }
+        }).
+
 -spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
 x(X) -> x(#{ params => #{} }, X).
 
@@ -63,10 +74,15 @@ collect_auxiliary_data() ->
 execute_query(Ctx, #op { selection_set = SSet,
                          schema = QType } = Op) ->
     #object_type{} = QType,
-    {Res, Errs} =
-        execute_sset([graphql_ast:id(Op)], Ctx,
-                     SSet, QType, none),
-    complete_top_level(Res, Errs).
+    case execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self() },
+                      SSet, QType, none) of
+        {ok, Res, Errs} ->
+            complete_top_level(Res, Errs);
+        {deferral, Later} ->
+            Key = make_ref(),
+            DeferState = #defer_state{ work = #{ Key => Later }, top_level = Key},
+            defer_loop(DeferState)
+    end.
 
 execute_mutation(Ctx, #op { selection_set = SSet,
                             schema = QType } = Op) ->
@@ -78,28 +94,19 @@ execute_mutation(Ctx, #op { selection_set = SSet,
 
 execute_sset(Path, Ctx, SSet, Type, Value) ->
     GroupedFields = collect_fields(Path, Ctx, Type, SSet),
-    DeferProc = spawn_defer_proc(),
     try
-        case execute_sset(Path, Ctx#{ defer_process => DeferProc}, GroupedFields, Type, Value, [], [], []) of
+        case execute_sset(Path, Ctx, GroupedFields, Type, Value, [], [], []) of
             {Map, Errs, []} ->
-                {Map, Errs};
+                {ok, Map, Errs};
             {Map, Errs, Defers} ->
-                execute_sset_defers(DeferProc, Map, Errs, Defers)
+                {deferral, #partial { obj = Map,
+                                      errors = Errs,
+                                      deferrals = Defers }}
         end
     catch
         throw:{null, Errors, Ds} ->
             %% @todo: Cancel defers, or at least consider a way of doing so!
-            {null, Errors}
-    end.
-
-execute_sset_defers(DeferProc, Map, Errs, Defers) ->
-    Parent = self(),
-    DeferProc ! {handle_defers, Parent, Defers},
-    receive
-        {defer_result, DeferProc, Map2, Errs2} ->
-            {maps:merge(Map, Map2), Errs2 ++ Errs}
-    after ?DEFER_TIMEOUT ->
-            exit(defer_timeout)
+            {ok, null, Errors}
     end.
 
 execute_sset(_Path, _Ctx, [], _Type, _Value, Map, Errs, Defers) ->
@@ -649,73 +656,6 @@ alias(#field { alias = Alias }) -> name(Alias).
 
 field_type(#field { schema = SF }) -> SF.
 
-%% -- DEFERRAL PROCESSES ------------------
--record(defer_state,
-        {
-          target :: pid(),
-          deferrals :: term(),
-          result :: map(),
-          errors :: term(),
-          defer_process :: pid()
-        }).
-
-spawn_defer_proc() ->
-    spawn_link(fun() ->
-                       State = defer_proc_init(),
-                       defer_proc_loop_check(State)
-               end).
-
-defer_proc_init_defer_map([], Acc) -> Acc;
-defer_proc_init_defer_map([{Key, {defer, Token, Data}} | Next], Acc) ->
-    Ref = graphql:token_ref(Token),
-    defer_proc_init_defer_map(Next, Acc#{ Ref => {Key, Data} }).
-
-defer_proc_init() ->
-    receive
-        {handle_defers, Parent, Defers} ->
-            DeferMap = defer_proc_init_defer_map(Defers, #{}),
-            DeferProc = spawn_defer_proc(),
-            #defer_state{ target = Parent,
-                          result = #{},
-                          errors = [],
-                          defer_process = DeferProc,
-                          deferrals = DeferMap }
-    end.
-
-defer_proc_loop_check(#defer_state { deferrals = Ds } = State) ->
-    case maps:size(Ds) of
-        0 -> defer_proc_done(State);
-        _ -> defer_proc_loop(State)
-    end.
-
-defer_proc_done(#defer_state { result = Res,
-                               errors = Errors,
-                               target = Target }) ->
-    Target ! {defer_result, self(), Res, Errors},
-    ok.
-
-defer_proc_loop(#defer_state { result = ResMap,
-                               errors = Errs,
-                               deferrals = Defers,
-                               defer_process = DeferProc } = State) ->
-    receive
-        {'$graphql_reply', Ref, Val} ->
-            {{Key, {P, Cx, ElabTy, Fields}}, Defers2} = maps:take(Ref, Defers),
-            case complete_value(P, Cx#{ defer_process => DeferProc }, ElabTy, Fields, Val) of
-                {ok, Result, FieldErrs} ->
-                    defer_proc_loop_check(
-                      State#defer_state{ result = ResMap#{ Key => Result },
-                                         errors = FieldErrs ++ Errs,
-                                         deferrals = Defers2 });
-                {error, Errors} ->
-                    defer_proc_done(State#defer_state { result = null,
-                                                             errors = Errors })
-                %% @todo: Need defer handling here
-            end
-    after ?DEFER_TIMEOUT ->
-            defer_proc_done(State#defer_state { result = null })
-    end.
-
 %% -- CONTEXT CANONICALIZATION ------------
 canon_context(#{ params := Params } = Ctx) ->
      Ctx#{ params := canon_params(Params) }.
@@ -727,6 +667,15 @@ canon_params(Ps) ->
 binarize(A) when is_atom(A) -> atom_to_binary(A, utf8);
 binarize(B) when is_binary(B) -> B;
 binarize(L) when is_list(L) -> list_to_binary(L).
+
+%% -- DEFERRED PROCESSING --
+defer_loop(#defer_state { } = State) ->
+    receive
+        {'$graphql_reply', Ref, Data} ->
+            ok
+    after 5000 ->
+            exit(defer_timeout)
+    end.
 
 %% -- ERROR HANDLING --
 
