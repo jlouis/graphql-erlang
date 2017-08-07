@@ -669,13 +669,55 @@ binarize(B) when is_binary(B) -> B;
 binarize(L) when is_list(L) -> list_to_binary(L).
 
 %% -- DEFERRED PROCESSING --
-defer_loop(#defer_state { } = State) ->
+
+%% Process deferred computations by grabbing them in the mailbox
+defer_loop(#defer_state {} = State) ->
     receive
-        {'$graphql_reply', Ref, Data} ->
-            ok
+        {'$graphql_reply', Key, Data} ->
+            defer_handle_route(State, Key, Data)
+
     after 5000 ->
             exit(defer_timeout)
     end.
+
+%% Process a reply by handling its route
+defer_handle_route(#defer_state { routes = Routes } = State, Key, Data) ->
+    case maps:take(Key, Routes) of
+        {Target, NewRoutes} ->
+            defer_handle_work(State#defer_state { routes = NewRoutes },
+                              Target,
+                              Data);
+        error ->
+            error_logger:info_msg("Warning: received out-of-band GraphQL reply: ~p", [Key]),
+            defer_loop(State)
+    end.
+
+%% Process work
+defer_handle_work(#defer_state {
+                     routes = Routes,
+                     work = WorkMap } = State, Key, Data) ->
+    Partial = maps:get(Key, WorkMap),
+    case handle_partial_object(Partial, Key, Data) of
+        {ok, Res, Errs} ->
+            %% Object is done, so route it
+            defer_handle_route(State#defer_state {
+                                 work = maps:remove(Key, WorkMap)
+                                },
+                               Key, {ok, Res, Errs});
+        {deferral, Later} ->
+            NewRoutes = routes(Later),
+            defer_loop(State#defer_state {
+                         routes = maps:merge(Routes, NewRoutes),
+                         work = WorkMap#{ Key := Later }
+                        })
+    end.
+
+%% Process a partial object
+handle_partial_object(#partial { deferrals = Deferrals }, Key, Result) -> 
+    todo.
+
+routes(#partial { deferrals = Deferrals }) ->
+    todo.
 
 %% -- ERROR HANDLING --
 
