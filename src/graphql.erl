@@ -33,8 +33,8 @@
 
 -export_type([ast/0, json/0, param_context/0]).
 
--type graphql_token() :: {'$graphql_token', pid(), reference()}.
--export_type([graphql_token/0]).
+-type token() :: {'$graphql_token', pid(), reference()}.
+-export_type([token/0]).
 
 -type schema_field() :: #{ atom() => any() }.
 -export_type([schema_field/0]).
