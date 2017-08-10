@@ -89,7 +89,23 @@ execute_query(Ctx, #op { selection_set = SSet,
             defer_loop(DeferState)
     end.
 
-routes(WL) -> routes(WL, #{}).
+execute_mutation(Ctx, #op { selection_set = SSet,
+                            schema = QType } = Op) ->
+    #object_type{} = QType,
+    case execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self() },
+                      SSet, QType, none) of
+        {ok, Res, Errs} ->
+            complete_top_level(Res, Errs);
+        {work, TopKey, WorkList} ->
+            DeferState = #defer_state{ routes = routes(WorkList),
+                                       work = worklist(WorkList), top_level = TopKey},
+            defer_loop(DeferState)
+    end.
+
+
+
+routes(WL) ->
+    routes(WL, #{}).
 
 routes([], Acc) ->
     Acc;
@@ -99,24 +115,11 @@ routes([#partial { key = T, deferrals = DMap }|Ps], Acc) ->
                     end,
                     maps:keys(DMap)),
     routes(Ps, maps:merge(Acc, maps:from_list(New))).
-                            
 
 worklist(WL) -> worklist(WL, #{}).
 
 worklist([], Acc)                            -> Acc;
 worklist([#partial { key = K } = P|Ps], Acc) -> worklist(Ps, Acc#{ K => P }).
-
-execute_mutation(Ctx, #op { selection_set = SSet,
-                            schema = QType } = Op) ->
-    #object_type{} = QType,
-    case execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self() },
-                      SSet, QType, none) of
-        {ok, Res, Errs} ->
-            complete_top_level(Res, Errs);
-        {work, TopKey, WorkList} ->
-            DeferState = #defer_state{ work = worklist(WorkList), top_level = TopKey},
-            defer_loop(DeferState)
-    end.
 
 execute_sset(Path, Ctx, SSet, Type, Value) ->
     GroupedFields = collect_fields(Path, Ctx, Type, SSet),
@@ -468,32 +471,31 @@ complete_value_list(Path, Ctx, Ty, Fields, Results) ->
                            case complete_value([I|Path], Ctx, Ty, Fields, R) of
                                {ok, V, Errs} ->
                                    {ok, V, resolver_error_wrap(Errs)};
+                               {work, Ref, Work} ->
+                                   {work, Ref, Work};
                                {error, Err} -> {error, Err}
                            end
                    end,
             Completed = [{I, Wrap(I, R)} || {I, R} <- IndexedResults],
             case complete_list_value_result(Completed) of
-                {error, Reasons} ->
-                    {ok, null, Reasons};
-                {ok, L} ->
-                    {Vals, Errs} = lists:unzip(L),
+                {Res, [], []} ->
+                    {Vals, Errs} = lists:unzip(Res),
                     Len = length(Completed),
                     Len = length(Vals),
-                    {ok, Vals, lists:concat(Errs)}
+                    {ok, Vals, lists:concat(Errs)};
+                {_, Reasons, []} ->
+                    {ok, null, Reasons}
             end
     end.
 
-complete_list_value_result(Completed) ->
-    case lists:any(
-           fun
-               ({_, {error, _}}) -> true;
-               (_) -> false
-           end,
-           Completed) of
-        true -> {error, lists:concat(
-                          [R || {_, {error, R}} <- Completed])};
-        false -> {ok, [{V, Es} || {_, {ok, V, Es}} <- Completed]}
-    end.
+complete_list_value_result([]) ->
+    {[], [], []};
+complete_list_value_result([{_, {error, Err}}|Next]) ->
+    {Res, Errs, Work} = complete_list_value_result(Next),
+    {Res, Err ++ Errs, Work};
+complete_list_value_result([{_, {ok, V, Es}}|Next]) ->
+    {Res, Errs, Work} = complete_list_value_result(Next),
+    {[{V, Es} | Res], Errs, Work}.
 
 index([]) -> [];
 index(L) -> lists:zip(lists:seq(0, length(L)-1), L).
@@ -728,12 +730,12 @@ binarize(L) when is_list(L) -> list_to_binary(L).
 %% -- DEFERRED PROCESSING --
 
 %% Process deferred computations by grabbing them in the mailbox
-defer_loop(#defer_state {} = State) ->
+defer_loop(#defer_state { routes = Routes, work = Work} = State) ->
+    error_logger:info_msg("Awaiting routes=~p workitems=~B", [Routes, maps:size(Work)]),
     receive
         {'$graphql_reply', Key, Data} ->
             defer_handle_route(State, Key, Data)
-
-    after 5000 ->
+    after 750 ->
             exit(defer_timeout)
     end.
 
@@ -798,7 +800,7 @@ handle_partial_object(#partial { obj = Obj,
                                           obj = Obj#{ Key => Result }
                                          });
                 #partial{} = Later ->
-                    partial_in_partial
+                    exit(partial_in_partial)
             end;
         error ->
             error_logger:info_msg("deferral failure key=~p state=~p",
@@ -810,10 +812,8 @@ handle_partial_done(#partial { obj = Obj,
                                errors = Errs,
                                deferrals = Ds } = Partial) ->
     case maps:size(Ds) of
-        0 ->
-            {ok, Obj, Errs};
-        _ ->
-            Partial
+        0 -> {ok, Obj, Errs};
+        _ -> Partial
     end.
                 
 %% -- ERROR HANDLING --
