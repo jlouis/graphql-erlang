@@ -14,14 +14,13 @@
         { data :: term(),
           source :: reference(),
           target :: reference(),
+          field_name :: binary(),
           obj :: term(),
           errors :: [term()],
           deferrals :: #{ reference() => binary() } }).
 
 -record(defer_state,
-        { top_level :: reference(),
-          work = #{} :: #{ reference() => #workunit{} }
-        }).
+        { work = #{} :: #{ reference() => #workunit{} } }).
 
 -spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
 x(X) -> x(#{ params => #{} }, X).
@@ -76,52 +75,60 @@ collect_auxiliary_data() ->
 execute_query(Ctx, #op { selection_set = SSet,
                          schema = QType } = Op) ->
     #object_type{} = QType,
-    case execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self() },
+    case execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self(),
+                                                  defer_target => top_level },
                       SSet, QType, none) of
         {ok, Res, Errs} ->
             complete_top_level(Res, Errs);
-        {work, TopKey, WorkList} ->
-            DeferState = #defer_state{ work = worklist(WorkList), top_level = TopKey},
+        {work, WorkList} ->
+            DeferState = #defer_state{ work = worklist(WorkList) },
             defer_loop(DeferState)
     end.
 
 execute_mutation(Ctx, #op { selection_set = SSet,
                             schema = QType } = Op) ->
     #object_type{} = QType,
-    case execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self() },
+    case execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self(),
+                                                  defer_target => top_level },
                       SSet, QType, none) of
         {ok, Res, Errs} ->
             complete_top_level(Res, Errs);
-        {work, TopKey, WorkList} ->
-            DeferState = #defer_state{ work = worklist(WorkList), top_level = TopKey},
+        {work, WorkList} ->
+            DeferState = #defer_state{ work = worklist(WorkList) },
             defer_loop(DeferState)
     end.
 
 worklist(WL) -> worklist(WL, #{}).
 
-worklist([], Acc)                             -> Acc;
+worklist([], Acc)                                -> Acc;
 worklist([#workunit { source = K } = P|Ps], Acc) -> worklist(Ps, Acc#{ K => P }).
 
-execute_sset(Path, Ctx, SSet, Type, Value) ->
+execute_sset(Path, #{ defer_target := Target } = Ctx, SSet, Type, Value) ->
     GroupedFields = collect_fields(Path, Ctx, Type, SSet),
+    RecurTarget = make_ref(),
     try
-        case execute_sset(Path, Ctx, GroupedFields, Type, Value, [], [], []) of
-            {Map, Errs, [], []} ->
+        case execute_sset(Path, Ctx#{ defer_target => RecurTarget }, GroupedFields, Type, Value, [], [], []) of
+            {Map, Errs, []} ->
                 {ok, Map, Errs};
             {Map, Errs, Work} ->
-                Key = make_ref(),
-                %% @todo: correct the source/target keys here
-                {work, Key, [#workunit { 
-                                source = Key,
-                                obj = Map,
-                                errors = Errs
-                               } | Work]}
+                {work, [#workunit { 
+                           source = RecurTarget,
+                           target = Target,
+                           obj = Map,
+                           errors = Errs,
+                           deferrals = deferral_map(Work)
+                          } | Work]}
         end
     catch
         throw:{null, Errors, _Ds} ->
             %% @todo: Cancel defers, or at least consider a way of doing so!
             {ok, null, Errors}
     end.
+
+deferral_map([]) -> #{};
+deferral_map([#workunit { field_name = Key, source = Source}|Next]) ->
+    Map = deferral_map(Next),
+    Map#{ Source => Key }.
 
 execute_sset(_Path, _Ctx, [], _Type, _Value, Map, Errs, Work) ->
     {maps:from_list(lists:reverse(Map)), Errs, Work};
@@ -145,19 +152,17 @@ execute_sset(Path, Ctx, [{Key, [F|_] = Fields} | Next],
                                  Work);
                 {defer, WU} ->
                     execute_sset(Path, Ctx, Next, Type, Value, Map, Errs,
-                                 [amend_target(Ctx, WU)|Work]);
-                {work, PartialKey, Partials} ->
-                    execute_sset(Path, Ctx, Next, Type, Value,
-                                 Map,
-                                 Errs,
-                                 Partials ++ Work);
+                                 [amend_target(Ctx, Key, WU)|Work]);
+                {work, WUs} ->
+                    execute_sset(Path, Ctx, Next, Type, Value, Map, Errs,
+                                 WUs ++ Work);
                 {error, Errors} ->
                     throw({null, Errors, Work})
             end
     end.
 
-amend_target(#{ defer_target := Target }, #workunit{} = WU) ->
-    WU#workunit { target = Target }.
+amend_target(#{ defer_target := Target }, Key, #workunit{} = WU) ->
+    WU#workunit { target = Target, obj = scalar, field_name = Key }.
 
 typename(#object_type { id = ID }) -> ID.
 
@@ -723,9 +728,13 @@ binarize(L) when is_list(L) -> list_to_binary(L).
 
 %% -- DEFERRED PROCESSING --
 
+format_work({Key, WU}) ->
+    {Key,
+     WU#workunit { data = removed }}.
+
 %% Process deferred computations by grabbing them in the mailbox
 defer_loop(#defer_state { work = Work } = State) ->
-    error_logger:info_msg("Awaiting routes=~p workitems=~B", [maps:keys(Work), maps:size(Work)]),
+    error_logger:info_msg("Awaiting routes=~p workitems=~p", [maps:keys(Work), [format_work(W) || W <- maps:to_list(Work)]] ),
     receive
         {'$graphql_reply', Key, Data} ->
             defer_handle_work(State, Key, Data)
@@ -735,17 +744,17 @@ defer_loop(#defer_state { work = Work } = State) ->
 
 %% Process work
 defer_handle_work(#defer_state {
-                     top_level = TopKey,
                      work = WorkMap } = State,
                   Source,
                   Data) ->
+    error_logger:info_msg("Handling work ~p", [Source]),
     case maps:get(Source, WorkMap, not_found) of
         not_found ->
             error_logger:info_msg("Warning: Received out-of-band token: ~p", [Source]),
             defer_loop(State);
-        #workunit{ target = Target} = WU ->
+        #workunit{ target = Target } = WU ->
             case defer_handle_workunit(WU, Source, Data) of
-                {done, Res, Errs} when Source == TopKey ->
+                {done, Res, Errs} when Source == top_level ->
                     complete_top_level(Res, Errs);
                 {done, Res, Errs} ->
                     %% Object is done, so route it
@@ -758,7 +767,8 @@ defer_handle_work(#defer_state {
 %% Process a partial object
 defer_handle_workunit(#workunit { obj = scalar,
                                   data = {Path, Ctx, ElabTy, Fields}
-                                }, _Source, ResolvedValue) ->
+                                }, Source, ResolvedValue) ->
+    error_logger:info_msg("Handling workunit ~p", [Source]),
     case complete_value(Path, Ctx, ElabTy, Fields, ResolvedValue) of
         {ok, Result, Errs} ->
             {done, Result, Errs}
@@ -766,6 +776,7 @@ defer_handle_workunit(#workunit { obj = scalar,
 defer_handle_workunit(#workunit { obj = Obj,
                                   errors = PartialErrs,
                                   deferrals = Defs} = WU, DKey, ResolvedValue) ->
+    error_logger:info_msg("Handling workunit ~p", [DKey]),    
     case maps:take(DKey, Defs) of
         {{_, FieldName}, NewDefs} ->
             {ok, Value, Errs} = ResolvedValue,
@@ -783,7 +794,7 @@ defer_handle_workunit_done(#workunit { obj = Obj,
                                  errors = Errs,
                                  deferrals = Ds } = WU) ->
     case maps:size(Ds) of
-        0 -> {ok, Obj, Errs};
+        0 -> {done, Obj, Errs};
         _ -> WU
     end.
                 
