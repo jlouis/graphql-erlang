@@ -454,15 +454,14 @@ complete_value_list(Path, Ctx, Ty, Fields, Results) ->
         ok ->
             Wrap = fun(I,R) ->
                            case complete_value([I|Path], Ctx, Ty, Fields, R) of
-                               {ok, V, Errs} ->
-                                   {ok, V, resolver_error_wrap(Errs)};
-                               {work, Ref, Work} ->
-                                   {work, Ref, Work, {[I|Path], Ctx, Ty, Fields}};
+                               {ok, V, Errs} -> {ok, V, resolver_error_wrap(Errs)};
+                               {work, WUs} -> {work, WUs};
                                {error, Err} -> {error, Err}
                            end
                    end,
             Completed = [{I, Wrap(I, R)} || {I, R} <- IndexedResults],
-            case complete_list_value_result(Completed) of
+            Target = make_ref(),
+            case complete_list_value_result(Target, Completed) of
                 {Res, [], []} ->
                     {Vals, Errs} = lists:unzip(Res),
                     Len = length(Completed),
@@ -471,34 +470,32 @@ complete_value_list(Path, Ctx, Ty, Fields, Results) ->
                 {_, Reasons, []} ->
                     {ok, null, Reasons};
                 {Res, Errors, WorkData} ->
-                    Key = make_ref(),
-                    {Deferrals, Work} = defer_list(Key, WorkData),
-                    {work, Key, [#workunit{
-                                    source = Key,
-                                    obj = Res,
-                                    deferrals = Deferrals,
-                                    errors = Errors } | Work]}
+                    DeferMap = defer_map(Res),
+                    {work, [#workunit{
+                               source = Target,
+                               obj = {list, #{}, Res},
+                               deferrals = DeferMap,
+                               errors = Errors } | WorkData]}
             end
     end.
 
-defer_list(_Target, []) ->
-    [];
-defer_list(Target, [{work, Source, WU}|Next]) ->
-    WUs = defer_list(Target, Next),
-    WU = #workunit { source = Source },
-    [WU|WUs].
+defer_map([]) -> #{};
+defer_map([{defer, Key}|T]) ->
+    Rest = defer_map(T),
+    Rest#{ Key => true }.
 
-complete_list_value_result([]) ->
+complete_list_value_result(_Target, []) ->
     {[], [], []};
-complete_list_value_result([{_, {error, Err}}|Next]) ->
-    {Res, Errs, Work} = complete_list_value_result(Next),
+complete_list_value_result(Target, [{_, {error, Err}}|Next]) ->
+    {Res, Errs, Work} = complete_list_value_result(Target, Next),
     {Res, Err ++ Errs, Work};
-complete_list_value_result([{_, {ok, V, Es}}|Next]) ->
-    {Res, Errs, Work} = complete_list_value_result(Next),
+complete_list_value_result(Target, [{_, {ok, V, Es}}|Next]) ->
+    {Res, Errs, Work} = complete_list_value_result(Target, Next),
     {[{V, Es} | Res], Errs, Work};
-complete_list_value_result([{_, {work, Ref, _, _} = W}|Next]) ->
-    {Res, Errs, Work} = complete_list_value_result(Next),
-    {[{partial, Ref}|Res], Errs, [W|Work]}. 
+complete_list_value_result(Target, [{_, {work, [#workunit { source = S } = H|T]}}|Next]) ->
+    {Res, Errs, Work} = complete_list_value_result(Target, Next),
+    WUs = [H#workunit { target = Target } | T],
+    {[{defer, S}|Res], Errs, WUs ++ Work}. 
 
 
 index([]) -> [];
@@ -781,6 +778,22 @@ defer_handle_workunit(#workunit { obj = scalar,
         {ok, Result, Errs} ->
             {done, Result, Errs, Target}
     end;
+defer_handle_workunit(#workunit { obj = {list, Results, L},
+                                  errors = PartialErrs,
+                                  deferrals = Defs } = WU, Source, {DKey, ResolvedValue}) ->
+    error_logger:info_msg("Handling list workunit ~p for key ~p", [Source, DKey]),
+    case maps:take(DKey, Defs) of
+        {_, NewDefs} ->
+            {ok, Value, Errs} = ResolvedValue,
+            defer_handle_workunit_done(WU#workunit {
+                                         deferrals = NewDefs,
+                                         errors = Errs ++ PartialErrs,
+                                         obj = {list, Results#{ DKey => Value }, L}});
+        error ->
+            error_logger:info_message("deferral (list) failure key=~p state=~p",
+                                      [DKey, Defs]),
+            exit(error)
+    end;
 defer_handle_workunit(#workunit { obj = Obj,
                                   errors = PartialErrs,
                                   deferrals = Defs} = WU, Source, {DKey, ResolvedValue}) ->
@@ -806,10 +819,19 @@ defer_handle_workunit_done(#workunit {
     case maps:size(Ds) of
         0 ->
             error_logger:info_msg("forwarding to ~p", [Target]),
-            {done, Obj, Errs, Target};
+            case Obj of
+                {list, ValueMap, L} ->
+                    ListObj = defer_fill_in_values(ValueMap, L),
+                    {done, ListObj, Errs, Target};
+                Obj ->
+                    {done, Obj, Errs, Target}
+            end;
         _ -> WU
     end.
-                
+
+defer_fill_in_values(_, []) -> [];
+defer_fill_in_values(Map, [{defer, S}|T]) -> [maps:get(S, Map)|defer_fill_in_values(Map, T)].
+
 %% -- ERROR HANDLING --
 
 resolver_error_wrap([]) -> [];
