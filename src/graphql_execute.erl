@@ -830,7 +830,8 @@ defer_handle_workunit_done(#workunit {
     end.
 
 defer_fill_in_values(_, []) -> [];
-defer_fill_in_values(Map, [{defer, S}|T]) -> [maps:get(S, Map)|defer_fill_in_values(Map, T)].
+defer_fill_in_values(Map, [{defer, S}|T]) -> [maps:get(S, Map)|defer_fill_in_values(Map, T)];
+defer_fill_in_values(Map, [H|T]) -> [H|defer_fill_in_values(Map, T)].
 
 %% -- ERROR HANDLING --
 

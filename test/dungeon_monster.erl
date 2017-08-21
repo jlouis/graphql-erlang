@@ -29,7 +29,14 @@ execute(Ctx, #monster { id = ID,
         <<"color">> -> color(Color, Args);
         <<"hitpoints">> -> {ok, HP};
         <<"hp">> -> {ok, HP};
-        <<"inventory">> -> {ok, [dungeon:load(OID) || OID <- Inventory]};
+        <<"inventory">> ->
+            InvToken = graphql:token(Ctx),
+            spawn_link(fun() ->
+                               timer:sleep(40),
+                               Data = [dungeon:load(OID) || OID <- Inventory],
+                               graphql:reply_cast(InvToken, Data)
+                       end),
+            {defer, InvToken};
         <<"mood">> ->
             MoodToken = graphql:token(Ctx),
             spawn_link(fun() ->

@@ -3,7 +3,7 @@
 
 -export([execute/4]).
 
-execute(_Ctx, #item { id = ID,
+execute(Ctx, #item { id = ID,
                       name = Name,
                       contents = Contents,
                       description = Description } = Item, Field, _) ->
@@ -11,7 +11,13 @@ execute(_Ctx, #item { id = ID,
         <<"id">> -> {ok, dungeon:wrap({item, ID})};
         <<"name">> -> {ok, Name};
         <<"description">> -> {ok, Description};
-        <<"weight">> -> {ok, weight(Item)};
+        <<"weight">> ->
+            Tok = graphql:token(Ctx),
+            spawn_link(fun() ->
+                               timer:sleep(20),
+                               graphql:cast_reply(Tok, {ok, weight(Item)})
+                       end),
+            {defer, Tok};
         <<"weightSum">> -> {ok, weight_sum(Item)};
         <<"contents">> ->
             {ok, [dungeon:load(OID) || OID <- Contents]}
