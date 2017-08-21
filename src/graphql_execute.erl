@@ -123,6 +123,7 @@ execute_sset(Path, #{ defer_target := Target } = Ctx, SSet, Type, Value) ->
                            target = Target,
                            obj = Map,
                            errors = Errs,
+                           data = {Path, Ctx, Type, GroupedFields},
                            deferrals = deferral_map(RecurTarget, Work)
                           } | Work]}
         end
@@ -152,9 +153,6 @@ execute_sset(Path, Ctx, [{Key, [F|_] = Fields} | Next],
                                  [{Key, Result} | Map],
                                  FieldErrs ++ Errs,
                                  Work);
-                {defer, WU} ->
-                    execute_sset(Path, Ctx, Next, Type, Value, Map, Errs,
-                                 [amend_target(Ctx, Key, WU)|Work]);
                 {work, WUs} ->
                     Items = [format_work({Key, W}) || W <- WUs],
                     error_logger:info_msg("WorkUnits for key ~p: ~p", [Key, Items]),
@@ -165,8 +163,9 @@ execute_sset(Path, Ctx, [{Key, [F|_] = Fields} | Next],
             end
     end.
 
-amend_target(Ctx, Key, [H|T]) -> [amend_target(Ctx, Key, H)|T];
-amend_target(#{ defer_target := Target }, Key, #workunit{} = WU) ->
+amend_target(Ctx, Key, [H|T]) -> [amend_target_(Ctx, Key, H)|T].
+
+amend_target_(#{ defer_target := Target }, Key, #workunit{} = WU) ->
     WU#workunit { target = Target, field_name = Key }.
 
 typename(#object_type { id = ID }) -> ID.
@@ -271,7 +270,7 @@ execute_field(Path, Ctx, ObjType, Value, [F|_] = Fields, #schema_field { annotat
                     obj = scalar,
                     errors = [],
                     deferrals = #{} },
-            {defer, WU};
+            {work, [WU]};
         ResolvedValue ->
             complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue)
     end.
@@ -331,7 +330,11 @@ complete_value(Path, Ctx, {non_null, InnerTy}, Fields, Result) ->
         {ok, null, InnerErrs} ->
             err(Path, null_value, InnerErrs);
         {ok, _C, _E} = V ->
-            V
+            V;
+        {work, _} = Work ->
+            %% @todo Handle null propagation here. The object should know it is being
+            %% null-wrapped in this case
+            amend_null(Work)
     end;
 complete_value(_Path, _Ctx, _Ty, _Fields, {ok, null}) ->
     {ok, null, []};
@@ -428,6 +431,7 @@ assert_list_completion_structure(Ty, Fields, Results) ->
         fun
             ({_I, {ok, _}}) -> true;
             ({_I, {error, _}}) -> true;
+            ({_I, {defer, _}}) -> true;
             ({_I, _}) -> false
         end,
     {_Ok, Fail} = lists:partition(ValidResult, Results),
@@ -475,14 +479,10 @@ complete_value_list(Path, Ctx, Ty, Fields, Results) ->
                                source = Target,
                                obj = {list, #{}, Res},
                                deferrals = DeferMap,
+                               data = {Path, Ctx, Ty, Fields},
                                errors = Errors } | WorkData]}
             end
     end.
-
-defer_map([]) -> #{};
-defer_map([{defer, Key}|T]) ->
-    Rest = defer_map(T),
-    Rest#{ Key => true }.
 
 complete_list_value_result(_Target, []) ->
     {[], [], []};
@@ -497,6 +497,13 @@ complete_list_value_result(Target, [{_, {work, [#workunit { source = S } = H|T]}
     WUs = [H#workunit { target = Target } | T],
     {[{defer, S}|Res], Errs, WUs ++ Work}. 
 
+defer_map([]) ->
+    #{};
+defer_map([{defer, Key}|T]) ->
+    Rest = defer_map(T),
+    Rest#{ Key => true };
+defer_map([_H|T]) ->
+    defer_map(T).
 
 index([]) -> [];
 index(L) -> lists:zip(lists:seq(0, length(L)-1), L).
@@ -779,16 +786,26 @@ defer_handle_workunit(#workunit { obj = scalar,
             {done, Result, Errs, Target}
     end;
 defer_handle_workunit(#workunit { obj = {list, Results, L},
+                                  data = {Path, Ctx, ElabTy, Fields},
                                   errors = PartialErrs,
                                   deferrals = Defs } = WU, Source, {DKey, ResolvedValue}) ->
     error_logger:info_msg("Handling list workunit ~p for key ~p", [Source, DKey]),
     case maps:take(DKey, Defs) of
         {_, NewDefs} ->
-            {ok, Value, Errs} = ResolvedValue,
-            defer_handle_workunit_done(WU#workunit {
-                                         deferrals = NewDefs,
-                                         errors = Errs ++ PartialErrs,
-                                         obj = {list, Results#{ DKey => Value }, L}});
+            case complete_value(Path, Ctx, ElabTy, Fields, ResolvedValue) of
+                {ok, Result, Errs} ->
+                    defer_handle_workunit_done(WU#workunit {
+                                                 deferrals = NewDefs,
+                                                 errors = Errs ++ PartialErrs,
+                                                 obj = {list, Results#{ DKey => Result }, L}});
+                {error, Err} ->
+                    %% An error occurs, fail this object
+                    defer_handle_workunit_done(WU#workunit {
+                                                 deferrals = NewDefs,
+                                                 errors = [Err] ++ PartialErrs,
+                                                 obj = {error, null}
+                                                 })
+            end;
         error ->
             error_logger:info_message("deferral (list) failure key=~p state=~p",
                                       [DKey, Defs]),
@@ -812,26 +829,38 @@ defer_handle_workunit(#workunit { obj = Obj,
     end.
 
 defer_handle_workunit_done(#workunit {
+                              obj = {error, Res},
+                              target = Target,
+                              errors = Errs1,
+                              deferrals = Ds }) ->
+    %% @todo Cancel deferrals here since they are now spurious
+    {done, Res, Errs1, Target};
+defer_handle_workunit_done(#workunit {
                               obj = Obj,
                               target = Target,
-                              errors = Errs,
+                              errors = Errs1,
                               deferrals = Ds } = WU) ->
     case maps:size(Ds) of
         0 ->
             error_logger:info_msg("forwarding to ~p", [Target]),
             case Obj of
                 {list, ValueMap, L} ->
-                    ListObj = defer_fill_in_values(ValueMap, L),
-                    {done, ListObj, Errs, Target};
+                    {ListObj, Errs2} = defer_fill_in_values(ValueMap, L),
+                    {done, ListObj, Errs2 ++ Errs1, Target};
                 Obj ->
-                    {done, Obj, Errs, Target}
+                    {done, Obj, Errs1, Target}
             end;
         _ -> WU
     end.
 
-defer_fill_in_values(_, []) -> [];
-defer_fill_in_values(Map, [{defer, S}|T]) -> [maps:get(S, Map)|defer_fill_in_values(Map, T)];
-defer_fill_in_values(Map, [H|T]) -> [H|defer_fill_in_values(Map, T)].
+defer_fill_in_values(_, []) -> {[], []};
+defer_fill_in_values(Map, [{defer, S}|T]) ->
+    {R, E} = defer_fill_in_values(Map, T),
+    {[maps:get(S, Map) | R],
+     E};
+defer_fill_in_values(Map, [{V, E1}|T]) ->
+    {Vs, E2} = defer_fill_in_values(Map, T),
+    {[V|Vs], E1 ++ E2}.
 
 %% -- ERROR HANDLING --
 
@@ -868,3 +897,5 @@ err_msg(list_resolution) ->
 err_msg(Otherwise) ->
     io_lib:format("Error in execution: ~p", [Otherwise]).
 
+amend_null({work, [#workunit { data = {Path, Ctx, ElabTy, Fields} } = W | Ws]}) ->
+    {work, [W#workunit { data = {Path, Ctx, {null, ElabTy}, Fields} } | Ws]}.
