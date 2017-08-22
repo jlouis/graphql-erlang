@@ -26,14 +26,14 @@ x({union, #{ id := ID, description := Desc, types := Types } = U}) ->
         resolve_type = Resolver
     };
 
-x({enum, #{ id := ID, description := Desc, values := VDefs} = E}) ->
-    {Mod} = enum_resolve(E),
+x({enum, #{ id := ID, description := Desc, values := VDefs} = Enum}) ->
+    ModuleResolver = enum_resolve(Enum),
     #enum_type {
     	id = c_id(ID),
     	description = binarize(Desc),
-    	annotations = annotations(E),
+    	annotations = annotations(Enum),
     	values = map_2(fun c_enum_val/2, VDefs),
-        resolve_module = Mod
+        resolve_module = ModuleResolver
      };
 
 x({object, #{ id := ID, fields := FieldDefs, description := Desc } = Obj}) ->
@@ -53,16 +53,14 @@ x({input_object, #{ id := ID, fields := FieldDefs, description := Desc } = IO}) 
          fields = map_2(fun c_input_value/2, FieldDefs) };
 
 %% Scalar--START
-x({scalar, #{ id := ID,
-              description := Desc} = Data}) ->
-    {Mod, InFun, OutFun} = scalar_resolve(Data),
+
+x({scalar, #{ id := ID, description := Desc} = Scalar}) ->
+    ModuleResolver = scalar_resolve(Scalar),
     #scalar_type {
        id = c_id(ID),
        description = binarize(Desc),
-       annotations = annotations(Data),
-       resolve_module = Mod,
-       input_coerce = InFun,
-       output_coerce = OutFun }.
+       annotations = annotations(Scalar),
+       resolve_module = ModuleResolver }.
 
 %% -- ROOT -------------
 root_query(#{ query := Q}) -> binarize(Q);
@@ -92,7 +90,7 @@ c_enum_val(K, #{ value := V, description := Desc } = Map) ->
 
 c_input_value(K, V) ->
     {binarize(K), c_input_value_val(V)}.
-     
+
 c_input_value_val(#{ type := Ty, description := Desc } = M) ->
     Def = default(M),
     #schema_arg {
@@ -106,7 +104,7 @@ default(#{ }) -> null.
 
 c_field(K, V) ->
     {binarize(K), c_field_val(V)}.
-    
+
 c_field_val(M) ->
     #schema_field {
     	ty = c_field_val_ty(M),
@@ -135,7 +133,7 @@ handle_type({non_null, Ty}) -> {non_null, handle_type(Ty)};
 handle_type([Ty]) -> {list, handle_type(Ty)};
 handle_type({list, Ty}) -> {list, handle_type(Ty)};
 handle_type(A) when is_atom(A) -> non_null(atom_to_list(A)).
-    
+
 non_null(Ty) ->
     case lists:reverse(Ty) of
         [$! | Rest] -> {non_null, list_to_binary(lists:reverse(Rest))};
@@ -178,27 +176,31 @@ map_2(F, M) ->
     Unpacked = maps:to_list(M),
     maps:from_list([F(K, V) || {K, V} <- Unpacked]).
 
-scalar_resolve(#{ coerce_module := Mod }) when is_atom(Mod) ->
-    {Mod, undefined, undefined};
-scalar_resolve(#{ input_coerce := In, output_coerce := Out} )
-  when is_function(In, 1),
-       is_function(Out, 1) ->
-    {undefined, In, Out};
-scalar_resolve(#{ id := ID, input_coerce := _, output_coerce := _ }) ->
-    exit({scalar_coercers_wrong_fun_arity, ID});
-scalar_resolve(#{ id := ID, output_coerce := _ }) ->
-    exit({missing_input_coerce, ID});
-scalar_resolve(#{ id := ID, input_coerce := _ }) ->
-    exit({missing_output_coerce, ID});
-scalar_resolve(#{}) ->
-    {undefined,
-     fun(X) -> {ok, X} end,
-     fun(X) -> {ok, X} end}.
+scalar_resolve(#{ resolve_module := ModuleResolver }) when is_atom(ModuleResolver) ->
+    ModuleResolver;
 
-enum_resolve(#{ resolve_module := Mod }) when is_atom(Mod) ->
-    {Mod};
+scalar_resolve(#{ id := 'ID'}) ->
+     graphql_scalar_binary_coerce;
+
+scalar_resolve(#{ id := 'String'}) ->
+     graphql_scalar_binary_coerce;
+
+scalar_resolve(#{ id := 'Bool'}) ->
+     graphql_scalar_bool_coerce;
+
+scalar_resolve(#{ id := 'Int'}) ->
+     graphql_scalar_integer_coerce;
+
+scalar_resolve(#{ id := 'Float'}) ->
+     graphql_scalar_float_coerce;
+
+scalar_resolve(_) ->
+     graphql_enum_coerce.
+
+enum_resolve(#{ resolve_module := ModuleResolver }) when is_atom(ModuleResolver) ->
+    ModuleResolver;
 enum_resolve(_) ->
-    {graphql_enum_coerce}.
+    graphql_enum_coerce.
 
 %% -- Annotations
 annotations(#{ annotations := Annots }) -> Annots;

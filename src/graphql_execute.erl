@@ -312,14 +312,17 @@ resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectTy
 
 complete_value(Path, Ctx, Ty, Fields, {ok, {enum, Value}}) ->
     complete_value(Path, Ctx, Ty, Fields, {ok, Value});
+
 complete_value(Path, Ctx, {scalar, Scalar}, Fields, {ok, Value}) ->
-    complete_value(Path, Ctx, output_coerce_type(Scalar), Fields, {ok, Value});
+    complete_value(Path, Ctx, scalar_resolve(Scalar), Fields, {ok, Value});
+
 complete_value(Path, Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
     error_logger:warning_msg(
       "Canary: Type lookup during value completion for: ~p~n",
       [Ty]),
     SchemaType = graphql_schema:get(Ty),
     complete_value(Path, Ctx, SchemaType, Fields, {ok, Value});
+
 complete_value(Path, Ctx, {non_null, InnerTy}, Fields, Result) ->
     %% Note we handle arbitrary results in this case. This makes sure errors
     %% factor through the non-null handler here and that handles
@@ -341,46 +344,20 @@ complete_value(Path, Ctx, {non_null, InnerTy}, Fields, Result) ->
     end;
 complete_value(_Path, _Ctx, _Ty, _Fields, {ok, null}) ->
     {ok, null, []};
+
 complete_value(Path, _Ctx, {list, _}, _Fields, {ok, V}) when not is_list(V) ->
     err(Path, not_a_list);
+
 complete_value(Path, Ctx, {list, InnerTy}, Fields, {ok, Value}) ->
     complete_value_list(Path, Ctx, InnerTy, Fields, Value);
-complete_value(Path, _Ctx, #scalar_type { id = ID, output_coerce = OCoerce, resolve_module = undefined }, _Fields, {ok, Value}) ->
-    try OCoerce(Value) of
-        {ok, Result} -> complete_value_scalar(Path, ID, Result);
-        {error, Reason} ->
-            err(Path, {output_coerce, ID, Value, Reason})
-    catch
-        Cl:Err ->
-            error_logger:error_msg(
-              "Output coercer crash during value completion: ~p, stacktrace: ~p~n",
-              [{Cl,Err,ID,Value}, erlang:get_stacktrace()]),
-            err(Path, {output_coerce_abort, ID, Value, {Cl, Err}})
-    end;
+
 complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
-    try RM:output(ID, Value) of
-        {ok, Result} -> complete_value_scalar(Path, ID, Result);
-        {error, Reason} ->
-            err(Path, {output_coerce, ID, Value, Reason})
-    catch
-        Cl:Err ->
-            error_logger:error_msg(
-              "Output coercer crash during value completion: ~p, stacktrace: ~p~n",
-              [{Cl,Err,ID,Value}, erlang:get_stacktrace()]),
-            err(Path, {output_coerce_abort, ID, Value, {Cl, Err}})
-    end;
+    complete_value_scalar(Path, ID, RM, Value);
+
 complete_value(_Path, _Ctx, #enum_type { id = ID, resolve_module = RM}, _Fields, {ok, Value}) ->
-    try RM:output(ID, Value) of
-    {ok, Result} -> complete_value_enum(_Path, ID, Result);
-    {error, Reason} ->
-        err(_Path, {ID, Value, Reason})
-    catch
-    Cl:Err ->
-        error_logger:error_msg(
-          "crash during value completion: ~p, stacktrace: ~p~n",
-          [{Cl, Err, ID, Value}, erlang:get_stacktrace()]),
-         err(_Path, {coerce_crash, ID, Value, {Cl, Err}})
-    end;
+    %% the enums are scalars too.
+    complete_value_scalar(_Path, ID, RM, Value);
+
 complete_value(Path, Ctx, #interface_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
     complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value});
 complete_value(Path, Ctx, #union_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
@@ -418,16 +395,20 @@ resolve_abstract_type(Resolver, Value) when is_function(Resolver, 1) ->
            {error, {resolve_type_crash, {Cl,Err}}}
     end.
 
-complete_value_enum(_path, _ID, Result) when is_binary(Result) ->   {ok, Result, []};
-complete_value_enum( Path,  ID, Value) -> err(Path, {ID, Value, not_enum_type}).
+complete_value_scalar(Path, ID, RM, Value) ->
+    try RM:output(ID, Value) of
+        {ok, Result} ->
+            {ok, Result, []};
 
-complete_value_scalar(_Path, _ID, Result) when is_binary(Result) -> {ok, Result, []};
-complete_value_scalar(_Path, _ID, Result) when is_number(Result) -> {ok, Result, []};
-complete_value_scalar(_Path, _ID, true) -> {ok, true, []};
-complete_value_scalar(_Path, _ID, false) -> {ok, false, []};
-complete_value_scalar(_Path, _ID, null) -> {ok, null, []};
-complete_value_scalar( Path,  ID, Value) ->
-    err(Path, {output_coerce, ID, Value, not_scalar_type}).
+        {error, Reason} ->
+            err(Path, {output_coerce, ID, Value, Reason})
+    catch
+        Cl:Err ->
+            error_logger:error_msg(
+              "Output coercer crash during value completion: ~p, stacktrace: ~p~n",
+              [{Cl,Err,ID,Value}, erlang:get_stacktrace()]),
+            err(Path, {output_coerce_abort, ID, Value, {Cl, Err}})
+    end.
 
 assert_list_completion_structure(Ty, Fields, Results) ->
     ValidResult =
@@ -575,61 +556,33 @@ default_resolver(#{ field := Field}, Cur, _Args) ->
 
 %% -- OUTPUT COERCION ------------------------------------
 
-output_coerce_type(id) ->
+scalar_resolve(id) ->
     #scalar_type { id = <<"ID">>,
-                   input_coerce = fun ?MODULE:builtin_input_coercer/1,
                    description = <<"Builtin output coercer type">>,
-                   output_coerce =
-                       fun
-                           (B) when is_binary(B) -> {ok, B};
-                           (_) -> {ok, null}
-                       end };
-output_coerce_type(string) ->
+                   resolve_module = graphql_scalar_binary_coerce
+                   };
+scalar_resolve(string) ->
     #scalar_type { id = <<"String">>,
-                   input_coerce = fun ?MODULE:builtin_input_coercer/1,
                    description = <<"Builtin output coercer type">>,
-                   output_coerce =
-                       fun
-                           (B) when is_binary(B) -> {ok, B};
-                           (_) -> {ok, null}
-                       end
+                   resolve_module = graphql_scalar_binary_coerce
                  };
-output_coerce_type(bool) ->
+scalar_resolve(bool) ->
     #scalar_type { id = <<"Bool">>,
-                   input_coerce = fun ?MODULE:builtin_input_coercer/1,
                    description = <<"Builtin output coercer type">>,
-                   output_coerce =
-                       fun
-                           (true) -> {ok, true};
-                           (<<"true">>) -> {ok, true};
-                           (false) -> {ok, false};
-                           (<<"false">>) -> {ok, false};
-                           (_) -> {ok, null}
-                       end
+                   resolve_module = graphql_scalar_bool_coerce
                  };
-output_coerce_type(int) ->
+scalar_resolve(int) ->
     #scalar_type { id = <<"Int">>,
-                   input_coerce = fun ?MODULE:builtin_input_coercer/1,
                    description = <<"Builtin output coercer type">>,
-                   output_coerce =
-                       fun
-                           (I) when is_integer(I) -> {ok, I};
-                           (_) -> {ok, null}
-                       end
+                   resolve_module = graphql_scalar_integer_coerce
                  };
-output_coerce_type(float) ->
-    Coercer = fun
-                  (F) when is_float(F) -> {ok, F};
-                  (I) when is_integer(I) -> {ok, float(I)};
-                  (_) -> {ok, null}
-              end,
+scalar_resolve(float) ->
     #scalar_type { id = <<"Float">>,
-                   output_coerce = Coercer,
-                   input_coerce = fun ?MODULE:builtin_input_coercer/1,
-                   description = <<"Builtin output coercer type">>
+                   description = <<"Builtin output coercer type">>,
+                   resolve_module = graphql_scalar_float_coerce
                  };
-output_coerce_type(#scalar_type{} = SType) -> SType;
-output_coerce_type(UserDefined) when is_binary(UserDefined) ->
+scalar_resolve(#scalar_type{} = SType) -> SType;
+scalar_resolve(UserDefined) when is_binary(UserDefined) ->
     case graphql_schema:lookup(UserDefined) of
         #scalar_type{} = SType -> SType;
         not_found -> not_found

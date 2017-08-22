@@ -176,39 +176,26 @@ input_coerce_scalar(Path, #scalar_type {} = SType, Val) ->
 input_coerce_scalar(Path, Ty, _V) ->
     err(Path, {type_mismatch, #{ schema => {scalar, Ty}}}).
 
-input_coercer(Path, #scalar_type { id = ID, input_coerce = IC, resolve_module = undefined }, Val) ->
-    try IC(Val) of
-        {ok, NewVal} -> {replace, NewVal};
-        {error, Reason} -> err(Path, {input_coercion, ID, Val, Reason})
-    catch
-        Cl:Err ->
-            error_logger:error_report(
-              [
-               {input_coercer, ID, Val},
-               {error, Cl, Err},
-               {stack, erlang:get_stacktrace()}
-              ]),
-            err(Path, {input_coerce_abort, {Cl, Err}})
-    end;
-input_coercer(Path, #scalar_type { id = ID, resolve_module = RM}, Val) ->
-    try RM:input(ID, Val) of
-        {ok, NewVal} -> {replace, NewVal};
-        {error, Reason} -> err(Path, {input_coercion, ID, Val, Reason})
-    catch
-        Cl:Err ->
-            error_report(ID, Val, Cl, Err),
-            err(Path, {input_coerce_abort, {Cl, Err}})
+input_coercer(Path, #scalar_type { id = ID, resolve_module = RM}, Value) ->
+    complete_value_scalar(Path, ID, RM, Value);
 
-    end;
-input_coercer(_Path, #enum_type { resolve_module = undefined }, Val) ->
-    {ok, Val};
-input_coercer(Path, #enum_type { id = ID, resolve_module = RM}, Val) ->
-    try RM:input(ID, Val) of
-        {ok, NewVal} -> {replace, NewVal};
-        {error, Reason} -> graphql_err:abort(Path, {input_coercion, ID, Val, Reason})
+input_coercer(_Path, #enum_type { id = _ID, resolve_module = undefined }, Value) ->
+    {ok, Value};
+
+input_coercer(Path, #enum_type { id = ID, resolve_module = ResolveModule}, Value) ->
+    complete_value_scalar(Path, ID, ResolveModule, Value).
+
+complete_value_scalar(Path, ID, ResolveModule, Value) ->
+    try ResolveModule:input(ID, Value) of
+        {ok, NewVal} ->
+            {replace, NewVal};
+
+        {error, Reason} ->
+            graphql_err:abort(Path, {input_coercion, ID, Value, Reason})
+
     catch
         Cl:Err ->
-            error_report(ID, Val, Cl, Err),
+            error_report(ID, Value, Cl, Err),
             err(Path, {input_coerce_abort, {Cl, Err}})
     end.
 
