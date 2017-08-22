@@ -18,7 +18,8 @@
                     {done, target(), binary(), term(), term()} | {more, defer_closure()}).
 
 -record(defer_state,
-        { work = #{} :: #{ reference() => defer_closure() } }).
+        { req_id :: reference(),
+          work = #{} :: #{ reference() => defer_closure() } }).
 
 -spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
 x(X) -> x(#{ params => #{} }, X).
@@ -30,7 +31,8 @@ x(Ctx, X) ->
 
 execute_request(InitialCtx, {document, Operations}) ->
     {Frags, Ops} = lists:partition(fun (#frag {}) -> true;(_) -> false end, Operations),
-    Ctx = InitialCtx#{ fragments => fragments(Frags) },
+    Ctx = InitialCtx#{ fragments => fragments(Frags),
+                       defer_request_id => make_ref() },
     case get_operation(Ctx, Ops) of
         {ok, #op { ty = {query, _} } = Op } ->
             execute_query(Ctx#{ op_type => query }, Op);
@@ -70,7 +72,7 @@ collect_auxiliary_data() ->
         []
     end.
 
-execute_query(Ctx, #op { selection_set = SSet,
+execute_query(#{ defer_request_id := ReqId } = Ctx, #op { selection_set = SSet,
                          schema = QType } = Op) ->
     #object_type{} = QType,
     case execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self(),
@@ -79,11 +81,12 @@ execute_query(Ctx, #op { selection_set = SSet,
         {ok, Res, Errs} ->
             complete_top_level(Res, Errs);
         {work, WL} ->
-            DeferState = #defer_state{ work = maps:from_list(WL) },
+            DeferState = #defer_state{ req_id = ReqId,
+                                       work = maps:from_list(WL) },
             defer_loop(DeferState)
     end.
 
-execute_mutation(Ctx, #op { selection_set = SSet,
+execute_mutation(#{ defer_request_id := ReqId } = Ctx, #op { selection_set = SSet,
                             schema = QType } = Op) ->
     #object_type{} = QType,
     case execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self(),
@@ -92,7 +95,8 @@ execute_mutation(Ctx, #op { selection_set = SSet,
         {ok, Res, Errs} ->
             complete_top_level(Res, Errs);
         {work, WL} ->
-            DeferState = #defer_state{ work = maps:from_list(WL) },
+            DeferState = #defer_state{ req_id = ReqId,
+                                       work = maps:from_list(WL) },
             defer_loop(DeferState)
     end.
 
@@ -670,10 +674,13 @@ binarize(L) when is_list(L) -> list_to_binary(L).
 %% -- DEFERRED PROCESSING --
 
 %% Process deferred computations by grabbing them in the mailbox
-defer_loop(#defer_state {} = State) ->
+defer_loop(#defer_state { req_id = ReqId } = State) ->
     receive
-        {'$graphql_reply', Key, Data} ->
-            defer_handle_work(State, Key, Data)
+        {'$graphql_reply', ReqId, Key, Data} ->
+            defer_handle_work(State, Key, Data);
+        {'$graphql_reply', _, _, _} ->
+            %% Ignoring old request
+            defer_loop(State)
     after 750 ->
             exit(defer_timeout)
     end.
