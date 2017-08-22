@@ -109,7 +109,7 @@ execute_sset(Path, #{ defer_target := Upstream } = Ctx, SSet, Type, Value) ->
                 {ok, Map, Errs};
             {Map, Errs, Work} ->
                 Missing = deferral_map(Work),
-                Closure = sset_closure(Upstream, no_name, Missing, Map, Errs),
+                Closure = sset_closure(Upstream, RecurTarget, no_name, Missing, Map, Errs),
                 {work, [{RecurTarget, Closure}]}
         end
     catch
@@ -121,7 +121,7 @@ execute_sset(Path, #{ defer_target := Upstream } = Ctx, SSet, Type, Value) ->
 deferral_map(Work) ->
     maps:from_list([{S, true} || {S, _} <- Work]).
 
-sset_closure(Target, UpstreamName, Missing, Map, Errors) ->
+sset_closure(Target, Recur, UpstreamName, Missing, Map, Errors) ->
     fun
         (Source, Name, ResolvedValue) ->
             case maps:take(Source, Missing) of
@@ -133,10 +133,11 @@ sset_closure(Target, UpstreamName, Missing, Map, Errors) ->
                         0 ->
                             {done, Target, UpstreamName, NewMap, NewErrors};
                         _ ->
-                            {more, sset_closure(Target, Name,
-                                                NewMissing,
-                                                NewMap,
-                                                NewErrors), []}
+                            {more, [{Recur,
+                                     sset_closure(Target, Recur, Name,
+                                                  NewMissing,
+                                                  NewMap,
+                                                  NewErrors)}]}
                     end
             end
     end.
@@ -674,12 +675,17 @@ binarize(L) when is_list(L) -> list_to_binary(L).
 %% -- DEFERRED PROCESSING --
 
 %% Process deferred computations by grabbing them in the mailbox
-defer_loop(#defer_state { req_id = ReqId } = State) ->
+defer_loop(#defer_state { req_id = Id } = State) ->
     receive
-        {'$graphql_reply', ReqId, Key, Data} ->
-            defer_handle_work(State, Key, Data);
-        {'$graphql_reply', _, _, _} ->
+        {'$graphql_reply', Id, Ref, Data} ->
+            error_logger:info_msg("Handling ~p", [{Id, Ref, Data}]),
+            defer_handle_work(State, Ref, Data);
+        {'$graphql_reply', _, _, _} = Reply ->
             %% Ignoring old request
+            error_logger:info_msg("Ignoring wrong reply: ~p", [Reply]),
+            defer_loop(State);
+        Otherwise ->
+            error_logger:info_msg("Received unknown: ~p", [Otherwise]),
             defer_loop(State)
     after 750 ->
             exit(defer_timeout)
@@ -698,9 +704,11 @@ defer_handle_work(#defer_state {work = WorkMap } = State,
                   Input) ->
     case maps:get(Target, WorkMap, not_found) of
         not_found ->
+            error_logger:info_msg("NOT FOUND! workmap: ~p", [WorkMap]),
             defer_loop(State);
         Closure ->
             Result = call_closure(Closure, Input),
+            error_logger:info_msg("Result from ~p: ~p", [Target, Result]),
             case Result of
                 {done, top_level, _, Res, Errs} ->
                     complete_top_level(Res, Errs);
@@ -709,11 +717,9 @@ defer_handle_work(#defer_state {work = WorkMap } = State,
                       State#defer_state { work = maps:remove(Target, WorkMap) },
                       Upstream,
                       {Target, Name, Res, Errs});
-                {more, NC, New} ->
+                {more, New} ->
                     NewWork = maps:from_list(New),
-                    defer_loop(State#defer_state { work = maps:merge(
-                                                            WorkMap#{ Target := NC },
-                                                            NewWork) })
+                    defer_loop(State#defer_state { work = maps:merge(WorkMap, NewWork) })
             end
     end.
 
