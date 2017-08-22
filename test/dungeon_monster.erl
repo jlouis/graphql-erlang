@@ -20,30 +20,15 @@ execute(Ctx, #monster { id = ID,
     case Field of
         <<"id">> -> dungeon:wrap({monster, ID});
         <<"name">> ->
-            NameToken = graphql:token(Ctx),
-            spawn_link(fun() ->
-                               timer:sleep(30),
-                               graphql:reply_cast(NameToken, {ok, Name})
-                       end),
-            {defer, NameToken};
+            {ok, Name};
         <<"color">> -> color(Color, Args);
         <<"hitpoints">> -> {ok, HP};
         <<"hp">> -> {ok, HP};
         <<"inventory">> ->
-            InvToken = graphql:token(Ctx),
-            spawn_link(fun() ->
-                               timer:sleep(40),
-                               Data = [dungeon:load(OID) || OID <- Inventory],
-                               graphql:reply_cast(InvToken, Data)
-                       end),
-            {defer, InvToken};
+            Data = [dungeon:load(OID) || OID <- Inventory],
+            {ok, Data};
         <<"mood">> ->
-            MoodToken = graphql:token(Ctx),
-            spawn_link(fun() ->
-                               timer:sleep(40),
-                               graphql:reply_cast(MoodToken, {ok, Mood})
-                       end),
-            {defer, MoodToken};
+            {ok, Mood};
         <<"plushFactor">> -> {ok, PlushFactor};
         <<"spikyness">> -> {ok, 5};
         <<"stats">> -> stats(Stats, Args);

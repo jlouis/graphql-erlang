@@ -12,12 +12,7 @@ execute(Ctx, #item { id = ID,
         <<"name">> -> {ok, Name};
         <<"description">> -> {ok, Description};
         <<"weight">> ->
-            Tok = graphql:token(Ctx),
-            spawn_link(fun() ->
-                               timer:sleep(20),
-                               graphql:cast_reply(Tok, {ok, weight(Item)})
-                       end),
-            {defer, Tok};
+            {ok, weight(Item)};
         <<"weightSum">> -> {ok, weight_sum(Item)};
         <<"contents">> ->
             {ok, [dungeon:load(OID) || OID <- Contents]}

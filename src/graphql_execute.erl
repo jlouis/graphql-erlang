@@ -13,7 +13,7 @@
 -record(workunit,
         { data :: term(),
           source :: reference(),
-          target :: reference(),
+          target :: reference() | top_level,
           field_name :: binary(),
           obj :: term(),
           errors :: [term()],
@@ -110,7 +110,7 @@ deferral_map(Target, [#workunit { field_name = Key, source = Source, target = Ta
 deferral_map(Target, [#workunit{}|Next]) ->
     deferral_map(Target, Next).
 
-execute_sset(Path, #{ defer_target := Target } = Ctx, SSet, Type, Value) ->
+execute_sset(Path, #{ defer_target := Upstream } = Ctx, SSet, Type, Value) ->
     GroupedFields = collect_fields(Path, Ctx, Type, SSet),
     RecurTarget = make_ref(),
     try
@@ -120,10 +120,11 @@ execute_sset(Path, #{ defer_target := Target } = Ctx, SSet, Type, Value) ->
             {Map, Errs, Work} ->
                 {work, [#workunit { 
                            source = RecurTarget,
-                           target = Target,
+                           target = Upstream,
                            obj = Map,
                            errors = Errs,
                            data = {Path, Ctx, Type, GroupedFields},
+                           field_name = <<"TODO">>,
                            deferrals = deferral_map(RecurTarget, Work)
                           } | Work]}
         end
@@ -257,7 +258,7 @@ does_fragment_type_apply(
           #union_type { types = Types } -> lists:member(ID, Types)
       end.
 
-execute_field(Path, Ctx, ObjType, Value, [F|_] = Fields, #schema_field { annotations = FAns, resolve = RF}) ->
+execute_field(Path, #{ defer_target := Target } = Ctx, ObjType, Value, [F|_] = Fields, #schema_field { annotations = FAns, resolve = RF}) ->
     Name = name(F),
     #schema_field { ty = ElaboratedTy } = field_type(F),
     Args = resolve_args(Ctx, F),
@@ -269,6 +270,8 @@ execute_field(Path, Ctx, ObjType, Value, [F|_] = Fields, #schema_field { annotat
                     source = graphql:token_ref(Token),
                     obj = scalar,
                     errors = [],
+                    target = Target,
+                    field_name = Name,
                     deferrals = #{} },
             {work, [WU]};
         ResolvedValue ->
@@ -449,17 +452,17 @@ assert_list_completion_structure(Ty, Fields, Results) ->
             {error, list_resolution}
     end.
 
-complete_value_list(Path, Ctx, Ty, Fields, Results) ->
+complete_value_list(Path, #{ defer_target := Upstream} = Ctx, Ty, Fields, Results) ->
     IndexedResults = index(Results),
     case assert_list_completion_structure(Ty, Fields, IndexedResults) of
         {error, list_resolution} ->
             {error, Errs} = err(Path, list_resolution),
             {ok, null, Errs};
         ok ->
-            Wrap = fun(I,R) ->
+            Wrap = fun
+                       (I,R) ->
                            case complete_value([I|Path], Ctx, Ty, Fields, R) of
                                {ok, V, Errs} -> {ok, V, resolver_error_wrap(Errs)};
-                               {work, WUs} -> {work, WUs};
                                {error, Err} -> {error, Err}
                            end
                    end,
@@ -480,6 +483,8 @@ complete_value_list(Path, Ctx, Ty, Fields, Results) ->
                                obj = {list, #{}, Res},
                                deferrals = DeferMap,
                                data = {Path, Ctx, Ty, Fields},
+                               target = Upstream,
+                               field_name = <<"TODO">>,
                                errors = Errors } | WorkData]}
             end
     end.
@@ -792,22 +797,13 @@ defer_handle_workunit(#workunit { obj = {list, Results, L},
     error_logger:info_msg("Handling list workunit ~p for key ~p", [Source, DKey]),
     case maps:take(DKey, Defs) of
         {_, NewDefs} ->
-            case complete_value(Path, Ctx, ElabTy, Fields, ResolvedValue) of
-                {ok, Result, Errs} ->
-                    defer_handle_workunit_done(WU#workunit {
-                                                 deferrals = NewDefs,
-                                                 errors = Errs ++ PartialErrs,
-                                                 obj = {list, Results#{ DKey => Result }, L}});
-                {error, Err} ->
-                    %% An error occurs, fail this object
-                    defer_handle_workunit_done(WU#workunit {
-                                                 deferrals = NewDefs,
-                                                 errors = [Err] ++ PartialErrs,
-                                                 obj = {error, null}
-                                                 })
-            end;
+            {ok, V, E} = ResolvedValue,
+            defer_handle_workunit_done(WU#workunit {
+                                         deferrals = NewDefs,
+                                         errors = E ++ PartialErrs,
+                                         obj = {list, Results#{ DKey => V }, L}});
         error ->
-            error_logger:info_message("deferral (list) failure key=~p state=~p",
+            error_logger:info_msg("deferral (list) failure key=~p state=~p",
                                       [DKey, Defs]),
             exit(error)
     end;
@@ -828,13 +824,6 @@ defer_handle_workunit(#workunit { obj = Obj,
             exit(error)
     end.
 
-defer_handle_workunit_done(#workunit {
-                              obj = {error, Res},
-                              target = Target,
-                              errors = Errs1,
-                              deferrals = Ds }) ->
-    %% @todo Cancel deferrals here since they are now spurious
-    {done, Res, Errs1, Target};
 defer_handle_workunit_done(#workunit {
                               obj = Obj,
                               target = Target,
