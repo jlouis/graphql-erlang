@@ -123,11 +123,11 @@ sset_closure(Target, UpstreamName, Missing, Map, Errors) ->
             case maps:take(Source, Missing) of
                 {_, NewMissing} ->
                     {ok, V, E} = ResolvedValue,
-                    NewMap = [{Name, V} | Map],
+                    NewMap = Map#{ Name => V },
                     NewErrors = E ++ Errors,
                     case maps:size(NewMissing) of
                         0 ->
-                            {done, Target, UpstreamName, maps:to_list(NewMap), NewErrors};
+                            {done, Target, UpstreamName, NewMap, NewErrors};
                         _ ->
                             {more, sset_closure(Target, Name,
                                                 NewMissing,
@@ -446,27 +446,24 @@ complete_value_list(Path, Ctx, Ty, Fields, Results) ->
             Completed = [{I, Wrap(I, R)} || {I, R} <- IndexedResults],
             Target = make_ref(),
             case complete_list_value_result(Target, Completed) of
-                {Res, [], []} ->
+                {Res, []} ->
                     {Vals, Errs} = lists:unzip(Res),
                     Len = length(Completed),
                     Len = length(Vals),
                     {ok, Vals, lists:concat(Errs)};
-                {_, Reasons, []} ->
-                    {ok, null, Reasons};
-                {Res, Errors, WorkData} ->
-                    %% @todo: Add closure here for lists
-                    {work, WorkData}
+                {_, Reasons} ->
+                    {ok, null, Reasons}
             end
     end.
 
 complete_list_value_result(_Target, []) ->
-    {[], [], []};
+    {[], []};
 complete_list_value_result(Target, [{_, {error, Err}}|Next]) ->
-    {Res, Errs, Work} = complete_list_value_result(Target, Next),
-    {Res, Err ++ Errs, Work};
+    {Res, Errs} = complete_list_value_result(Target, Next),
+    {Res, Err ++ Errs};
 complete_list_value_result(Target, [{_, {ok, V, Es}}|Next]) ->
-    {Res, Errs, Work} = complete_list_value_result(Target, Next),
-    {[{V, Es} | Res], Errs, Work}.
+    {Res, Errs} = complete_list_value_result(Target, Next),
+    {[{V, Es} | Res], Errs}.
 
 index([]) -> [];
 index(L) -> lists:zip(lists:seq(0, length(L)-1), L).
