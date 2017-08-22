@@ -10,17 +10,15 @@
 
 -define(DEFER_TIMEOUT, 5000). %% @todo: Get rid of this timeout. It is temporary
 
--record(workunit,
-        { data :: term(),
-          source :: reference(),
-          target :: reference() | top_level,
-          field_name :: binary(),
-          obj :: term(),
-          errors :: [term()],
-          deferrals :: #{ reference() => binary() } }).
+-type source() :: reference().
+-type target() :: reference().
+
+-type defer_closure() ::
+        fun ((source(), term()) ->
+                    {done, target(), binary(), term(), term()} | {more, defer_closure()}).
 
 -record(defer_state,
-        { work = #{} :: #{ reference() => #workunit{} } }).
+        { work = #{} :: #{ reference() => defer_closure() } }).
 
 -spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
 x(X) -> x(#{ params => #{} }, X).
@@ -80,8 +78,8 @@ execute_query(Ctx, #op { selection_set = SSet,
                       SSet, QType, none) of
         {ok, Res, Errs} ->
             complete_top_level(Res, Errs);
-        {work, WorkList} ->
-            DeferState = #defer_state{ work = worklist(WorkList) },
+        {work, WL} ->
+            DeferState = #defer_state{ work = maps:from_list(WL) },
             defer_loop(DeferState)
     end.
 
@@ -93,22 +91,10 @@ execute_mutation(Ctx, #op { selection_set = SSet,
                       SSet, QType, none) of
         {ok, Res, Errs} ->
             complete_top_level(Res, Errs);
-        {work, WorkList} ->
-            DeferState = #defer_state{ work = worklist(WorkList) },
+        {work, WL} ->
+            DeferState = #defer_state{ work = maps:from_list(WL) },
             defer_loop(DeferState)
     end.
-
-worklist(WL) -> worklist(WL, #{}).
-
-worklist([], Acc)                                -> Acc;
-worklist([#workunit { source = K } = P|Ps], Acc) -> worklist(Ps, Acc#{ K => P }).
-
-deferral_map(_Target, []) -> #{};
-deferral_map(Target, [#workunit { field_name = Key, source = Source, target = Target}|Next]) ->
-    Map = deferral_map(Target, Next),
-    Map#{ Source => Key };
-deferral_map(Target, [#workunit{}|Next]) ->
-    deferral_map(Target, Next).
 
 execute_sset(Path, #{ defer_target := Upstream } = Ctx, SSet, Type, Value) ->
     GroupedFields = collect_fields(Path, Ctx, Type, SSet),
@@ -118,20 +104,37 @@ execute_sset(Path, #{ defer_target := Upstream } = Ctx, SSet, Type, Value) ->
             {Map, Errs, []} ->
                 {ok, Map, Errs};
             {Map, Errs, Work} ->
-                {work, [#workunit { 
-                           source = RecurTarget,
-                           target = Upstream,
-                           obj = Map,
-                           errors = Errs,
-                           data = {Path, Ctx, Type, GroupedFields},
-                           field_name = <<"TODO">>,
-                           deferrals = deferral_map(RecurTarget, Work)
-                          } | Work]}
+                Missing = deferral_map(Work),
+                Closure = sset_closure(Upstream, no_name, Missing, Map, Errs),
+                {work, [{RecurTarget, Closure}]}
         end
     catch
         throw:{null, Errors, _Ds} ->
             %% @todo: Cancel defers, or at least consider a way of doing so!
             {ok, null, Errors}
+    end.
+
+deferral_map(Work) ->
+    maps:from_list([{S, true} || {S, _} <- Work]).
+
+sset_closure(Target, UpstreamName, Missing, Map, Errors) ->
+    fun
+        (Source, Name, ResolvedValue) ->
+            case maps:take(Source, Missing) of
+                {_, NewMissing} ->
+                    {ok, V, E} = ResolvedValue,
+                    NewMap = [{Name, V} | Map],
+                    NewErrors = E ++ Errors,
+                    case maps:size(NewMissing) of
+                        0 ->
+                            {done, Target, UpstreamName, maps:to_list(NewMap), NewErrors};
+                        _ ->
+                            {more, sset_closure(Target, Name,
+                                                NewMissing,
+                                                NewMap,
+                                                NewErrors), []}
+                    end
+            end
     end.
 
 execute_sset(_Path, _Ctx, [], _Type, _Value, Map, Errs, Work) ->
@@ -155,19 +158,12 @@ execute_sset(Path, Ctx, [{Key, [F|_] = Fields} | Next],
                                  FieldErrs ++ Errs,
                                  Work);
                 {work, WUs} ->
-                    Items = [format_work({Key, W}) || W <- WUs],
-                    error_logger:info_msg("WorkUnits for key ~p: ~p", [Key, Items]),
                     execute_sset(Path, Ctx, Next, Type, Value, Map, Errs,
-                                 amend_target(Ctx, Key, WUs) ++ Work);
+                                 WUs ++ Work);
                 {error, Errors} ->
                     throw({null, Errors, Work})
             end
     end.
-
-amend_target(Ctx, Key, [H|T]) -> [amend_target_(Ctx, Key, H)|T].
-
-amend_target_(#{ defer_target := Target }, Key, #workunit{} = WU) ->
-    WU#workunit { target = Target, field_name = Key }.
 
 typename(#object_type { id = ID }) -> ID.
 
@@ -265,15 +261,16 @@ execute_field(Path, #{ defer_target := Target } = Ctx, ObjType, Value, [F|_] = F
     Fun = resolver_function(ObjType, RF),
     case resolve_field_value(Ctx, ObjType, Value, Name, FAns, Fun, Args) of
         {defer, Token} ->
-            WU = #workunit {
-                    data = {Path, Ctx, ElaboratedTy, Fields},
-                    source = graphql:token_ref(Token),
-                    obj = scalar,
-                    errors = [],
-                    target = Target,
-                    field_name = Name,
-                    deferrals = #{} },
-            {work, [WU]};
+            Source = graphql:token_ref(Token),
+            Closure =
+                fun
+                    (ResVal) ->
+                        case complete_value(Path, Ctx, ElaboratedTy, Fields, ResVal) of
+                            {ok, Result, Errs} ->
+                                {done, Target, Name, Result, Errs}
+                        end
+                end,
+            {work, [{Source, Closure}]};
         ResolvedValue ->
             complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue)
     end.
@@ -338,9 +335,8 @@ complete_value(Path, Ctx, {non_null, InnerTy}, Fields, Result) ->
         {ok, _C, _E} = V ->
             V;
         {work, _} = Work ->
-            %% @todo Handle null propagation here. The object should know it is being
-            %% null-wrapped in this case
-            amend_null(Work)
+            %% @todo Handle null propagation here by wrapping the closure
+            Work
     end;
 complete_value(_Path, _Ctx, _Ty, _Fields, {ok, null}) ->
     {ok, null, []};
@@ -433,7 +429,7 @@ assert_list_completion_structure(Ty, Fields, Results) ->
             {error, list_resolution}
     end.
 
-complete_value_list(Path, #{ defer_target := Upstream} = Ctx, Ty, Fields, Results) ->
+complete_value_list(Path, Ctx, Ty, Fields, Results) ->
     IndexedResults = index(Results),
     case assert_list_completion_structure(Ty, Fields, IndexedResults) of
         {error, list_resolution} ->
@@ -458,15 +454,8 @@ complete_value_list(Path, #{ defer_target := Upstream} = Ctx, Ty, Fields, Result
                 {_, Reasons, []} ->
                     {ok, null, Reasons};
                 {Res, Errors, WorkData} ->
-                    DeferMap = defer_map(Res),
-                    {work, [#workunit{
-                               source = Target,
-                               obj = {list, #{}, Res},
-                               deferrals = DeferMap,
-                               data = {Path, Ctx, Ty, Fields},
-                               target = Upstream,
-                               field_name = <<"TODO">>,
-                               errors = Errors } | WorkData]}
+                    %% @todo: Add closure here for lists
+                    {work, WorkData}
             end
     end.
 
@@ -477,19 +466,7 @@ complete_list_value_result(Target, [{_, {error, Err}}|Next]) ->
     {Res, Err ++ Errs, Work};
 complete_list_value_result(Target, [{_, {ok, V, Es}}|Next]) ->
     {Res, Errs, Work} = complete_list_value_result(Target, Next),
-    {[{V, Es} | Res], Errs, Work};
-complete_list_value_result(Target, [{_, {work, [#workunit { source = S } = H|T]}}|Next]) ->
-    {Res, Errs, Work} = complete_list_value_result(Target, Next),
-    WUs = [H#workunit { target = Target } | T],
-    {[{defer, S}|Res], Errs, WUs ++ Work}. 
-
-defer_map([]) ->
-    #{};
-defer_map([{defer, Key}|T]) ->
-    Rest = defer_map(T),
-    Rest#{ Key => true };
-defer_map([_H|T]) ->
-    defer_map(T).
+    {[{V, Es} | Res], Errs, Work}.
 
 index([]) -> [];
 index(L) -> lists:zip(lists:seq(0, length(L)-1), L).
@@ -695,12 +672,8 @@ binarize(L) when is_list(L) -> list_to_binary(L).
 
 %% -- DEFERRED PROCESSING --
 
-format_work({Key, WU}) -> {Key, WU#workunit { data = removed }}.
-
 %% Process deferred computations by grabbing them in the mailbox
-defer_loop(#defer_state { work = Work } = State) ->
-    Items = [format_work(W) || W <- maps:to_list(Work)],
-    error_logger:info_msg("Awaiting workitems=~p", [Items] ),
+defer_loop(#defer_state {} = State) ->
     receive
         {'$graphql_reply', Key, Data} ->
             defer_handle_work(State, Key, Data)
@@ -708,101 +681,37 @@ defer_loop(#defer_state { work = Work } = State) ->
             exit(defer_timeout)
     end.
 
+%% A deferred closure has a different structure depending on what kind of input data
+%% it will accept. This function mediates through the different variants of calls which
+%% are possible.
+%% @todo: Handle Errs in a more graceful manner!
+call_closure(Closure, {Source, Name, Res, Errs}) -> Closure(Source, Name, Res);
+call_closure(Closure, Data) -> Closure(Data).
+
 %% Process work
 defer_handle_work(#defer_state {work = WorkMap } = State,
-                  Source,
-                  Data) ->
-    error_logger:info_msg("Handling work ~p", [Source]),
-    case maps:get(Source, WorkMap, not_found) of
+                  Target,
+                  Input) ->
+    case maps:get(Target, WorkMap, not_found) of
         not_found ->
-            error_logger:info_msg("Warning: Received out-of-band token: ~p", [Source]),
             defer_loop(State);
-        #workunit{} = WU ->
-            case defer_handle_workunit(WU, Source, Data) of
-                {done, Res, Errs, top_level} ->
+        Closure ->
+            Result = call_closure(Closure, Input),
+            case Result of
+                {done, top_level, _, Res, Errs} ->
                     complete_top_level(Res, Errs);
-                {done, Res, Errs, ForwardTarget} ->
-                    %% Object is done, so route it
-                    defer_handle_work(State#defer_state { work = maps:remove(Source, WorkMap) },
-                                      ForwardTarget,
-                                      {Source, {ok, Res, Errs}});
-                #workunit{} = NewWU ->
-                    defer_loop(State#defer_state {
-                                 work = WorkMap#{ Source := NewWU}
-                                })
+                {done, Upstream, Name, Res, Errs} ->
+                    defer_handle_work(
+                      State#defer_state { work = maps:remove(Target, WorkMap) },
+                      Upstream,
+                      {Target, Name, Res, Errs});
+                {more, NC, New} ->
+                    NewWork = maps:from_list(New),
+                    defer_loop(State#defer_state { work = maps:merge(
+                                                            WorkMap#{ Target := NC },
+                                                            NewWork) })
             end
     end.
-
-%% Process a partial object
-defer_handle_workunit(#workunit { obj = scalar,
-                                  target = Target,
-                                  data = {Path, Ctx, ElabTy, Fields}
-                                }, Source, ResolvedValue) ->
-    error_logger:info_msg("Handling scalar workunit ~p, forwarding to ~p", [Source, Target]),
-    case complete_value(Path, Ctx, ElabTy, Fields, ResolvedValue) of
-        {ok, Result, Errs} ->
-            {done, Result, Errs, Target}
-    end;
-defer_handle_workunit(#workunit { obj = {list, Results, L},
-                                  data = {Path, Ctx, ElabTy, Fields},
-                                  errors = PartialErrs,
-                                  deferrals = Defs } = WU, Source, {DKey, ResolvedValue}) ->
-    error_logger:info_msg("Handling list workunit ~p for key ~p", [Source, DKey]),
-    case maps:take(DKey, Defs) of
-        {_, NewDefs} ->
-            {ok, V, E} = ResolvedValue,
-            defer_handle_workunit_done(WU#workunit {
-                                         deferrals = NewDefs,
-                                         errors = E ++ PartialErrs,
-                                         obj = {list, Results#{ DKey => V }, L}});
-        error ->
-            error_logger:info_msg("deferral (list) failure key=~p state=~p",
-                                      [DKey, Defs]),
-            exit(error)
-    end;
-defer_handle_workunit(#workunit { obj = Obj,
-                                  errors = PartialErrs,
-                                  deferrals = Defs} = WU, Source, {DKey, ResolvedValue}) ->
-    error_logger:info_msg("Handling object workunit ~p for key ~p", [Source, DKey]),    
-    case maps:take(DKey, Defs) of
-        {FieldName, NewDefs} ->
-            {ok, Value, Errs} = ResolvedValue,
-            defer_handle_workunit_done(WU#workunit {
-                                         deferrals = NewDefs,
-                                         errors = Errs ++ PartialErrs,
-                                         obj = Obj#{ FieldName => Value }});
-        error ->
-            error_logger:info_msg("deferral failure key=~p state=~p",
-                                  [DKey, Defs]),
-            exit(error)
-    end.
-
-defer_handle_workunit_done(#workunit {
-                              obj = Obj,
-                              target = Target,
-                              errors = Errs1,
-                              deferrals = Ds } = WU) ->
-    case maps:size(Ds) of
-        0 ->
-            error_logger:info_msg("forwarding to ~p", [Target]),
-            case Obj of
-                {list, ValueMap, L} ->
-                    {ListObj, Errs2} = defer_fill_in_values(ValueMap, L),
-                    {done, ListObj, Errs2 ++ Errs1, Target};
-                Obj ->
-                    {done, Obj, Errs1, Target}
-            end;
-        _ -> WU
-    end.
-
-defer_fill_in_values(_, []) -> {[], []};
-defer_fill_in_values(Map, [{defer, S}|T]) ->
-    {R, E} = defer_fill_in_values(Map, T),
-    {[maps:get(S, Map) | R],
-     E};
-defer_fill_in_values(Map, [{V, E1}|T]) ->
-    {Vs, E2} = defer_fill_in_values(Map, T),
-    {[V|Vs], E1 ++ E2}.
 
 %% -- ERROR HANDLING --
 
@@ -839,5 +748,3 @@ err_msg(list_resolution) ->
 err_msg(Otherwise) ->
     io_lib:format("Error in execution: ~p", [Otherwise]).
 
-amend_null({work, [#workunit { data = {Path, Ctx, ElabTy, Fields} } = W | Ws]}) ->
-    {work, [W#workunit { data = {Path, Ctx, {null, ElabTy}, Fields} } | Ws]}.
