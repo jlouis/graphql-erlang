@@ -15,7 +15,7 @@
 
 -type defer_closure() ::
         fun ((source(), term()) ->
-                    {done, target(), binary(), term(), term()} | {more, defer_closure()}).
+                    {done, target(), term(), term()} | {more, defer_closure()}).
 
 -record(defer_state,
         { req_id :: reference(),
@@ -102,15 +102,14 @@ execute_mutation(#{ defer_request_id := ReqId } = Ctx, #op { selection_set = SSe
 
 execute_sset(Path, #{ defer_target := Upstream } = Ctx, SSet, Type, Value) ->
     GroupedFields = collect_fields(Path, Ctx, Type, SSet),
-    RecurTarget = make_ref(),
+    Self = make_ref(),
     try
-        case execute_sset(Path, Ctx#{ defer_target => RecurTarget }, GroupedFields, Type, Value, [], [], []) of
-            {Map, Errs, []} ->
+        case execute_sset_field(Path, Ctx#{ defer_target => Self }, GroupedFields, Type, Value) of
+            {ok, Map, Errs} ->
                 {ok, Map, Errs};
-            {Map, Errs, Work} ->
-                Missing = deferral_map(Work),
-                Closure = sset_closure(Upstream, RecurTarget, no_name, Missing, Map, Errs),
-                {work, [{RecurTarget, Closure}]}
+            {defer, Map, Errs, Work, Missing} ->
+                Closure = sset_closure(Upstream, Self, Missing, Map, Errs),
+                {work, [{Self, Closure}] ++ Work}
         end
     catch
         throw:{null, Errors, _Ds} ->
@@ -118,23 +117,20 @@ execute_sset(Path, #{ defer_target := Upstream } = Ctx, SSet, Type, Value) ->
             {ok, null, Errors}
     end.
 
-deferral_map(Work) ->
-    maps:from_list([{S, true} || {S, _} <- Work]).
-
-sset_closure(Target, Recur, UpstreamName, Missing, Map, Errors) ->
+sset_closure(Upstream, Self, Missing, Map, Errors) ->
     fun
-        (Source, Name, ResolvedValue) ->
-            case maps:take(Source, Missing) of
-                {_, NewMissing} ->
-                    {ok, V, E} = ResolvedValue,
-                    NewMap = Map#{ Name => V },
-                    NewErrors = E ++ Errors,
+        (FieldRef, Completed, Errs) ->
+            case maps:take(FieldRef, Missing) of
+                {Name, NewMissing} ->
+                    NewMap = Map#{ Name => Completed },
+                    NewErrors = Errs ++ Errors,
                     case maps:size(NewMissing) of
                         0 ->
-                            {done, Target, UpstreamName, NewMap, NewErrors};
+                            {done, Upstream, NewMap, NewErrors};
                         _ ->
-                            {more, [{Recur,
-                                     sset_closure(Target, Recur, Name,
+                            error_logger:info_msg("Need more: ~p", [NewMissing]),
+                            {more, [{Self,
+                                     sset_closure(Upstream, Self,
                                                   NewMissing,
                                                   NewMap,
                                                   NewErrors)}]}
@@ -142,33 +138,51 @@ sset_closure(Target, Recur, UpstreamName, Missing, Map, Errors) ->
             end
     end.
 
-execute_sset(_Path, _Ctx, [], _Type, _Value, Map, Errs, Work) ->
-    {maps:from_list(lists:reverse(Map)), Errs, Work};
-execute_sset(Path, Ctx, [{Key, [F|_] = Fields} | Next],
-             Type, Value, Map, Errs, Work) ->
+execute_sset_field(Path, Ctx, Fields, Type, Value) ->
+    Map = [],
+    Errs = [],
+    Work = [],
+    Missing = #{},
+    execute_sset_field(Path, Ctx, Fields, Type, Value, Map, Errs, Work, Missing).
+
+execute_sset_field(_Path, _Ctx, [], _Type, _Value, Map, Errs, Work, Missing) ->
+    Result = maps:from_list(lists:reverse(Map)),
+    case Work of
+        [] ->
+            0 = maps:size(Missing),
+            {ok, Result, Errs};
+        [_|_] ->
+            true = maps:size(Missing) > 0,
+            {defer, Result, Errs, Work, Missing}
+    end;
+execute_sset_field(Path, Ctx, [{Key, [F|_] = Fields} | Next],
+             Type, Value, Map, Errs, Work, Missing) ->
     case lookup_field(F, Type) of
         null ->
-            execute_sset(Path, Ctx, Next, Type, Value, Map, Errs, Work);
+            execute_sset_field(Path, Ctx, Next, Type, Value, Map, Errs, Work, Missing);
         not_found ->
-            execute_sset(Path, Ctx, Next, Type, Value, Map, Errs, Work);
+            execute_sset_field(Path, Ctx, Next, Type, Value, Map, Errs, Work, Missing);
         typename ->
-            execute_sset(Path, Ctx, Next, Type, Value,
-                         [{Key, typename(Type)} | Map],
-                         Errs, Work);
+            execute_sset_field(Path, Ctx, Next, Type, Value,
+                               [{Key, typename(Type)} | Map],
+                               Errs, Work, Missing);
         FieldType ->
             case execute_field([Key | Path], Ctx, Type, Value, Fields, FieldType) of
                 {ok, Result, FieldErrs} ->
-                    execute_sset(Path, Ctx, Next, Type, Value,
-                                 [{Key, Result} | Map],
-                                 FieldErrs ++ Errs,
-                                 Work);
+                    execute_sset_field(Path, Ctx, Next, Type, Value,
+                                       [{Key, Result} | Map],
+                                       FieldErrs ++ Errs,
+                                       Work, Missing);
                 {work, WUs} ->
-                    execute_sset(Path, Ctx, Next, Type, Value, Map, Errs,
-                                 WUs ++ Work);
+                    execute_sset_field(Path, Ctx, Next, Type, Value, Map, Errs,
+                                       WUs ++ Work, add_missing(WUs, Key, Missing));
                 {error, Errors} ->
                     throw({null, Errors, Work})
             end
     end.
+
+add_missing([{Ref, _} | _], Key, Missing) ->
+    Missing#{ Ref => Key }.
 
 typename(#object_type { id = ID }) -> ID.
 
@@ -259,23 +273,23 @@ does_fragment_type_apply(
           #union_type { types = Types } -> lists:member(ID, Types)
       end.
 
-execute_field(Path, #{ defer_target := Target } = Ctx, ObjType, Value, [F|_] = Fields, #schema_field { annotations = FAns, resolve = RF}) ->
+execute_field(Path, #{ defer_target := Upstream} = Ctx, ObjType, Value, [F|_] = Fields, #schema_field { annotations = FAns, resolve = RF}) ->
     Name = name(F),
     #schema_field { ty = ElaboratedTy } = field_type(F),
     Args = resolve_args(Ctx, F),
     Fun = resolver_function(ObjType, RF),
     case resolve_field_value(Ctx, ObjType, Value, Name, FAns, Fun, Args) of
         {defer, Token} ->
-            Source = graphql:token_ref(Token),
+            Ref = graphql:token_ref(Token),
             Closure =
                 fun
                     (ResVal) ->
                         case complete_value(Path, Ctx, ElaboratedTy, Fields, ResVal) of
                             {ok, Result, Errs} ->
-                                {done, Target, Name, Result, Errs}
+                                {done, Upstream, Result, Errs}
                         end
                 end,
-            {work, [{Source, Closure}]};
+            {work, [{Ref, Closure}]};
         ResolvedValue ->
             complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue)
     end.
@@ -683,9 +697,6 @@ defer_loop(#defer_state { req_id = Id } = State) ->
         {'$graphql_reply', _, _, _} = Reply ->
             %% Ignoring old request
             error_logger:info_msg("Ignoring wrong reply: ~p", [Reply]),
-            defer_loop(State);
-        Otherwise ->
-            error_logger:info_msg("Received unknown: ~p", [Otherwise]),
             defer_loop(State)
     after 750 ->
             exit(defer_timeout)
@@ -695,31 +706,31 @@ defer_loop(#defer_state { req_id = Id } = State) ->
 %% it will accept. This function mediates through the different variants of calls which
 %% are possible.
 %% @todo: Handle Errs in a more graceful manner!
-call_closure(Closure, {Source, Name, Res, Errs}) -> Closure(Source, Name, Res);
+call_closure(Closure, {Source, Res, Errs}) -> Closure(Source, Res, Errs);
 call_closure(Closure, Data) -> Closure(Data).
 
 %% Process work
 defer_handle_work(#defer_state {work = WorkMap } = State,
                   Target,
                   Input) ->
-    case maps:get(Target, WorkMap, not_found) of
-        not_found ->
+    case maps:take(Target, WorkMap) of
+        error ->
             error_logger:info_msg("NOT FOUND! workmap: ~p", [WorkMap]),
             defer_loop(State);
-        Closure ->
+        {Closure, WorkMap2} ->
             Result = call_closure(Closure, Input),
             error_logger:info_msg("Result from ~p: ~p", [Target, Result]),
             case Result of
-                {done, top_level, _, Res, Errs} ->
+                {done, top_level, Res, Errs} ->
                     complete_top_level(Res, Errs);
-                {done, Upstream, Name, Res, Errs} ->
+                {done, Upstream, Res, Errs} ->
                     defer_handle_work(
-                      State#defer_state { work = maps:remove(Target, WorkMap) },
+                      State#defer_state { work = WorkMap2 },
                       Upstream,
-                      {Target, Name, Res, Errs});
+                      {Target, Res, Errs});
                 {more, New} ->
                     NewWork = maps:from_list(New),
-                    defer_loop(State#defer_state { work = maps:merge(WorkMap, NewWork) })
+                    defer_loop(State#defer_state { work = maps:merge(WorkMap2, NewWork) })
             end
     end.
 
