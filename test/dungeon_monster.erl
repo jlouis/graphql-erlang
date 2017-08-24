@@ -20,7 +20,12 @@ execute(Ctx, #monster { id = ID,
     case Field of
         <<"id">> -> dungeon:wrap({monster, ID});
         <<"name">> ->
-            {ok, Name};
+            NameToken = graphql:token(Ctx),
+            spawn_link(fun() ->
+                               timer:sleep(10),
+                               graphql:reply_cast(NameToken, {ok, Name})
+                       end),
+            {defer, NameToken};
         <<"color">> -> color(Color, Args);
         <<"hitpoints">> -> {ok, HP};
         <<"hp">> -> {ok, HP};

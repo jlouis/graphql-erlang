@@ -489,7 +489,7 @@ complete_value_list(Path, #{ defer_target := Upstream } = Ctx, Ty, Fields, Resul
                                   Missing#{ Ref => Index } }
                         end
                 end,
-            {Completed, W, M} = Completer(IndexedResults),
+            {Completed, Ws, M} = Completer(IndexedResults),
             case maps:size(M) of
                 0 ->
                     case complete_list_value_result(Completed) of
@@ -500,6 +500,41 @@ complete_value_list(Path, #{ defer_target := Upstream } = Ctx, Ty, Fields, Resul
                             {ok, Vals, lists:concat(Errs)};
                         {_, Reasons} ->
                             {ok, null, Reasons}
+                    end;
+                _ ->
+                    Closure = list_closure(Upstream, Self, M, Completed, #{}),
+                    {work, [{Self, Closure}|Ws]}
+            end
+    end.
+
+list_subst([], _Done)               -> [];
+list_subst([{defer, Ref}|Xs], Done) -> [maps:get(Ref, Done)|list_subst(Xs, Done)];
+list_subst([X|Xs], Done)            -> [X|list_subst(Xs, Done)].
+
+list_closure(Upstream, Self, Missing, List, Done) ->
+    fun
+        (FieldRef, Completed, Errs) ->
+            case maps:take(FieldRef, Missing) of
+                {_Index, NewMissing} ->
+                    NewDone = Done#{ FieldRef => {ok, Completed, Errs} },
+                    case maps:size(NewMissing) of
+                        0 ->
+                            SubstList = list_subst(List, NewDone),
+                            case complete_list_value_result(SubstList) of
+                                {Res, []} ->
+                                    {Vs, Es} = lists:unzip(Res),
+                                    Len = length(SubstList),
+                                    Len = length(Vs),
+                                    {done, Upstream, Vs, lists:concat(Es)};
+                                {_, Reasons} ->
+                                    {done, Upstream, null, Reasons}
+                            end;
+                        _ ->
+                            {more, [{Self,
+                                     list_closure(Upstream, Self,
+                                                  NewMissing,
+                                                  List,
+                                                  NewDone )}]}
                     end
             end
     end.
