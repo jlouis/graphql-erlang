@@ -460,40 +460,57 @@ assert_list_completion_structure(Ty, Fields, Results) ->
             {error, list_resolution}
     end.
 
-complete_value_list(Path, Ctx, Ty, Fields, Results) ->
+complete_value_list(Path, #{ defer_target := Upstream } = Ctx, Ty, Fields, Results) ->
     IndexedResults = index(Results),
     case assert_list_completion_structure(Ty, Fields, IndexedResults) of
         {error, list_resolution} ->
             {error, Errs} = err(Path, list_resolution),
             {ok, null, Errs};
         ok ->
-            Wrap = fun
-                       (I,R) ->
-                           case complete_value([I|Path], Ctx, Ty, Fields, R) of
-                               {ok, V, Errs} -> {ok, V, resolver_error_wrap(Errs)};
-                               {error, Err} -> {error, Err}
-                           end
-                   end,
-            Completed = [{I, Wrap(I, R)} || {I, R} <- IndexedResults],
-            Target = make_ref(),
-            case complete_list_value_result(Target, Completed) of
-                {Res, []} ->
-                    {Vals, Errs} = lists:unzip(Res),
-                    Len = length(Completed),
-                    Len = length(Vals),
-                    {ok, Vals, lists:concat(Errs)};
-                {_, Reasons} ->
-                    {ok, null, Reasons}
+            Self = make_ref(),
+            InnerCtx = Ctx#{ defer_target := Self },
+            Completer =
+                fun
+                    F([]) -> {[], [], #{}};
+                    F([{Index, Result}|Next]) ->
+                        {Rest, WUs, Missing} = F(Next),
+                        case complete_value([Index|Path], InnerCtx, Ty, Fields, Result) of
+                            {ok, V, Errs} ->
+                                { [{ok, V, error_wrap(Errs)} | Rest],
+                                  WUs,
+                                  Missing };
+                            {error, Err} ->
+                                { [{error, Err}| Rest],
+                                  WUs,
+                                  Missing };
+                            {work, [{Ref, _Closure}|_] = Work} ->
+                                { [{defer, Ref} | Rest],
+                                  Work ++ WUs,
+                                  Missing#{ Ref => Index } }
+                        end
+                end,
+            {Completed, W, M} = Completer(IndexedResults),
+            case maps:size(M) of
+                0 ->
+                    case complete_list_value_result(Completed) of
+                        {Res, []} ->
+                            {Vals, Errs} = lists:unzip(Res),
+                            Len = length(Completed),
+                            Len = length(Vals),
+                            {ok, Vals, lists:concat(Errs)};
+                        {_, Reasons} ->
+                            {ok, null, Reasons}
+                    end
             end
     end.
 
-complete_list_value_result(_Target, []) ->
+complete_list_value_result([]) ->
     {[], []};
-complete_list_value_result(Target, [{_, {error, Err}}|Next]) ->
-    {Res, Errs} = complete_list_value_result(Target, Next),
+complete_list_value_result([{error, Err}|Next]) ->
+    {Res, Errs} = complete_list_value_result(Next),
     {Res, Err ++ Errs};
-complete_list_value_result(Target, [{_, {ok, V, Es}}|Next]) ->
-    {Res, Errs} = complete_list_value_result(Target, Next),
+complete_list_value_result([{ok, V, Es}|Next]) ->
+    {Res, Errs} = complete_list_value_result(Next),
     {[{V, Es} | Res], Errs}.
 
 index([]) -> [];
@@ -748,9 +765,9 @@ defer_handle_work(#defer_state {work = WorkMap } = State,
 
 %% -- ERROR HANDLING --
 
-resolver_error_wrap([]) -> [];
-resolver_error_wrap([#{ reason := Reason } = E | Next]) ->
-    [E#{ reason => {resolver_error, Reason} } | resolver_error_wrap(Next)].
+error_wrap([]) -> [];
+error_wrap([#{ reason := Reason } = E | Next]) ->
+    [E#{ reason => {resolver_error, Reason} } | error_wrap(Next)].
 
 err(Path, Reason) ->
     err(Path, Reason, []).
