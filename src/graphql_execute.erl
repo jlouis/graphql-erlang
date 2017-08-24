@@ -339,11 +339,13 @@ complete_value(Path, Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
     SchemaType = graphql_schema:get(Ty),
     complete_value(Path, Ctx, SchemaType, Fields, {ok, Value});
 
-complete_value(Path, Ctx, {non_null, InnerTy}, Fields, Result) ->
+complete_value(Path, #{ defer_target := Upstream } = Ctx,
+               {non_null, InnerTy}, Fields, Result) ->
     %% Note we handle arbitrary results in this case. This makes sure errors
     %% factor through the non-null handler here and that handles
     %% nested {error, Reason} tuples correctly
-    case complete_value(Path, Ctx, InnerTy, Fields, Result) of
+    Self = make_ref(),
+    case complete_value(Path, Ctx#{ defer_target := Self}, InnerTy, Fields, Result) of
         {error, Reason} ->
             %% Rule: Along a path, there is at most one error, so if the underlying
             %% object is at fault, don't care too much about this level, just pass
@@ -353,9 +355,19 @@ complete_value(Path, Ctx, {non_null, InnerTy}, Fields, Result) ->
             err(Path, null_value, InnerErrs);
         {ok, _C, _E} = V ->
             V;
-        {work, _} = Work ->
-            %% @todo Handle null propagation here by wrapping the closure
-            Work
+        {work, WUs} ->
+            %% This closure wraps the null properly and errors null-returns
+            %% From the underlying computation if it completes later on with a
+            %% null value.
+            Closure =
+                fun
+                    (FieldRef, null, InnerErrs) when FieldRef == Self ->
+                        Err = err(Path, null_value, InnerErrs),
+                        {done, Upstream, Err, []};
+                    (FieldRef, Completed, InnerErrs) when FieldRef == Self ->
+                        {done, Upstream, Completed, InnerErrs}
+                end,
+            {work, [{Self, Closure}|WUs]}
     end;
 complete_value(_Path, _Ctx, _Ty, _Fields, {ok, null}) ->
     {ok, null, []};
