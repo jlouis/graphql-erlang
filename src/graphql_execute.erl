@@ -86,18 +86,17 @@ execute_query(#{ defer_request_id := ReqId } = Ctx, #op { selection_set = SSet,
             defer_loop(DeferState)
     end.
 
-execute_mutation(#{ defer_request_id := ReqId } = Ctx, #op { selection_set = SSet,
+execute_mutation(Ctx, #op { selection_set = SSet,
                             schema = QType } = Op) ->
     #object_type{} = QType,
     case execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self(),
                                                   defer_target => top_level },
                       SSet, QType, none) of
+        %% In mutations, there is no way you can get deferred work
+        %% So we just ignore the case here. If it ever occurs with a
+        %% case clause bug here, it is a broken invariant.
         {ok, Res, Errs} ->
-            complete_top_level(Res, Errs);
-        {work, WL} ->
-            DeferState = #defer_state{ req_id = ReqId,
-                                       work = maps:from_list(WL) },
-            defer_loop(DeferState)
+            complete_top_level(Res, Errs)
     end.
 
 execute_sset(Path, #{ defer_target := Upstream } = Ctx, SSet, Type, Value) ->
@@ -273,12 +272,35 @@ does_fragment_type_apply(
           #union_type { types = Types } -> lists:member(ID, Types)
       end.
 
-execute_field(Path, #{ defer_target := Upstream} = Ctx, ObjType, Value, [F|_] = Fields, #schema_field { annotations = FAns, resolve = RF}) ->
+execute_field_await(Path,
+                    #{ defer_request_id := ReqId } = Ctx,
+                    ElaboratedTy,
+                    Fields,
+                    Ref) ->
+    receive
+        {'$graphql_reply', ReqId, Ref, ResolvedValue} ->
+            complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue);
+        {'$graphql_reply', _, _, _} = Reply ->
+            error_logger:info_msg("Ignoring old reply: ~p", [Reply]),
+            execute_field_await(Path, Ctx, ElaboratedTy, Fields, Ref)
+    after 750 ->
+            exit(defer_mutation_timeout)
+    end.
+
+execute_field(Path, #{ defer_target := Upstream,
+                       op_type := OpType } = Ctx,
+              ObjType, Value, [F|_] = Fields,
+              #schema_field { annotations = FAns, resolve = RF}) ->
     Name = name(F),
     #schema_field { ty = ElaboratedTy } = field_type(F),
     Args = resolve_args(Ctx, F),
     Fun = resolver_function(ObjType, RF),
     case resolve_field_value(Ctx, ObjType, Value, Name, FAns, Fun, Args) of
+        {defer, Token} when OpType == mutation ->
+            %% A mutation must not run the mutation in the parallel, so it awaits
+            %% the data straight away
+            Ref = graphql:token_ref(Token),
+            execute_field_await(Path, Ctx, ElaboratedTy, Fields, Ref);
         {defer, Token} ->
             Ref = graphql:token_ref(Token),
             Closure =
@@ -760,7 +782,7 @@ defer_loop(#defer_state { req_id = Id } = State) ->
             defer_handle_work(State, Ref, Data);
         {'$graphql_reply', _, _, _} = Reply ->
             %% Ignoring old request
-            error_logger:info_msg("Ignoring wrong reply: ~p", [Reply]),
+            error_logger:info_msg("Ignoring old reply: ~p", [Reply]),
             defer_loop(State)
     after 750 ->
             exit(defer_timeout)
