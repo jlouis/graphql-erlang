@@ -118,6 +118,9 @@ execute_sset(Path, #{ defer_target := Upstream } = Ctx, SSet, Type, Value) ->
 
 sset_closure(Upstream, Self, Missing, Map, Errors) ->
     fun
+        (FieldRef, {error, Errs}, []) ->
+            %% TODO: Cancel here
+            {done, Upstream, null, Errs ++ Errors};
         (FieldRef, Completed, Errs) ->
             case maps:take(FieldRef, Missing) of
                 {Name, NewMissing} ->
@@ -306,9 +309,21 @@ execute_field(Path, #{ defer_target := Upstream,
             Closure =
                 fun
                     (ResVal) ->
-                        case complete_value(Path, Ctx, ElaboratedTy, Fields, ResVal) of
+                        Target = make_ref(),
+                        case complete_value(Path, Ctx#{ defer_target := Target}, ElaboratedTy, Fields, ResVal) of
                             {ok, Result, Errs} ->
-                                {done, Upstream, Result, Errs}
+                                {done, Upstream, Result, Errs};
+                            {error, Errs} ->
+                                {done, Upstream, {error, Errs}, []};
+                            {work, Items} ->
+                                %% This will forward to `Target`
+                                Forwarder =
+                                    fun
+                                        (T, Completed, Errs) ->
+                                            error_logger:info_msg("T: ~p, Target: ~p, upstream: ~p", [T, Target, Upstream]),
+                                            {done, Upstream, Ref, Completed, Errs}
+                                    end,
+                                {more, [{Target, Forwarder} | Items]}
                         end
                 end,
             {work, [{Ref, Closure}]};
@@ -383,10 +398,10 @@ complete_value(Path, #{ defer_target := Upstream } = Ctx,
             %% null value.
             Closure =
                 fun
-                    (FieldRef, null, InnerErrs) when FieldRef == Self ->
+                    (FieldRef, null, InnerErrs) ->
                         Err = err(Path, null_value, InnerErrs),
                         {done, Upstream, Err, []};
-                    (FieldRef, Completed, InnerErrs) when FieldRef == Self ->
+                    (FieldRef, Completed, InnerErrs) ->
                         {done, Upstream, Completed, InnerErrs}
                 end,
             {work, [{Self, Closure}|WUs]}
@@ -814,6 +829,11 @@ defer_handle_work(#defer_state {work = WorkMap } = State,
                       State#defer_state { work = WorkMap2 },
                       Upstream,
                       {Target, Res, Errs});
+                {done, Upstream, Ref, Res, Errs} ->
+                    defer_handle_work(
+                      State#defer_state { work = WorkMap2 },
+                      Upstream,
+                      {Ref, Res, Errs});
                 {more, New} ->
                     NewWork = maps:from_list(New),
                     defer_loop(State#defer_state { work = maps:merge(WorkMap2, NewWork) })

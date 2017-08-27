@@ -27,7 +27,13 @@ execute(Ctx, #monster { id = ID,
                        end),
             {defer, NameToken};
         <<"color">> -> color(Color, Args);
-        <<"hitpoints">> -> {ok, HP};
+        <<"hitpoints">> ->
+            HPToken = graphql:token(Ctx),
+            spawn_link(fun() ->
+                               timer:sleep(20),
+                               graphql:reply_cast(HPToken, {ok, HP})
+                       end),
+            {defer, HPToken};
         <<"hp">> -> {ok, HP};
         <<"inventory">> ->
             Data = [dungeon:load(OID) || OID <- Inventory],
@@ -36,7 +42,12 @@ execute(Ctx, #monster { id = ID,
             {ok, Mood};
         <<"plushFactor">> -> {ok, PlushFactor};
         <<"spikyness">> -> {ok, 5};
-        <<"stats">> -> stats(Stats, Args);
+        <<"stats">> ->
+            StatsToken = graphql:token(Ctx),
+            spawn_link(fun() ->
+                               graphql:reply_cast(StatsToken, stats(Stats, Args))
+                       end),
+            {defer, StatsToken};
         <<"statsVariantOne">> -> stats(Stats);
         <<"statsVariantTwo">> -> stats(Stats);
         <<"statsVariantThree">> -> stats(Stats);

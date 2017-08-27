@@ -8,10 +8,16 @@ execute(Ctx, #stats { attack = Attack,
                        shell_scripting = ShellScripting},
         Field, _Args) ->
     case Field of
-        <<"attack">> when Attack == 13 ->
-            {ok, null};
         <<"attack">> ->
-            {ok, Attack};
+            AttackToken = graphql:token(Ctx),
+            spawn_link(fun() ->
+                               Reply = case Attack of
+                                           13 -> {ok, null};
+                                           A -> {ok, A}
+                                       end,
+                               graphql:reply_cast(AttackToken, Reply)
+                       end),
+            {defer, AttackToken};
         <<"yell">> ->
             {ok, Yell};
         <<"shellScripting">> ->
