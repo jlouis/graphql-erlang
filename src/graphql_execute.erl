@@ -11,15 +11,22 @@
 -define(DEFER_TIMEOUT, 5000). %% @todo: Get rid of this timeout. It is temporary
 
 -type source() :: reference().
--type target() :: reference().
+
+-record(done,
+        { upstream :: source() | top_level,
+          key :: binary() | source() | undefined, %% @todo: Kill 'undefined'
+          result :: {ok, term(), [term()]} | {error, [term()]} }).
 
 -type defer_closure() ::
-        fun ((source(), term()) ->
-                    {done, target(), term(), term()} | {more, defer_closure()}).
+        fun ((term()) ->
+                    #done{} | {more, [{source(), defer_closure()}]}).
 
 -record(defer_state,
-        { req_id :: reference(),
-          work = #{} :: #{ reference() => defer_closure() } }).
+        { req_id :: source(),
+          work = #{} :: #{ source() => defer_closure() } }).
+
+-record(work,
+        { items :: [{reference(), defer_closure()}] }).
 
 -spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
 x(X) -> x(#{ params => #{} }, X).
@@ -80,7 +87,7 @@ execute_query(#{ defer_request_id := ReqId } = Ctx, #op { selection_set = SSet,
                       SSet, QType, none) of
         {ok, Res, Errs} ->
             complete_top_level(Res, Errs);
-        {work, WL} ->
+        #work { items = WL } ->
             DeferState = #defer_state{ req_id = ReqId,
                                        work = maps:from_list(WL) },
             defer_loop(DeferState)
@@ -108,7 +115,7 @@ execute_sset(Path, #{ defer_target := Upstream } = Ctx, SSet, Type, Value) ->
                 {ok, Map, Errs};
             {defer, Map, Errs, Work, Missing} ->
                 Closure = sset_closure(Upstream, Self, Missing, Map, Errs),
-                {work, [{Self, Closure}] ++ Work}
+                #work { items = [{Self, Closure}] ++ Work }
         end
     catch
         throw:{null, Errors, _Ds} ->
@@ -118,17 +125,23 @@ execute_sset(Path, #{ defer_target := Upstream } = Ctx, SSet, Type, Value) ->
 
 sset_closure(Upstream, Self, Missing, Map, Errors) ->
     fun
-        (FieldRef, {error, Errs}, []) ->
+        ({_FieldRef, {error, Errs}}) ->
             %% TODO: Cancel here
-            {done, Upstream, null, Errs ++ Errors};
-        (FieldRef, Completed, Errs) ->
+            #done {
+               upstream = Upstream,
+               result = {ok, null, Errs ++ Errors}
+              };
+        ({FieldRef, {ok, Completed, Errs}}) ->
             case maps:take(FieldRef, Missing) of
                 {Name, NewMissing} ->
                     NewMap = Map#{ Name => Completed },
                     NewErrors = Errs ++ Errors,
                     case maps:size(NewMissing) of
                         0 ->
-                            {done, Upstream, NewMap, NewErrors};
+                            #done {
+                               upstream = Upstream,
+                               result = {ok, NewMap, NewErrors}
+                              };
                         _ ->
                             error_logger:info_msg("Need more: ~p", [NewMissing]),
                             {more, [{Self,
@@ -175,7 +188,7 @@ execute_sset_field(Path, Ctx, [{Key, [F|_] = Fields} | Next],
                                        [{Key, Result} | Map],
                                        FieldErrs ++ Errs,
                                        Work, Missing);
-                {work, WUs} ->
+                #work { items = WUs } ->
                     execute_sset_field(Path, Ctx, Next, Type, Value, Map, Errs,
                                        WUs ++ Work, add_missing(WUs, Key, Missing));
                 {error, Errors} ->
@@ -312,21 +325,26 @@ execute_field(Path, #{ defer_target := Upstream,
                         Target = make_ref(),
                         case complete_value(Path, Ctx#{ defer_target := Target}, ElaboratedTy, Fields, ResVal) of
                             {ok, Result, Errs} ->
-                                {done, Upstream, Result, Errs};
+                                #done { upstream = Upstream, result = {ok, Result, Errs} };
                             {error, Errs} ->
-                                {done, Upstream, {error, Errs}, []};
-                            {work, Items} ->
+                                #done { upstream = Upstream, result = {error, Errs} };
+                            #work { items = Items } ->
                                 %% This will forward to `Target`
                                 Forwarder =
                                     fun
-                                        (T, Completed, Errs) ->
-                                            error_logger:info_msg("T: ~p, Target: ~p, upstream: ~p", [T, Target, Upstream]),
-                                            {done, Upstream, Ref, Completed, Errs}
+                                        ({T, Completed}) ->
+                                            error_logger:info_msg(
+                                              "T: ~p, Target: ~p, upstream: ~p",
+                                              [T, Target, Upstream]),
+                                            #done { upstream = Upstream,
+                                                    key = Ref,
+                                                    result = Completed
+                                                  }
                                     end,
                                 {more, [{Target, Forwarder} | Items]}
                         end
                 end,
-            {work, [{Ref, Closure}]};
+            #work { items = [{Ref, Closure}]};
         ResolvedValue ->
             complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue)
     end.
@@ -392,19 +410,25 @@ complete_value(Path, #{ defer_target := Upstream } = Ctx,
             err(Path, null_value, InnerErrs);
         {ok, _C, _E} = V ->
             V;
-        {work, WUs} ->
+        #work { items = WUs } ->
             %% This closure wraps the null properly and errors null-returns
             %% From the underlying computation if it completes later on with a
             %% null value.
             Closure =
                 fun
-                    (FieldRef, null, InnerErrs) ->
-                        Err = err(Path, null_value, InnerErrs),
-                        {done, Upstream, Err, []};
-                    (FieldRef, Completed, InnerErrs) ->
-                        {done, Upstream, Completed, InnerErrs}
+                    ({_FieldRef, {ok, null, InnerErrs}}) ->
+                        #done {
+                           upstream = Upstream,
+                           result = err(Path, null_value, InnerErrs)
+                          };
+                    ({_FieldRef, Res}) ->
+                        {ok, _, _} = Res, % Assert the current state of affairs
+                        #done {
+                           upstream = Upstream,
+                           result = Res
+                          }
                 end,
-            {work, [{Self, Closure}|WUs]}
+            #work { items = [{Self, Closure}|WUs]}
     end;
 complete_value(_Path, _Ctx, _Ty, _Fields, {ok, null}) ->
     {ok, null, []};
@@ -520,7 +544,7 @@ complete_value_list(Path, #{ defer_target := Upstream } = Ctx, Ty, Fields, Resul
                                 { [{error, Err}| Rest],
                                   WUs,
                                   Missing };
-                            {work, [{Ref, _Closure}|_] = Work} ->
+                            #work { items = [{Ref, _Closure}|_] = Work } ->
                                 { [{defer, Ref} | Rest],
                                   Work ++ WUs,
                                   Missing#{ Ref => Index } }
@@ -540,7 +564,7 @@ complete_value_list(Path, #{ defer_target := Upstream } = Ctx, Ty, Fields, Resul
                     end;
                 _ ->
                     Closure = list_closure(Upstream, Self, M, Completed, #{}),
-                    {work, [{Self, Closure}|Ws]}
+                    #work { items = [{Self, Closure} | Ws] }
             end
     end.
 
@@ -550,10 +574,10 @@ list_subst([X|Xs], Done)            -> [X|list_subst(Xs, Done)].
 
 list_closure(Upstream, Self, Missing, List, Done) ->
     fun
-        (FieldRef, Completed, Errs) ->
+        ({FieldRef, Result}) ->
             case maps:take(FieldRef, Missing) of
                 {_Index, NewMissing} ->
-                    NewDone = Done#{ FieldRef => {ok, Completed, Errs} },
+                    NewDone = Done#{ FieldRef => Result },
                     case maps:size(NewMissing) of
                         0 ->
                             SubstList = list_subst(List, NewDone),
@@ -562,9 +586,15 @@ list_closure(Upstream, Self, Missing, List, Done) ->
                                     {Vs, Es} = lists:unzip(Res),
                                     Len = length(SubstList),
                                     Len = length(Vs),
-                                    {done, Upstream, Vs, lists:concat(Es)};
+                                    #done {
+                                       upstream = Upstream,
+                                       result = {ok, Vs, lists:concat(Es) }
+                                      };
                                 {_, Reasons} ->
-                                    {done, Upstream, null, Reasons}
+                                    #done {
+                                       upstream = Upstream,
+                                       result = {ok, null, Reasons}
+                                      }
                             end;
                         _ ->
                             {more, [{Self,
@@ -803,13 +833,6 @@ defer_loop(#defer_state { req_id = Id } = State) ->
             exit(defer_timeout)
     end.
 
-%% A deferred closure has a different structure depending on what kind of input data
-%% it will accept. This function mediates through the different variants of calls which
-%% are possible.
-%% @todo: Handle Errs in a more graceful manner!
-call_closure(Closure, {Source, Res, Errs}) -> Closure(Source, Res, Errs);
-call_closure(Closure, Data) -> Closure(Data).
-
 %% Process work
 defer_handle_work(#defer_state {work = WorkMap } = State,
                   Target,
@@ -819,21 +842,29 @@ defer_handle_work(#defer_state {work = WorkMap } = State,
             error_logger:info_msg("NOT FOUND! workmap: ~p", [WorkMap]),
             defer_loop(State);
         {Closure, WorkMap2} ->
-            Result = call_closure(Closure, Input),
+            Result = Closure(Input),
             error_logger:info_msg("Result from ~p: ~p", [Target, Result]),
             case Result of
-                {done, top_level, Res, Errs} ->
+                #done { upstream = top_level,
+                        result = {ok, Res, Errs}} ->
                     complete_top_level(Res, Errs);
-                {done, Upstream, Res, Errs} ->
+                #done { upstream = top_level,
+                        result = {error, Errs} } ->
+                    complete_top_level(undefiend, Errs);
+                #done { upstream = Upstream,
+                        key = undefined,
+                        result = Value } ->
                     defer_handle_work(
                       State#defer_state { work = WorkMap2 },
                       Upstream,
-                      {Target, Res, Errs});
-                {done, Upstream, Ref, Res, Errs} ->
+                      {Target, Value});
+                #done { upstream = Upstream,
+                        key = Key,
+                        result = Value } ->
                     defer_handle_work(
                       State#defer_state { work = WorkMap2 },
                       Upstream,
-                      {Ref, Res, Errs});
+                      {Key, Value});
                 {more, New} ->
                     NewWork = maps:from_list(New),
                     defer_loop(State#defer_state { work = maps:merge(WorkMap2, NewWork) })
