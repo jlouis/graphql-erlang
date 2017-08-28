@@ -14,7 +14,7 @@
 
 -record(done,
         { upstream :: source() | top_level,
-          key :: binary() | source() | undefined, %% @todo: Kill 'undefined'
+          key :: binary() | pos_integer() | top_key,
           result :: {ok, term(), [term()]} | {error, [term()]} }).
 
 -type defer_closure() ::
@@ -83,7 +83,7 @@ execute_query(#{ defer_request_id := ReqId } = Ctx, #op { selection_set = SSet,
                          schema = QType } = Op) ->
     #object_type{} = QType,
     case execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self(),
-                                                  defer_target => top_level },
+                                                  defer_target => {top_level, top_key} },
                       SSet, QType, none) of
         {ok, Res, Errs} ->
             complete_top_level(Res, Errs);
@@ -97,7 +97,7 @@ execute_mutation(Ctx, #op { selection_set = SSet,
                             schema = QType } = Op) ->
     #object_type{} = QType,
     case execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self(),
-                                                  defer_target => top_level },
+                                                  defer_target => {top_level, top_key} },
                       SSet, QType, none) of
         %% In mutations, there is no way you can get deferred work
         %% So we just ignore the case here. If it ever occurs with a
@@ -106,7 +106,7 @@ execute_mutation(Ctx, #op { selection_set = SSet,
             complete_top_level(Res, Errs)
     end.
 
-execute_sset(Path, #{ defer_target := Upstream } = Ctx, SSet, Type, Value) ->
+execute_sset(Path, #{ defer_target := DeferTarget } = Ctx, SSet, Type, Value) ->
     GroupedFields = collect_fields(Path, Ctx, Type, SSet),
     Self = make_ref(),
     try
@@ -114,7 +114,7 @@ execute_sset(Path, #{ defer_target := Upstream } = Ctx, SSet, Type, Value) ->
             {ok, Map, Errs} ->
                 {ok, Map, Errs};
             {defer, Map, Errs, Work, Missing} ->
-                Closure = sset_closure(Upstream, Self, Missing, Map, Errs),
+                Closure = sset_closure(DeferTarget, Self, Missing, Map, Errs),
                 #work { items = [{Self, Closure}] ++ Work }
         end
     catch
@@ -123,29 +123,31 @@ execute_sset(Path, #{ defer_target := Upstream } = Ctx, SSet, Type, Value) ->
             {ok, null, Errors}
     end.
 
-sset_closure(Upstream, Self, Missing, Map, Errors) ->
+sset_closure({Upstream, Key}, Self, Missing, Map, Errors) ->
     fun
-        ({_FieldRef, {error, Errs}}) ->
+        ({_Name, {error, Errs}}) ->
             %% TODO: Cancel here
             #done {
                upstream = Upstream,
+               key = Key,
                result = {ok, null, Errs ++ Errors}
               };
-        ({FieldRef, {ok, Completed, Errs}}) ->
-            case maps:take(FieldRef, Missing) of
-                {Name, NewMissing} ->
+        ({Name, {ok, Completed, Errs}}) ->
+            case maps:take(Name, Missing) of
+                {true, NewMissing} ->
                     NewMap = Map#{ Name => Completed },
                     NewErrors = Errs ++ Errors,
                     case maps:size(NewMissing) of
                         0 ->
                             #done {
                                upstream = Upstream,
+                               key = Key,
                                result = {ok, NewMap, NewErrors}
                               };
                         _ ->
                             error_logger:info_msg("Need more: ~p", [NewMissing]),
                             {more, [{Self,
-                                     sset_closure(Upstream, Self,
+                                     sset_closure({Upstream, Key}, Self,
                                                   NewMissing,
                                                   NewMap,
                                                   NewErrors)}]}
@@ -170,7 +172,7 @@ execute_sset_field(_Path, _Ctx, [], _Type, _Value, Map, Errs, Work, Missing) ->
             true = maps:size(Missing) > 0,
             {defer, Result, Errs, Work, Missing}
     end;
-execute_sset_field(Path, Ctx, [{Key, [F|_] = Fields} | Next],
+execute_sset_field(Path, #{ defer_target := Upstream } = Ctx, [{Key, [F|_] = Fields} | Next],
              Type, Value, Map, Errs, Work, Missing) ->
     case lookup_field(F, Type) of
         null ->
@@ -182,7 +184,7 @@ execute_sset_field(Path, Ctx, [{Key, [F|_] = Fields} | Next],
                                [{Key, typename(Type)} | Map],
                                Errs, Work, Missing);
         FieldType ->
-            case execute_field([Key | Path], Ctx, Type, Value, Fields, FieldType) of
+            case execute_field([Key | Path], Ctx#{ defer_target := {Upstream, Key}}, Type, Value, Fields, FieldType) of
                 {ok, Result, FieldErrs} ->
                     execute_sset_field(Path, Ctx, Next, Type, Value,
                                        [{Key, Result} | Map],
@@ -190,14 +192,11 @@ execute_sset_field(Path, Ctx, [{Key, [F|_] = Fields} | Next],
                                        Work, Missing);
                 #work { items = WUs } ->
                     execute_sset_field(Path, Ctx, Next, Type, Value, Map, Errs,
-                                       WUs ++ Work, add_missing(WUs, Key, Missing));
+                                       WUs ++ Work, Missing#{ Key => true });
                 {error, Errors} ->
                     throw({null, Errors, Work})
             end
     end.
-
-add_missing([{Ref, _} | _], Key, Missing) ->
-    Missing#{ Ref => Key }.
 
 typename(#object_type { id = ID }) -> ID.
 
@@ -303,7 +302,7 @@ execute_field_await(Path,
             exit(defer_mutation_timeout)
     end.
 
-execute_field(Path, #{ defer_target := Upstream,
+execute_field(Path, #{ defer_target := {Upstream, Key},
                        op_type := OpType } = Ctx,
               ObjType, Value, [F|_] = Fields,
               #schema_field { annotations = FAns, resolve = RF}) ->
@@ -322,26 +321,13 @@ execute_field(Path, #{ defer_target := Upstream,
             Closure =
                 fun
                     (ResVal) ->
-                        Target = make_ref(),
-                        case complete_value(Path, Ctx#{ defer_target := Target}, ElaboratedTy, Fields, ResVal) of
+                        case complete_value(Path, Ctx, ElaboratedTy, Fields, ResVal) of
                             {ok, Result, Errs} ->
-                                #done { upstream = Upstream, result = {ok, Result, Errs} };
+                                #done { upstream = Upstream, key = Key, result = {ok, Result, Errs} };
                             {error, Errs} ->
-                                #done { upstream = Upstream, result = {error, Errs} };
+                                #done { upstream = Upstream, key = Key, result = {error, Errs} };
                             #work { items = Items } ->
-                                %% This will forward to `Target`
-                                Forwarder =
-                                    fun
-                                        ({T, Completed}) ->
-                                            error_logger:info_msg(
-                                              "T: ~p, Target: ~p, upstream: ~p",
-                                              [T, Target, Upstream]),
-                                            #done { upstream = Upstream,
-                                                    key = Ref,
-                                                    result = Completed
-                                                  }
-                                    end,
-                                {more, [{Target, Forwarder} | Items]}
+                                {more, Items}
                         end
                 end,
             #work { items = [{Ref, Closure}]};
@@ -394,13 +380,13 @@ complete_value(Path, Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
     SchemaType = graphql_schema:get(Ty),
     complete_value(Path, Ctx, SchemaType, Fields, {ok, Value});
 
-complete_value(Path, #{ defer_target := Upstream } = Ctx,
+complete_value(Path, #{ defer_target := {Upstream, Key} } = Ctx,
                {non_null, InnerTy}, Fields, Result) ->
     %% Note we handle arbitrary results in this case. This makes sure errors
     %% factor through the non-null handler here and that handles
     %% nested {error, Reason} tuples correctly
     Self = make_ref(),
-    case complete_value(Path, Ctx#{ defer_target := Self}, InnerTy, Fields, Result) of
+    case complete_value(Path, Ctx#{ defer_target := {Self, Key} }, InnerTy, Fields, Result) of
         {error, Reason} ->
             %% Rule: Along a path, there is at most one error, so if the underlying
             %% object is at fault, don't care too much about this level, just pass
@@ -416,15 +402,17 @@ complete_value(Path, #{ defer_target := Upstream } = Ctx,
             %% null value.
             Closure =
                 fun
-                    ({_FieldRef, {ok, null, InnerErrs}}) ->
+                    ({_Key, {ok, null, InnerErrs}}) ->
                         #done {
                            upstream = Upstream,
+                           key = Key,
                            result = err(Path, null_value, InnerErrs)
                           };
-                    ({_FieldRef, Res}) ->
+                    ({_Key, Res}) ->
                         {ok, _, _} = Res, % Assert the current state of affairs
                         #done {
                            upstream = Upstream,
+                           key = Key,
                            result = Res
                           }
                 end,
@@ -529,13 +517,12 @@ complete_value_list(Path, #{ defer_target := Upstream } = Ctx, Ty, Fields, Resul
             {ok, null, Errs};
         ok ->
             Self = make_ref(),
-            InnerCtx = Ctx#{ defer_target := Self },
             Completer =
                 fun
                     F([]) -> {[], [], #{}};
                     F([{Index, Result}|Next]) ->
                         {Rest, WUs, Missing} = F(Next),
-                        case complete_value([Index|Path], InnerCtx, Ty, Fields, Result) of
+                        case complete_value([Index|Path], Ctx#{ defer_target := {Self, Index}}, Ty, Fields, Result) of
                             {ok, V, Errs} ->
                                 { [{ok, V, error_wrap(Errs)} | Rest],
                                   WUs,
@@ -544,10 +531,10 @@ complete_value_list(Path, #{ defer_target := Upstream } = Ctx, Ty, Fields, Resul
                                 { [{error, Err}| Rest],
                                   WUs,
                                   Missing };
-                            #work { items = [{Ref, _Closure}|_] = Work } ->
-                                { [{defer, Ref} | Rest],
+                            #work { items = Work } ->
+                                { [{defer, Index} | Rest],
                                   Work ++ WUs,
-                                  Missing#{ Ref => Index } }
+                                  Missing#{ Index => true } }
                         end
                 end,
             {Completed, Ws, M} = Completer(IndexedResults),
@@ -569,15 +556,15 @@ complete_value_list(Path, #{ defer_target := Upstream } = Ctx, Ty, Fields, Resul
     end.
 
 list_subst([], _Done)               -> [];
-list_subst([{defer, Ref}|Xs], Done) -> [maps:get(Ref, Done)|list_subst(Xs, Done)];
+list_subst([{defer, Idx}|Xs], Done) -> [maps:get(Idx, Done)|list_subst(Xs, Done)];
 list_subst([X|Xs], Done)            -> [X|list_subst(Xs, Done)].
 
-list_closure(Upstream, Self, Missing, List, Done) ->
+list_closure({Upstream, Key}, Self, Missing, List, Done) ->
     fun
-        ({FieldRef, Result}) ->
-            case maps:take(FieldRef, Missing) of
-                {_Index, NewMissing} ->
-                    NewDone = Done#{ FieldRef => Result },
+        ({Index, Result}) ->
+            case maps:take(Index, Missing) of
+                {true, NewMissing} ->
+                    NewDone = Done#{ Index => Result },
                     case maps:size(NewMissing) of
                         0 ->
                             SubstList = list_subst(List, NewDone),
@@ -588,17 +575,19 @@ list_closure(Upstream, Self, Missing, List, Done) ->
                                     Len = length(Vs),
                                     #done {
                                        upstream = Upstream,
+                                       key = Key,
                                        result = {ok, Vs, lists:concat(Es) }
                                       };
                                 {_, Reasons} ->
                                     #done {
                                        upstream = Upstream,
+                                       key = Key,
                                        result = {ok, null, Reasons}
                                       }
                             end;
                         _ ->
                             {more, [{Self,
-                                     list_closure(Upstream, Self,
+                                     list_closure({Upstream, Key}, Self,
                                                   NewMissing,
                                                   List,
                                                   NewDone )}]}
@@ -846,18 +835,13 @@ defer_handle_work(#defer_state {work = WorkMap } = State,
             error_logger:info_msg("Result from ~p: ~p", [Target, Result]),
             case Result of
                 #done { upstream = top_level,
+                        key = top_key,
                         result = {ok, Res, Errs}} ->
                     complete_top_level(Res, Errs);
                 #done { upstream = top_level,
+                        key = top_key,
                         result = {error, Errs} } ->
-                    complete_top_level(undefiend, Errs);
-                #done { upstream = Upstream,
-                        key = undefined,
-                        result = Value } ->
-                    defer_handle_work(
-                      State#defer_state { work = WorkMap2 },
-                      Upstream,
-                      {Target, Value});
+                    complete_top_level(undefined, Errs);
                 #done { upstream = Upstream,
                         key = Key,
                         result = Value } ->
