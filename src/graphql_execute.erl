@@ -145,7 +145,6 @@ sset_closure({Upstream, Key}, Self, Missing, Map, Errors) ->
                                result = {ok, NewMap, NewErrors}
                               };
                         _ ->
-                            error_logger:info_msg("Need more: ~p", [NewMissing]),
                             {more, [{Self,
                                      sset_closure({Upstream, Key}, Self,
                                                   NewMissing,
@@ -295,8 +294,7 @@ execute_field_await(Path,
     receive
         {'$graphql_reply', ReqId, Ref, ResolvedValue} ->
             complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue);
-        {'$graphql_reply', _, _, _} = Reply ->
-            error_logger:info_msg("Ignoring old reply: ~p", [Reply]),
+        {'$graphql_reply', _, _, _} ->
             execute_field_await(Path, Ctx, ElaboratedTy, Fields, Ref)
     after 750 ->
             exit(defer_mutation_timeout)
@@ -812,11 +810,8 @@ binarize(L) when is_list(L) -> list_to_binary(L).
 defer_loop(#defer_state { req_id = Id } = State) ->
     receive
         {'$graphql_reply', Id, Ref, Data} ->
-            error_logger:info_msg("Handling ~p", [{Id, Ref, Data}]),
             defer_handle_work(State, Ref, Data);
-        {'$graphql_reply', _, _, _} = Reply ->
-            %% Ignoring old request
-            error_logger:info_msg("Ignoring old reply: ~p", [Reply]),
+        {'$graphql_reply', _, _, _} ->
             defer_loop(State)
     after 750 ->
             exit(defer_timeout)
@@ -828,11 +823,10 @@ defer_handle_work(#defer_state {work = WorkMap } = State,
                   Input) ->
     case maps:take(Target, WorkMap) of
         error ->
-            error_logger:info_msg("NOT FOUND! workmap: ~p", [WorkMap]),
+            error_logger:info_msg("Ignoring input for ~p: ~p", [Target, Input]),
             defer_loop(State);
         {Closure, WorkMap2} ->
             Result = Closure(Input),
-            error_logger:info_msg("Result from ~p: ~p", [Target, Result]),
             case Result of
                 #done { upstream = top_level,
                         key = top_key,
