@@ -41,14 +41,15 @@
 
 %% TOKENS
 %% -----------------------------------------------------------------------------------
-token(#{ defer_process := Proc }) ->
-    {'$graphql_token', Proc, make_ref()}.
+token(#{ defer_process := Proc, defer_request_id := ReqId }) ->
+    {'$graphql_token', Proc, ReqId, make_ref()}.
 
 %% @private
-token_ref({'$graphql_token', _, Ref}) -> Ref.
+token_ref({'$graphql_token', _, _, Ref}) -> Ref.
 
-reply_cast({'$graphql_token', Target, Ref}, Data) ->
-    Target ! {'$graphql_reply', Ref, Data},
+reply_cast({'$graphql_token', Target, Id, Ref}, Data) ->
+    error_logger:info_msg("Replying: ~p", [{Target, Id, Ref, Data}]),
+    Target ! {'$graphql_reply', Id, Ref, Data},
     ok.
 
 %% -----------------------------------------------------------------------------------
