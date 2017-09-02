@@ -8,13 +8,11 @@
 -export([err_msg/1]).
 -export([builtin_input_coercer/1]).
 
--define(DEFER_TIMEOUT, 5000). %% @todo: Get rid of this timeout. It is temporary
-
 -type source() :: reference().
 
 -record(done,
         { upstream :: source() | top_level,
-          key :: binary() | pos_integer() | top_key,
+          key :: reference(),
           result :: {ok, term(), [term()]} | {error, [term()]} }).
 
 -type defer_closure() ::
@@ -83,7 +81,7 @@ execute_query(#{ defer_request_id := ReqId } = Ctx, #op { selection_set = SSet,
                          schema = QType } = Op) ->
     #object_type{} = QType,
     case execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self(),
-                                                  defer_target => {top_level, top_key} },
+                                                  defer_target => top_level },
                       SSet, QType, none) of
         {ok, Res, Errs} ->
             complete_top_level(Res, Errs);
@@ -97,7 +95,7 @@ execute_mutation(Ctx, #op { selection_set = SSet,
                             schema = QType } = Op) ->
     #object_type{} = QType,
     case execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self(),
-                                                  defer_target => {top_level, top_key} },
+                                                  defer_target => top_level },
                       SSet, QType, none) of
         %% In mutations, there is no way you can get deferred work
         %% So we just ignore the case here. If it ever occurs with a
@@ -123,30 +121,30 @@ execute_sset(Path, #{ defer_target := DeferTarget } = Ctx, SSet, Type, Value) ->
             {ok, null, Errors}
     end.
 
-sset_closure({Upstream, Key}, Self, Missing, Map, Errors) ->
+sset_closure(Upstream, Self, Missing, Map, Errors) ->
     fun
         ({_Name, {error, Errs}}) ->
             %% TODO: Cancel here
             #done {
                upstream = Upstream,
-               key = Key,
+               key = Self,
                result = {ok, null, Errs ++ Errors}
               };
-        ({Name, {ok, Completed, Errs}}) ->
-            case maps:take(Name, Missing) of
-                {true, NewMissing} ->
+        ({Ref, {ok, Completed, Errs}}) ->
+            case maps:take(Ref, Missing) of
+                {Name, NewMissing} ->
                     NewMap = Map#{ Name => Completed },
                     NewErrors = Errs ++ Errors,
                     case maps:size(NewMissing) of
                         0 ->
                             #done {
                                upstream = Upstream,
-                               key = Key,
+                               key = Self,
                                result = {ok, NewMap, NewErrors}
                               };
                         _ ->
                             {more, [{Self,
-                                     sset_closure({Upstream, Key}, Self,
+                                     sset_closure(Upstream, Self,
                                                   NewMissing,
                                                   NewMap,
                                                   NewErrors)}]}
@@ -190,12 +188,15 @@ execute_sset_field(Path, #{ defer_target := Upstream } = Ctx, [{Key, [F|_] = Fie
                                        FieldErrs ++ Errs,
                                        Work, Missing);
                 #work { items = WUs } ->
+                    Ref = upstream_ref(WUs),
                     execute_sset_field(Path, Ctx, Next, Type, Value, Map, Errs,
-                                       WUs ++ Work, Missing#{ Key => true });
+                                       WUs ++ Work, Missing#{ Ref => Key });
                 {error, Errors} ->
                     throw({null, Errors, Work})
             end
     end.
+
+upstream_ref([{Ref, _} | _]) -> Ref.
 
 typename(#object_type { id = ID }) -> ID.
 
@@ -300,7 +301,7 @@ execute_field_await(Path,
             exit(defer_mutation_timeout)
     end.
 
-execute_field(Path, #{ defer_target := {Upstream, Key},
+execute_field(Path, #{ defer_target := Upstream,
                        op_type := OpType } = Ctx,
               ObjType, Value, [F|_] = Fields,
               #schema_field { annotations = FAns, resolve = RF}) ->
@@ -321,9 +322,9 @@ execute_field(Path, #{ defer_target := {Upstream, Key},
                     (ResVal) ->
                         case complete_value(Path, Ctx, ElaboratedTy, Fields, ResVal) of
                             {ok, Result, Errs} ->
-                                #done { upstream = Upstream, key = Key, result = {ok, Result, Errs} };
+                                #done { upstream = Upstream, key = Ref, result = {ok, Result, Errs} };
                             {error, Errs} ->
-                                #done { upstream = Upstream, key = Key, result = {error, Errs} };
+                                #done { upstream = Upstream, key = Ref, result = {error, Errs} };
                             #work { items = Items } ->
                                 {more, Items}
                         end
