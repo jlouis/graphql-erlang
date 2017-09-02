@@ -48,7 +48,6 @@ token(#{ defer_process := Proc, defer_request_id := ReqId }) ->
 token_ref({'$graphql_token', _, _, Ref}) -> Ref.
 
 reply_cast({'$graphql_token', Target, Id, Ref}, Data) ->
-    error_logger:info_msg("Replying: ~p", [{Target, Id, Ref, Data}]),
     Target ! {'$graphql_reply', Id, Ref, Data},
     ok.
 
