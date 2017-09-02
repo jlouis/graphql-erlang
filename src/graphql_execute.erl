@@ -15,16 +15,16 @@
           key :: reference(),
           result :: {ok, term(), [term()]} | {error, [term()]} }).
 
+-record(work,
+        { items :: [{reference(), defer_closure()}] }).
+
 -type defer_closure() ::
-        fun ((term()) ->
-                    #done{} | {more, [{source(), defer_closure()}]}).
+        fun ((term()) -> #done{}
+                       | #work{}).
 
 -record(defer_state,
         { req_id :: source(),
           work = #{} :: #{ source() => defer_closure() } }).
-
--record(work,
-        { items :: [{reference(), defer_closure()}] }).
 
 -spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
 x(X) -> x(#{ params => #{} }, X).
@@ -143,11 +143,11 @@ sset_closure(Upstream, Self, Missing, Map, Errors) ->
                                result = {ok, NewMap, NewErrors}
                               };
                         _ ->
-                            {more, [{Self,
-                                     sset_closure(Upstream, Self,
-                                                  NewMissing,
-                                                  NewMap,
-                                                  NewErrors)}]}
+                            #work { items = [{Self,
+                                              sset_closure(Upstream, Self,
+                                                           NewMissing,
+                                                           NewMap,
+                                                           NewErrors)}]}
                     end
             end
     end.
@@ -325,8 +325,8 @@ execute_field(Path, #{ defer_target := Upstream,
                                 #done { upstream = Upstream, key = Ref, result = {ok, Result, Errs} };
                             {error, Errs} ->
                                 #done { upstream = Upstream, key = Ref, result = {error, Errs} };
-                            #work { items = Items } ->
-                                {more, Items}
+                            #work {} = Wrk ->
+                                Wrk
                         end
                 end,
             #work { items = [{Ref, Closure}]};
@@ -585,11 +585,11 @@ list_closure({Upstream, Key}, Self, Missing, List, Done) ->
                                       }
                             end;
                         _ ->
-                            {more, [{Self,
-                                     list_closure({Upstream, Key}, Self,
-                                                  NewMissing,
-                                                  List,
-                                                  NewDone )}]}
+                            #work{ items = [{Self,
+                                             list_closure({Upstream, Key}, Self,
+                                                          NewMissing,
+                                                          List,
+                                                          NewDone )}]}
                     end
             end
     end.
@@ -844,7 +844,7 @@ defer_handle_work(#defer_state {work = WorkMap } = State,
                       State#defer_state { work = WorkMap2 },
                       Upstream,
                       {Key, Value});
-                {more, New} ->
+                #work { items = New } ->
                     NewWork = maps:from_list(New),
                     defer_loop(State#defer_state { work = maps:merge(WorkMap2, NewWork) })
             end
