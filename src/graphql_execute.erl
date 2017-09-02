@@ -8,8 +8,6 @@
 -export([err_msg/1]).
 -export([builtin_input_coercer/1]).
 
--define(DEFER_TIMEOUT, 5000). %% @todo: Get rid of this timeout. It is temporary
-
 -type source() :: reference().
 
 -record(done,
