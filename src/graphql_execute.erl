@@ -13,7 +13,8 @@
 -record(done,
         { upstream :: source() | top_level,
           key :: reference(),
-          result :: {ok, term(), [term()]} | {error, [term()]} }).
+          cancel :: [reference()],
+          result :: ok | {ok, term(), [term()]} | {error, [term()]} }).
 
 -record(work,
         { items :: [{reference(), defer_closure()}],
@@ -125,6 +126,13 @@ execute_sset(Path, #{ defer_target := DeferTarget } = Ctx, SSet, Type, Value) ->
 
 obj_closure(Upstream, Self, Missing, Map, Errors) ->
     fun
+        (cancel) ->
+            #done {
+               upstream = Upstream,
+               key = Self,
+               result = ok,
+               cancel = maps:keys(Missing)
+              };
         ({change_ref, From, To}) ->
             {Val, Removed} =  maps:take(From, Missing),
             #work { items = [{Self, obj_closure(Upstream, Self,
@@ -132,11 +140,11 @@ obj_closure(Upstream, Self, Missing, Map, Errors) ->
                                                 Map,
                                                 Errors)}] };
         ({_Name, {error, Errs}}) ->
-            %% TODO: Cancel here
             #done {
                upstream = Upstream,
                key = Self,
-               result = {ok, null, Errs ++ Errors}
+               result = {ok, null, Errs ++ Errors},
+               cancel = maps:keys(Missing)
               };
         ({Ref, {ok, Completed, Errs}}) ->
             case maps:take(Ref, Missing) of
@@ -148,6 +156,7 @@ obj_closure(Upstream, Self, Missing, Map, Errors) ->
                             #done {
                                upstream = Upstream,
                                key = Self,
+                               cancel = [],
                                result = {ok, NewMap, NewErrors}
                               };
                         _ ->
@@ -309,8 +318,7 @@ execute_field_await(Path,
             exit(defer_mutation_timeout)
     end.
 
-execute_field(Path, #{ defer_target := Upstream,
-                       op_type := OpType } = Ctx,
+execute_field(Path, #{ op_type := OpType } = Ctx,
               ObjType, Value, [F|_] = Fields,
               #schema_field { annotations = FAns, resolve = RF}) ->
     Name = name(F),
@@ -318,30 +326,48 @@ execute_field(Path, #{ defer_target := Upstream,
     Args = resolve_args(Ctx, F),
     Fun = resolver_function(ObjType, RF),
     case resolve_field_value(Ctx, ObjType, Value, Name, FAns, Fun, Args) of
-        {defer, Token} when OpType == mutation ->
+        {defer, Token, _} when OpType == mutation ->
             %% A mutation must not run the mutation in the parallel, so it awaits
             %% the data straight away
             Ref = graphql:token_ref(Token),
             execute_field_await(Path, Ctx, ElaboratedTy, Fields, Ref);
-        {defer, Token} ->
-            Ref = graphql:token_ref(Token),
-            Closure =
-                fun
-                    (ResVal) ->
-                        case complete_value(Path, Ctx, ElaboratedTy, Fields, ResVal) of
-                            {ok, Result, Errs} ->
-                                #done { upstream = Upstream, key = Ref, result = {ok, Result, Errs} };
-                            {error, Errs} ->
-                                #done { upstream = Upstream, key = Ref, result = {error, Errs} };
-                            #work { items = Items } = Wrk ->
-                                NewRef = upstream_ref(Items),
-                                Wrk#work { change_ref = {Upstream, Ref, NewRef} }
-                        end
-                end,
-            #work { items = [{Ref, Closure}]};
+        {defer, Token, #{ workers := WorkerPids }} ->
+            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, WorkerPids);
         ResolvedValue ->
             complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue)
     end.
+
+field_closure(Path, #{ defer_target := Upstream } = Ctx,
+              ElaboratedTy, Fields, Token, WorkerPids) ->
+    Ref = graphql:token_ref(Token),
+    Closure =
+        fun
+            (cancel) ->
+                cancel(Token, WorkerPids),
+                #done { upstream = Upstream,
+                        key = Ref,
+                        cancel = [],
+                        result = ok
+                      };
+            (ResVal) ->
+                case complete_value(Path, Ctx, ElaboratedTy, Fields, ResVal) of
+                    {ok, Result, Errs} ->
+                        #done { upstream = Upstream,
+                                key = Ref,
+                                cancel = [],
+                                result = {ok, Result, Errs} };
+                    {error, Errs} ->
+                        #done { upstream = Upstream,
+                                key = Ref,
+                                cancel = [],
+                                result = {error, Errs} };
+                    #work { items = Items } = Wrk ->
+                        NewRef = upstream_ref(Items),
+                        Wrk#work { change_ref = {Upstream, Ref, NewRef} }
+                end
+        end,
+    #work { items = [{Ref, Closure}]}.
+    
 
 resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectType, Value, Name, FAns, Fun, Args) ->
     CtxAnnot = Ctx#{
@@ -359,7 +385,10 @@ resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectTy
         {ok, Result, AuxiliaryDataList} when is_list(AuxiliaryDataList) ->
             self() ! {'$auxiliary_data', AuxiliaryDataList},
             {ok, Result};
-        {defer, Token} -> {defer, Token};
+        {defer, Token} ->
+            {defer, Token, #{ workers => [] }};
+        {defer, Token, #{ workers := Workers }} ->
+            {defer, Token, Workers};
         default ->
             resolve_field_value(Ctx, ObjectType, Value, Name, FAns, fun ?MODULE:default_resolver/3, Args);
         Wrong ->
@@ -410,25 +439,8 @@ complete_value(Path, #{ defer_target := Upstream } = Ctx,
             %% null value.
             %%
             %% Note: The closure ignores the key
-            Closure =
-                fun
-                    F({change_ref, _Old, _New}) ->
-                        #work { items = [{Self, F}] };
-                    F({_Ref, {ok, null, InnerErrs}}) ->
-                        #done {
-                           upstream = Upstream,
-                           key = Self,
-                           result = err(Path, null_value, InnerErrs)
-                          };
-                    F({_Ref, Res}) ->
-                        {ok, _, _} = Res, % Assert the current state of affairs
-                        #done {
-                           upstream = Upstream,
-                           key = Self,
-                           result = Res
-                          }
-                end,
-            #work { items = [{Self, Closure}|WUs]}
+            #work { items = [{Self, not_null_closure(Upstream, Self, Path,
+                                                     upstream_ref(WUs))}|WUs]}
     end;
 complete_value(_Path, _Ctx, _Ty, _Fields, {ok, null}) ->
     {ok, null, []};
@@ -575,6 +587,13 @@ list_subst([X|Xs], Done)            -> [X|list_subst(Xs, Done)].
 
 list_closure(Upstream, Self, Missing, List, Done) ->
     fun
+        (cancel) ->
+            #done {
+               upstream = Upstream,
+               key = Self,
+               result = ok,
+               cancel = maps:keys(Missing)
+              };
         ({change_ref, From, To}) ->
             {Val, Removed} = maps:take(From, Missing),
             #work { items = [{Self, 
@@ -597,12 +616,14 @@ list_closure(Upstream, Self, Missing, List, Done) ->
                                     #done {
                                        upstream = Upstream,
                                        key = Self,
+                                       cancel = [],
                                        result = {ok, Vs, lists:concat(Es) }
                                       };
                                 {_, Reasons} ->
                                     #done {
                                        upstream = Upstream,
                                        key = Self,
+                                       cancel = [],
                                        result = {ok, null, Reasons}
                                       }
                             end;
@@ -616,6 +637,35 @@ list_closure(Upstream, Self, Missing, List, Done) ->
             end
     end.
 
+not_null_closure(Upstream, Self, Path, Ref) ->
+    fun
+        (cancel) ->
+            #done {
+               upstream = Upstream,
+               key = Self,
+               cancel = [Ref],
+               result = ok
+              };
+        ({change_ref, _Old, New}) ->
+            #work { items = [{Self, not_null_closure(Upstream, Self, Path,
+                                                     New)}] };
+        ({_Ref, {ok, null, InnerErrs}}) ->
+            #done {
+               upstream = Upstream,
+               key = Self,
+               cancel = [],
+               result = err(Path, null_value, InnerErrs)
+              };
+        ({_Ref, Res}) ->
+            {ok, _, _} = Res, % Assert the current state of affairs
+            #done {
+               upstream = Upstream,
+               key = Self,
+               cancel = [],
+               result = Res
+              }
+    end.
+    
 complete_list_value_result([]) ->
     {[], []};
 complete_list_value_result([{error, Err}|Next]) ->
@@ -840,6 +890,12 @@ defer_loop(#defer_state { req_id = Id } = State) ->
             exit(defer_timeout)
     end.
 
+%% Cancel a token
+cancel(_Token, []) -> ok;
+cancel(Token, [Pid|Pids]) -> 
+    Pid ! {graphql_cancel, Token},
+    cancel(Token, Pids).
+    
 %% Process work
 defer_handle_work(#defer_state {work = WorkMap } = State,
                   Target,
@@ -859,9 +915,12 @@ defer_handle_work(#defer_state {work = WorkMap } = State,
                     complete_top_level(undefined, Errs);
                 #done { upstream = Upstream,
                         key = Key,
+                        cancel = CancelRefs,
                         result = Value } ->
+                    NextState = State#defer_state { work = WorkMap2 },
+                    CancelState = defer_handle_cancel(NextState, CancelRefs),
                     defer_handle_work(
-                      State#defer_state { work = WorkMap2 },
+                      CancelState,
                       Upstream,
                       {Key, Value});
                 #work { items = New, change_ref = Change } ->
@@ -875,6 +934,18 @@ defer_handle_work(#defer_state {work = WorkMap } = State,
                     end
             end
     end.
+
+defer_handle_cancel(State, []) -> State;
+defer_handle_cancel(#defer_state { work = WorkMap } = State, [R|Rs]) -> 
+    case maps:take(R, WorkMap) of
+        error ->
+            defer_handle_cancel(State, Rs);
+        {Closure, WorkMap2} ->
+            #done { result = ok, cancel = ToCancel } = Closure(cancel),
+            defer_handle_cancel(State#defer_state { work = WorkMap2 },
+                                ToCancel ++ Rs)
+    end.
+            
 
 %% -- ERROR HANDLING --
 
