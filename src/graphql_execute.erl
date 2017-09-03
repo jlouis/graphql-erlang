@@ -955,10 +955,18 @@ defer_handle_cancel(#defer_state { work = WorkMap,
               Rs);
         {Closure, WorkMap2} ->
             #done { result = ok, cancel = ToCancel } = Closure(cancel),
-            defer_handle_cancel(
-              State#defer_state { work = WorkMap2,
-                                  canceled = [R|Cancelled] },
-              ToCancel ++ Rs)
+            case ToCancel of
+                [] ->
+                    defer_handle_cancel(
+                      State#defer_state { work = WorkMap2,
+                                          canceled = [R|Cancelled] },
+                      Rs);
+                _ ->
+                    defer_handle_cancel(
+                      State#defer_state { work = WorkMap2,
+                                          canceled = Cancelled },
+                      ToCancel ++ Rs)
+            end
     end.
             
 
