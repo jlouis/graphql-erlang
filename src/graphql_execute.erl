@@ -27,6 +27,7 @@
 
 -record(defer_state,
         { req_id :: source(),
+          canceled = [] :: [reference()],
           work = #{} :: #{ source() => defer_closure() } }).
 
 -spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
@@ -897,13 +898,22 @@ cancel(Token, [Pid|Pids]) ->
     cancel(Token, Pids).
     
 %% Process work
-defer_handle_work(#defer_state {work = WorkMap } = State,
+defer_handle_work(#defer_state {work = WorkMap,
+                                canceled = Cancelled } = State,
                   Target,
                   Input) ->
     case maps:take(Target, WorkMap) of
         error ->
-            error_logger:info_msg("Ignoring input for ~p: ~p", [Target, Input]),
-            defer_loop(State);
+            case lists:member(Target, Cancelled) of
+                true ->
+                    defer_loop(
+                      State#defer_state { canceled = Cancelled -- [Target] });
+                false ->
+                    error_logger:info_msg(
+                      "Ignoring unknown uncancelled target ~p with return ~p",
+                      [Target, Input]),
+                    defer_loop(State)
+            end;
         {Closure, WorkMap2} ->
             Result = Closure(Input),
             case Result of
@@ -936,14 +946,19 @@ defer_handle_work(#defer_state {work = WorkMap } = State,
     end.
 
 defer_handle_cancel(State, []) -> State;
-defer_handle_cancel(#defer_state { work = WorkMap } = State, [R|Rs]) -> 
+defer_handle_cancel(#defer_state { work = WorkMap,
+                                   canceled = Cancelled } = State, [R|Rs]) -> 
     case maps:take(R, WorkMap) of
         error ->
-            defer_handle_cancel(State, Rs);
+            defer_handle_cancel(
+              State#defer_state { canceled = [R|Cancelled] },
+              Rs);
         {Closure, WorkMap2} ->
             #done { result = ok, cancel = ToCancel } = Closure(cancel),
-            defer_handle_cancel(State#defer_state { work = WorkMap2 },
-                                ToCancel ++ Rs)
+            defer_handle_cancel(
+              State#defer_state { work = WorkMap2,
+                                  canceled = [R|Cancelled] },
+              ToCancel ++ Rs)
     end.
             
 
