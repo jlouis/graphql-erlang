@@ -14,10 +14,13 @@
         { upstream :: source() | top_level,
           key :: reference(),
           cancel :: [reference()],
+          demonitor :: [reference()],
           result :: ok | {ok, term(), [term()]} | {error, [term()]} }).
 
 -record(work,
         { items :: [{reference(), defer_closure()}],
+          monitor :: #{ reference() => reference() },
+          demonitor :: [reference()],
           change_ref = undefined :: undefined
                                   | {reference(), reference(), reference()} }).
 
@@ -28,6 +31,7 @@
 -record(defer_state,
         { req_id :: source(),
           canceled = [] :: [reference()],
+          monitored :: #{ reference() => reference() },
           work = #{} :: #{ source() => defer_closure() } }).
 
 -spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
@@ -89,8 +93,9 @@ execute_query(#{ defer_request_id := ReqId } = Ctx, #op { selection_set = SSet,
                       SSet, QType, none) of
         {ok, Res, Errs} ->
             complete_top_level(Res, Errs);
-        #work { items = WL } ->
+        #work { items = WL, monitor = Ms, demonitor = Ds } ->
             DeferState = #defer_state{ req_id = ReqId,
+                                       monitored = maps:without(Ds, Ms),
                                        work = maps:from_list(WL) },
             defer_loop(DeferState)
     end.
@@ -116,8 +121,9 @@ execute_sset(Path, #{ defer_target := DeferTarget } = Ctx, SSet, Type, Value) ->
             {ok, Map, Errs} ->
                 {ok, Map, Errs};
             {defer, Map, Errs, Work, Missing} ->
+                #work { items = Items } = Work,
                 Closure = obj_closure(DeferTarget, Self, Missing, Map, Errs),
-                #work { items = [{Self, Closure}] ++ Work }
+                Work#work { items = [{Self, Closure}] ++ Items }
         end
     catch
         throw:{null, Errors, _Ds} ->
@@ -132,11 +138,15 @@ obj_closure(Upstream, Self, Missing, Map, Errors) ->
                upstream = Upstream,
                key = Self,
                result = ok,
+               demonitor = [],
                cancel = maps:keys(Missing)
               };
         ({change_ref, From, To}) ->
             {Val, Removed} =  maps:take(From, Missing),
-            #work { items = [{Self, obj_closure(Upstream, Self,
+            #work {
+               demonitor = [],
+               monitor = #{},
+               items = [{Self, obj_closure(Upstream, Self,
                                                 Removed#{ To => Val },
                                                 Map,
                                                 Errors)}] };
@@ -145,6 +155,7 @@ obj_closure(Upstream, Self, Missing, Map, Errors) ->
                upstream = Upstream,
                key = Self,
                result = {ok, null, Errs ++ Errors},
+               demonitor = [],
                cancel = maps:keys(Missing)
               };
         ({Ref, {ok, Completed, Errs}}) ->
@@ -158,6 +169,7 @@ obj_closure(Upstream, Self, Missing, Map, Errors) ->
                                upstream = Upstream,
                                key = Self,
                                cancel = [],
+                               demonitor = [],
                                result = {ok, NewMap, NewErrors}
                               };
                         _ ->
@@ -165,21 +177,29 @@ obj_closure(Upstream, Self, Missing, Map, Errors) ->
                                               obj_closure(Upstream, Self,
                                                           NewMissing,
                                                           NewMap,
-                                                          NewErrors)}]}
+                                                          NewErrors)}],
+                                    monitor = #{},
+                                    demonitor = []}
                     end
             end
     end.
 
+merge_work(#work { items = I1, monitor = M1, demonitor = D1 },
+           #work { items = I2, monitor = M2, demonitor = D2 }) ->
+    #work { items = I2 ++ I1,
+            monitor = maps:merge(M1, M2),
+            demonitor = D2 ++ D1 }.
+
 execute_sset_field(Path, Ctx, Fields, Type, Value) ->
     Map = [],
     Errs = [],
-    Work = [],
+    Work = #work { items = [], monitor = #{}, demonitor = [] },
     Missing = #{},
     execute_sset_field(Path, Ctx, Fields, Type, Value, Map, Errs, Work, Missing).
 
 execute_sset_field(_Path, _Ctx, [], _Type, _Value, Map, Errs, Work, Missing) ->
     Result = maps:from_list(lists:reverse(Map)),
-    case Work of
+    case Work#work.items of
         [] ->
             0 = maps:size(Missing),
             {ok, Result, Errs};
@@ -205,10 +225,11 @@ execute_sset_field(Path, Ctx, [{Key, [F|_] = Fields} | Next],
                                        [{Key, Result} | Map],
                                        FieldErrs ++ Errs,
                                        Work, Missing);
-                #work { items = WUs } ->
+                #work { items = WUs } = Work2 ->
                     Ref = upstream_ref(WUs),
                     execute_sset_field(Path, Ctx, Next, Type, Value, Map, Errs,
-                                       WUs ++ Work, Missing#{ Ref => Key });
+                                       merge_work(Work, Work2),
+                                       Missing#{ Ref => Key });
                 {error, Errors} ->
                     throw({null, Errors, Work})
             end
@@ -333,41 +354,58 @@ execute_field(Path, #{ op_type := OpType } = Ctx,
             Ref = graphql:token_ref(Token),
             execute_field_await(Path, Ctx, ElaboratedTy, Fields, Ref);
         {defer, Token, #{ workers := WorkerPids }} ->
-            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, WorkerPids);
+            Monitored = monitor_workers(WorkerPids),
+            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, Monitored);
         ResolvedValue ->
             complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue)
     end.
 
+monitor_workers([]) ->
+    [];
+monitor_workers([W|Ws]) ->
+    M = erlang:monitor(process, W),
+    [{M, W}|monitor_workers(Ws)].
+
 field_closure(Path, #{ defer_target := Upstream } = Ctx,
-              ElaboratedTy, Fields, Token, WorkerPids) ->
+              ElaboratedTy, Fields, Token, Monitors) ->
     Ref = graphql:token_ref(Token),
     Closure =
         fun
             (cancel) ->
-                cancel(Token, WorkerPids),
+                cancel(Token, Monitors),
                 #done { upstream = Upstream,
                         key = Ref,
                         cancel = [],
+                        demonitor = [M || {M, _} <- Monitors],
                         result = ok
                       };
             (ResVal) ->
+                lists:foreach(fun({M, _}) ->
+                                      erlang:demonitor(M, [flush])
+                              end,
+                              Monitors),
                 case complete_value(Path, Ctx, ElaboratedTy, Fields, ResVal) of
                     {ok, Result, Errs} ->
                         #done { upstream = Upstream,
                                 key = Ref,
                                 cancel = [],
+                                demonitor = [M || {M, _} <- Monitors],
                                 result = {ok, Result, Errs} };
                     {error, Errs} ->
                         #done { upstream = Upstream,
                                 key = Ref,
                                 cancel = [],
+                                demonitor = [M || {M, _} <- Monitors],
                                 result = {error, Errs} };
-                    #work { items = Items } = Wrk ->
+                    #work { items = Items, demonitor = Ms } = Wrk ->
                         NewRef = upstream_ref(Items),
-                        Wrk#work { change_ref = {Upstream, Ref, NewRef} }
+                        Wrk#work { change_ref = {Upstream, Ref, NewRef},
+                                   demonitor = [M || {M, _} <- Monitors] ++ Ms}
                 end
         end,
-    #work { items = [{Ref, Closure}]}.
+    #work { items = [{Ref, Closure}],
+            demonitor = [],
+            monitor = maps:from_list([{M, Ref} || {M, _} <- Monitors]) }.
     
 
 resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectType, Value, Name, FAns, Fun, Args) ->
@@ -434,13 +472,14 @@ complete_value(Path, #{ defer_target := Upstream } = Ctx,
             err(Path, null_value, InnerErrs);
         {ok, _C, _E} = V ->
             V;
-        #work { items = WUs } ->
+        #work { items = WUs } = Work ->
             %% This closure wraps the null properly and errors null-returns
             %% From the underlying computation if it completes later on with a
             %% null value.
             %%
             %% Note: The closure ignores the key
-            #work { items = [{Self, not_null_closure(Upstream, Self, Path,
+            Work#work { items =
+                            [{Self, not_null_closure(Upstream, Self, Path,
                                                      upstream_ref(WUs))}|WUs]}
     end;
 complete_value(_Path, _Ctx, _Ty, _Fields, {ok, null}) ->
@@ -534,7 +573,8 @@ assert_list_completion_structure(Ty, Fields, Results) ->
             {error, list_resolution}
     end.
 
-complete_value_list(Path, #{ defer_target := Upstream } = Ctx, Ty, Fields, Results) ->
+complete_value_list(Path, #{ defer_target := Upstream } = Ctx,
+                    Ty, Fields, Results) ->
     IndexedResults = index(Results),
     case assert_list_completion_structure(Ty, Fields, IndexedResults) of
         {error, list_resolution} ->
@@ -578,7 +618,9 @@ complete_value_list(Path, #{ defer_target := Upstream } = Ctx, Ty, Fields, Resul
                     end;
                 _ ->
                     Closure = list_closure(Upstream, Self, M, Completed, #{}),
-                    #work { items = [{Self, Closure} | Ws] }
+                    #work { demonitor = [],
+                            monitor = #{},
+                            items = [{Self, Closure} | Ws] }
             end
     end.
 
@@ -593,15 +635,19 @@ list_closure(Upstream, Self, Missing, List, Done) ->
                upstream = Upstream,
                key = Self,
                result = ok,
+               demonitor = [],
                cancel = maps:keys(Missing)
               };
         ({change_ref, From, To}) ->
             {Val, Removed} = maps:take(From, Missing),
-            #work { items = [{Self, 
+            #work {
+               items = [{Self, 
                               list_closure(Upstream, Self,
                                            Removed#{ To => Val },
                                            List,
-                                           Done)}]};
+                                           Done)}],
+               monitor = #{},
+               demonitor = []};
         ({Ref, Result}) ->
             case maps:take(Ref, Missing) of
                 {Index, NewMissing} ->
@@ -618,6 +664,7 @@ list_closure(Upstream, Self, Missing, List, Done) ->
                                        upstream = Upstream,
                                        key = Self,
                                        cancel = [],
+                                       demonitor = [],
                                        result = {ok, Vs, lists:concat(Es) }
                                       };
                                 {_, Reasons} ->
@@ -625,6 +672,7 @@ list_closure(Upstream, Self, Missing, List, Done) ->
                                        upstream = Upstream,
                                        key = Self,
                                        cancel = [],
+                                       demonitor = [],
                                        result = {ok, null, Reasons}
                                       }
                             end;
@@ -633,7 +681,9 @@ list_closure(Upstream, Self, Missing, List, Done) ->
                                              list_closure(Upstream, Self,
                                                           NewMissing,
                                                           List,
-                                                          NewDone )}]}
+                                                          NewDone )}],
+                                   monitor = #{},
+                                   demonitor = [] }
                     end
             end
     end.
@@ -645,16 +695,20 @@ not_null_closure(Upstream, Self, Path, Ref) ->
                upstream = Upstream,
                key = Self,
                cancel = [Ref],
+               demonitor = [],
                result = ok
               };
         ({change_ref, _Old, New}) ->
-            #work { items = [{Self, not_null_closure(Upstream, Self, Path,
+            #work { demonitor = [],
+                    monitor = #{},
+                    items = [{Self, not_null_closure(Upstream, Self, Path,
                                                      New)}] };
         ({_Ref, {ok, null, InnerErrs}}) ->
             #done {
                upstream = Upstream,
                key = Self,
                cancel = [],
+               demonitor = [],
                result = err(Path, null_value, InnerErrs)
               };
         ({_Ref, Res}) ->
@@ -663,6 +717,7 @@ not_null_closure(Upstream, Self, Path, Ref) ->
                upstream = Upstream,
                key = Self,
                cancel = [],
+               demonitor = [],
                result = Res
               }
     end.
@@ -893,8 +948,9 @@ defer_loop(#defer_state { req_id = Id } = State) ->
 
 %% Cancel a token
 cancel(_Token, []) -> ok;
-cancel(Token, [Pid|Pids]) -> 
+cancel(Token, [{M, Pid}|Pids]) -> 
     Pid ! {graphql_cancel, Token},
+    erlang:demonitor(M, [flush]),
     cancel(Token, Pids).
     
 %% Process work
