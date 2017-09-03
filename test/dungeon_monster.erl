@@ -22,7 +22,6 @@ execute(Ctx, #monster { id = ID,
         <<"name">> ->
             NameToken = graphql:token(Ctx),
             spawn_link(fun() ->
-                               timer:sleep(10),
                                graphql:reply_cast(NameToken, {ok, Name})
                        end),
             {defer, NameToken};
@@ -30,7 +29,6 @@ execute(Ctx, #monster { id = ID,
         <<"hitpoints">> ->
             HPToken = graphql:token(Ctx),
             spawn_link(fun() ->
-                               timer:sleep(20),
                                graphql:reply_cast(HPToken, {ok, HP})
                        end),
             {defer, HPToken};
