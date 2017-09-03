@@ -379,6 +379,18 @@ field_closure(Path, #{ defer_target := Upstream } = Ctx,
                         demonitor = [M || {M, _} <- Monitors],
                         result = ok
                       };
+            ({crash, MRef, Pid, Reason}) ->
+                Other = Monitors -- [MRef],
+                lists:foreach(fun({M, _}) ->
+                                      erlang:demonitor(M, [flush])
+                              end,
+                              Other),
+                #done { upstream = Upstream,
+                        key = Ref,
+                        cancel = [],
+                        demonitor = Other,
+                        result = {error, [{worker_crash, Pid, Reason}]}
+                      };
             (ResVal) ->
                 lists:foreach(fun({M, _}) ->
                                       erlang:demonitor(M, [flush])
@@ -941,7 +953,9 @@ defer_loop(#defer_state { req_id = Id } = State) ->
         {'$graphql_reply', Id, Ref, Data} ->
             defer_handle_work(State, Ref, Data);
         {'$graphql_reply', _, _, _} ->
-            defer_loop(State)
+            defer_loop(State);
+        {'DOWN', MRef, process, Pid, Reason} ->
+            defer_monitor_down(State, MRef, Pid, Reason)
     after 750 ->
             exit(defer_timeout)
     end.
@@ -952,10 +966,17 @@ cancel(Token, [{M, Pid}|Pids]) ->
     Pid ! {graphql_cancel, Token},
     erlang:demonitor(M, [flush]),
     cancel(Token, Pids).
-    
+
+defer_monitor_down(#defer_state{ monitored = Monitored} = State,
+                   MRef, Pid, Reason) ->
+    {Target, Monitored2} = maps:take(MRef, Monitored),
+    NextState = State#defer_state { monitored = Monitored2 },
+    defer_handle_work(NextState, Target, {crash, MRef, Pid, Reason}).
+
 %% Process work
-defer_handle_work(#defer_state {work = WorkMap,
-                                canceled = Cancelled } = State,
+defer_handle_work(#defer_state { work = WorkMap,
+                                 monitored = Monitored,
+                                 canceled = Cancelled } = State,
                   Target,
                   Input) ->
     case maps:take(Target, WorkMap) of
@@ -973,6 +994,8 @@ defer_handle_work(#defer_state {work = WorkMap,
         {Closure, WorkMap2} ->
             Result = Closure(Input),
             case Result of
+                %% TODO: We can assert the monitor state here, and we probably
+                %% should
                 #done { upstream = top_level,
                         result = {ok, Res, Errs}} ->
                     complete_top_level(Res, Errs);
@@ -982,16 +1005,28 @@ defer_handle_work(#defer_state {work = WorkMap,
                 #done { upstream = Upstream,
                         key = Key,
                         cancel = CancelRefs,
+                        demonitor = Demonitors,
                         result = Value } ->
-                    NextState = State#defer_state { work = WorkMap2 },
+                    NextState = State#defer_state {
+                                  work = WorkMap2,
+                                  monitored = maps:without(Demonitors, Monitored)
+                                 },
                     CancelState = defer_handle_cancel(NextState, CancelRefs),
                     defer_handle_work(
                       CancelState,
                       Upstream,
                       {Key, Value});
-                #work { items = New, change_ref = Change } ->
+                #work { items = New,
+                        change_ref = Change, 
+                        monitor = ToMonitor,
+                        demonitor = ToDemonitor } ->
                     NewWork = maps:from_list(New),
-                    NextState = State#defer_state { work = maps:merge(WorkMap2, NewWork) },
+                    NextState = State#defer_state {
+                                  work = maps:merge(WorkMap2, NewWork),
+                                  monitored =
+                                    maps:without(ToDemonitor,
+                                                 maps:merge(Monitored,
+                                                            ToMonitor))},
                     case Change of
                         undefined ->
                             defer_loop(NextState);
@@ -1020,7 +1055,7 @@ defer_handle_cancel(#defer_state { work = WorkMap,
                 _ ->
                     defer_handle_cancel(
                       State#defer_state { work = WorkMap2,
-                                          canceled = Cancelled },
+                                          canceled = [R|Cancelled] },
                       ToCancel ++ Rs)
             end
     end.
