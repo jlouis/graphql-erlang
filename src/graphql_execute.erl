@@ -368,7 +368,7 @@ field_closure(Path, #{ defer_target := Upstream } = Ctx,
                 end
         end,
     #work { items = [{Ref, Closure}]}.
-    
+
 
 resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectType, Value, Name, FAns, Fun, Args) ->
     CtxAnnot = Ctx#{
@@ -396,13 +396,13 @@ resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectTy
             error_logger:error_msg(
               "Resolver returned wrong value: ~p(..) -> ~p",
               [Fun, Wrong]),
-            {error, {wrong_resolver_return, graphql_schema:id(ObjectType), Name}}
+            {error, {wrong_resolver_return, {graphql_schema:id(ObjectType), Name}}}
     catch
         Cl:Err ->
             error_logger:error_msg(
               "Resolver function error: ~p stacktrace: ~p~n",
               [{Cl,Err}, erlang:get_stacktrace()]),
-            {error, {resolver_crash, graphql_schema:id(ObjectType), Name}}
+            {error, {resolver_crash, {graphql_schema:id(ObjectType), Name}}}
     end.
 
 complete_value(Path, Ctx, Ty, Fields, {ok, {enum, Value}}) ->
@@ -597,7 +597,7 @@ list_closure(Upstream, Self, Missing, List, Done) ->
               };
         ({change_ref, From, To}) ->
             {Val, Removed} = maps:take(From, Missing),
-            #work { items = [{Self, 
+            #work { items = [{Self,
                               list_closure(Upstream, Self,
                                            Removed#{ To => Val },
                                            List,
@@ -666,7 +666,7 @@ not_null_closure(Upstream, Self, Path, Ref) ->
                result = Res
               }
     end.
-    
+
 complete_list_value_result([]) ->
     {[], []};
 complete_list_value_result([{error, Err}|Next]) ->
@@ -893,10 +893,10 @@ defer_loop(#defer_state { req_id = Id } = State) ->
 
 %% Cancel a token
 cancel(_Token, []) -> ok;
-cancel(Token, [Pid|Pids]) -> 
+cancel(Token, [Pid|Pids]) ->
     Pid ! {graphql_cancel, Token},
     cancel(Token, Pids).
-    
+
 %% Process work
 defer_handle_work(#defer_state {work = WorkMap,
                                 canceled = Cancelled } = State,
@@ -947,7 +947,7 @@ defer_handle_work(#defer_state {work = WorkMap,
 
 defer_handle_cancel(State, []) -> State;
 defer_handle_cancel(#defer_state { work = WorkMap,
-                                   canceled = Cancelled } = State, [R|Rs]) -> 
+                                   canceled = Cancelled } = State, [R|Rs]) ->
     case maps:take(R, WorkMap) of
         error ->
             defer_handle_cancel(
@@ -968,7 +968,7 @@ defer_handle_cancel(#defer_state { work = WorkMap,
                       ToCancel ++ Rs)
             end
     end.
-            
+
 
 %% -- ERROR HANDLING --
 
