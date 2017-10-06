@@ -17,6 +17,32 @@ Versioning generally follows semantic versioning, but breaks it for
 releases less than 1.0.0 in certain situations. The changelog mentions
 the compatibility issues you are likely to encounter.
 
+* 0.10.0 - New feature update:
+  - Fix: null-value resolution. In some cases, execution could not
+    correctly resolve `null` values in the system in the right way.
+  - Refactor the dungeon SUITE test cases so they are easier to
+    maintain in the future.
+  - Feature: Support 3-tuple responses in GraphQL resolvers. Tuples of the form
+    `{ok, Result, [Terms]}` are now allowed, and the given Terms will
+    be collected in the final response in an unspecified order. This
+    allows resolvers to send back auxilliary data through the graph
+    system and handle these at the top level later on. This
+    functionality is currently *experimental* until we figure out if
+    there is a simpler solution to the problem of getting side-channel
+    data out of the Graph and back to the execution engine.
+  - Refactor: Rework the way Scalars are resolved in the system. Streamline
+    different variants of scalar resolution into the same code path.
+    This paves the way for lots of future code removal in the system
+    and lots of simplification down the road.
+  - Refactor: Replace special built-in resolves with injected resolvers to make
+    them closer to user-defined resolvers in their operation. This
+    also simplifies code.
+  - Feature: Support *experimental* concurrent and parallel query in
+    the execution engine. This allows different parts of the query to
+    execute individually which improves latency of the system as a
+    whole. The feature is currently tested in a way to make sure it is
+    in "symbiosis" with the rest of the system. Once it has proven to
+    be stable, it will be documented.
 * 0.9.0 - Stability update:
   - Lager is not a dependency anymore. The library is completely
     independent of anything but `kernel` and `stdlib` now.
