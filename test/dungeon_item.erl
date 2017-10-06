@@ -3,7 +3,7 @@
 
 -export([execute/4]).
 
-execute(Ctx, #item { id = ID,
+execute(_Ctx, #item { id = ID,
                       name = Name,
                       contents = Contents,
                       description = Description } = Item, Field, _) ->
