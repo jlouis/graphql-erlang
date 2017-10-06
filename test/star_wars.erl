@@ -34,7 +34,7 @@ inject() ->
 
          } } },
     ok = graphql:insert_schema_definition(Query),
-    
+
     Root = {root, #{
     	query => 'Query',
     	interaces => []
@@ -140,7 +140,7 @@ get_character(ID) ->
 
 get_friends(#{ <<"friends">> := Friends }) ->
     {ok, [get_character(F) || F <- Friends]}.
-    
+
 get_hero(_Ctx, #{ <<"episode">> := {enum, <<"EMPIRE">>} }) ->
     {Humans, _} = star_wars(),
     {ok, maps:get(<<"1000">>, Humans)};
@@ -166,7 +166,7 @@ star_wars() ->
     Vader = #{
     	id => <<"1001">>,
     	name => <<"Darth Vader">>,
-    	friends => <<"1004">>,
+    	friends => [<<"1004">>],
     	appearsIn => resolve_module([ 4, 5, 6 ]),
     	homePlanet => <<"Tatooine">> },
     Han = #{
@@ -185,7 +185,7 @@ star_wars() ->
     	name => <<"Wilhuff Tarkin">>,
     	friends => [ <<"1001">> ],
     	appearsIn => resolve_module([ 4 ]) },
-    
+
     HumanData = #{
     	<<"1000">> => c(Luke),
     	<<"1001">> => c(Vader),
@@ -193,7 +193,7 @@ star_wars() ->
     	<<"1003">> => c(Leia),
     	<<"1004">> => c(Tarkin)
     },
-    
+
     Threepio = #{
     	id => <<"2000">>,
     	name => <<"C-3PO">>,
@@ -201,7 +201,7 @@ star_wars() ->
     	appearsIn => resolve_module([ 4, 5, 6 ]),
     	primaryFunction => <<"Protocol">>
     },
-    
+
     Artoo = #{
     	id => <<"2001">>,
     	name => <<"R2-D2">>,
@@ -209,12 +209,12 @@ star_wars() ->
     	appearsIn => resolve_module([ 4, 5, 6 ]),
     	primaryFunction => <<"AstroMech">>
     },
-    	
+
     DroidData = #{
     	<<"2000">> => c(Threepio),
     	<<"2001">> => c(Artoo)
     },
-    
+
     {HumanData, DroidData}.
 
 c(M) ->
