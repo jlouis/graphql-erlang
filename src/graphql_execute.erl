@@ -396,13 +396,13 @@ resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectTy
             error_logger:error_msg(
               "Resolver returned wrong value: ~p(..) -> ~p",
               [Fun, Wrong]),
-            {error, {wrong_resolver_return, graphql_schema:id(ObjectType), Name}}
+            {error, {wrong_resolver_return, {graphql_schema:id(ObjectType), Name}}}
     catch
         Cl:Err ->
             error_logger:error_msg(
               "Resolver function error: ~p stacktrace: ~p~n",
               [{Cl,Err}, erlang:get_stacktrace()]),
-            {error, {resolver_crash, graphql_schema:id(ObjectType), Name}}
+            {error, {resolver_crash, {graphql_schema:id(ObjectType), Name}}}
     end.
 
 complete_value(Path, Ctx, Ty, Fields, {ok, {enum, Value}}) ->

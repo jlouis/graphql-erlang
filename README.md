@@ -17,6 +17,9 @@ Versioning generally follows semantic versioning, but breaks it for
 releases less than 1.0.0 in certain situations. The changelog mentions
 the compatibility issues you are likely to encounter.
 
+* 0.9.1 - Stability update:
+  - *POTENTIAL INCOMPATIBILITY:* In case of `resolver_crash` &
+    `wrong_resolver_return` errors are returned as atoms instead of a triplet at key field
 * 0.9.0 - Stability update:
   - Lager is not a dependency anymore. The library is completely
     independent of anything but `kernel` and `stdlib` now.
@@ -47,7 +50,7 @@ the compatibility issues you are likely to encounter.
     relies on Enumerated types, the code changed around it. The
     feature was somewhat "experimental" since it lacked documentation.
     It still needs an example of its use in the tutorial.
-  
+
 * 0.8.0 - First Open Source Release. The version is deliberately set a
   bit before 1.0 in order to be able to do some changes to the API
   before releasing a more official version with full backwards
