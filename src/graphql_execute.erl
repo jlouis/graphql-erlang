@@ -14,10 +14,13 @@
         { upstream :: source() | top_level,
           key :: reference(),
           cancel :: [reference()],
+          demonitor :: {reference(), pid()} | undefined,
           result :: ok | {ok, term(), [term()]} | {error, [term()]} }).
 
 -record(work,
         { items :: [{reference(), defer_closure()}],
+          monitor :: #{ reference() => reference() },
+          demonitor :: [{reference(), pid()}],
           change_ref = undefined :: undefined
                                   | {reference(), reference(), reference()} }).
 
@@ -28,6 +31,7 @@
 -record(defer_state,
         { req_id :: source(),
           canceled = [] :: [reference()],
+          monitored :: #{ reference() => reference() },
           work = #{} :: #{ source() => defer_closure() } }).
 
 -spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
@@ -89,8 +93,9 @@ execute_query(#{ defer_request_id := ReqId } = Ctx, #op { selection_set = SSet,
                       SSet, QType, none) of
         {ok, Res, Errs} ->
             complete_top_level(Res, Errs);
-        #work { items = WL } ->
+        #work { items = WL, monitor = Ms, demonitor = [] } ->
             DeferState = #defer_state{ req_id = ReqId,
+                                       monitored = Ms,
                                        work = maps:from_list(WL) },
             defer_loop(DeferState)
     end.
@@ -116,8 +121,9 @@ execute_sset(Path, #{ defer_target := DeferTarget } = Ctx, SSet, Type, Value) ->
             {ok, Map, Errs} ->
                 {ok, Map, Errs};
             {defer, Map, Errs, Work, Missing} ->
+                #work { items = Items } = Work,
                 Closure = obj_closure(DeferTarget, Self, Missing, Map, Errs),
-                #work { items = [{Self, Closure}] ++ Work }
+                Work#work { items = [{Self, Closure}] ++ Items }
         end
     catch
         throw:{null, Errors, _Ds} ->
@@ -132,11 +138,15 @@ obj_closure(Upstream, Self, Missing, Map, Errors) ->
                upstream = Upstream,
                key = Self,
                result = ok,
+               demonitor = undefined,
                cancel = maps:keys(Missing)
               };
         ({change_ref, From, To}) ->
             {Val, Removed} =  maps:take(From, Missing),
-            #work { items = [{Self, obj_closure(Upstream, Self,
+            #work {
+               demonitor = [],
+               monitor = #{},
+               items = [{Self, obj_closure(Upstream, Self,
                                                 Removed#{ To => Val },
                                                 Map,
                                                 Errors)}] };
@@ -145,6 +155,7 @@ obj_closure(Upstream, Self, Missing, Map, Errors) ->
                upstream = Upstream,
                key = Self,
                result = {ok, null, Errs ++ Errors},
+               demonitor = undefined,
                cancel = maps:keys(Missing)
               };
         ({Ref, {ok, Completed, Errs}}) ->
@@ -158,6 +169,7 @@ obj_closure(Upstream, Self, Missing, Map, Errors) ->
                                upstream = Upstream,
                                key = Self,
                                cancel = [],
+                               demonitor = undefined,
                                result = {ok, NewMap, NewErrors}
                               };
                         _ ->
@@ -165,21 +177,29 @@ obj_closure(Upstream, Self, Missing, Map, Errors) ->
                                               obj_closure(Upstream, Self,
                                                           NewMissing,
                                                           NewMap,
-                                                          NewErrors)}]}
+                                                          NewErrors)}],
+                                    monitor = #{},
+                                    demonitor = []}
                     end
             end
     end.
 
+merge_work(#work { items = I1, monitor = M1, demonitor = D1 },
+           #work { items = I2, monitor = M2, demonitor = D2 }) ->
+    #work { items = I2 ++ I1,
+            monitor = maps:merge(M1, M2),
+            demonitor = D2 ++ D1 }.
+
 execute_sset_field(Path, Ctx, Fields, Type, Value) ->
     Map = [],
     Errs = [],
-    Work = [],
+    Work = #work { items = [], monitor = #{}, demonitor = [] },
     Missing = #{},
     execute_sset_field(Path, Ctx, Fields, Type, Value, Map, Errs, Work, Missing).
 
 execute_sset_field(_Path, _Ctx, [], _Type, _Value, Map, Errs, Work, Missing) ->
     Result = maps:from_list(lists:reverse(Map)),
-    case Work of
+    case Work#work.items of
         [] ->
             0 = maps:size(Missing),
             {ok, Result, Errs};
@@ -205,10 +225,11 @@ execute_sset_field(Path, Ctx, [{Key, [F|_] = Fields} | Next],
                                        [{Key, Result} | Map],
                                        FieldErrs ++ Errs,
                                        Work, Missing);
-                #work { items = WUs } ->
+                #work { items = WUs } = Work2 ->
                     Ref = upstream_ref(WUs),
                     execute_sset_field(Path, Ctx, Next, Type, Value, Map, Errs,
-                                       WUs ++ Work, Missing#{ Ref => Key });
+                                       merge_work(Work, Work2),
+                                       Missing#{ Ref => Key });
                 {error, Errors} ->
                     throw({null, Errors, Work})
             end
@@ -332,43 +353,65 @@ execute_field(Path, #{ op_type := OpType } = Ctx,
             %% the data straight away
             Ref = graphql:token_ref(Token),
             execute_field_await(Path, Ctx, ElaboratedTy, Fields, Ref);
-        {defer, Token, #{ workers := WorkerPids }} ->
-            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, WorkerPids);
+        {defer, Token, W} when is_pid(W) ->
+            M = erlang:monitor(process, W),
+            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, {M, W});
+        {defer, Token, undefined} ->
+            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, undefined);
         ResolvedValue ->
             complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue)
     end.
 
+remove_monitor(undefined) -> ok;
+remove_monitor({M, _W}) -> demonitor(M, [flush]).
+     
 field_closure(Path, #{ defer_target := Upstream } = Ctx,
-              ElaboratedTy, Fields, Token, WorkerPids) ->
+              ElaboratedTy, Fields, Token, Monitor) ->
     Ref = graphql:token_ref(Token),
     Closure =
         fun
             (cancel) ->
-                cancel(Token, WorkerPids),
+                cancel(Token, Monitor),
                 #done { upstream = Upstream,
                         key = Ref,
                         cancel = [],
+                        demonitor = Monitor,
                         result = ok
                       };
+            ({crash, MRef, Pid, Reason}) when MRef == element(1, Monitor) ->
+                #done { upstream = Upstream,
+                        key = Ref,
+                        cancel = [],
+                        demonitor = undefined,
+                        result = {error, [{worker_crash, Pid, Reason}]}
+                      };
             (ResVal) ->
+                remove_monitor(Monitor),
                 case complete_value(Path, Ctx, ElaboratedTy, Fields, ResVal) of
                     {ok, Result, Errs} ->
                         #done { upstream = Upstream,
                                 key = Ref,
                                 cancel = [],
+                                demonitor = Monitor,
                                 result = {ok, Result, Errs} };
                     {error, Errs} ->
                         #done { upstream = Upstream,
                                 key = Ref,
                                 cancel = [],
+                                demonitor = Monitor,
                                 result = {error, Errs} };
-                    #work { items = Items } = Wrk ->
+                    #work { items = Items, demonitor = Ms } = Wrk ->
                         NewRef = upstream_ref(Items),
-                        Wrk#work { change_ref = {Upstream, Ref, NewRef} }
+                        Wrk#work { change_ref = {Upstream, Ref, NewRef},
+                                   demonitor = [Monitor] ++ Ms}
                 end
         end,
-    #work { items = [{Ref, Closure}]}.
-
+    #work { items = [{Ref, Closure}],
+            demonitor = [],
+            monitor = case Monitor of
+                          undefined -> #{};
+                          {M, _} -> #{ M => Ref }
+                      end }.
 
 resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectType, Value, Name, FAns, Fun, Args) ->
     CtxAnnot = Ctx#{
@@ -387,9 +430,9 @@ resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectTy
             self() ! {'$auxiliary_data', AuxiliaryDataList},
             {ok, Result};
         {defer, Token} ->
-            {defer, Token, #{ workers => [] }};
-        {defer, Token, #{ workers := Workers }} ->
-            {defer, Token, Workers};
+            {defer, Token, undefined};
+        {defer, Token, #{ worker := W }} ->
+            {defer, Token, W};
         default ->
             resolve_field_value(Ctx, ObjectType, Value, Name, FAns, fun ?MODULE:default_resolver/3, Args);
         Wrong ->
@@ -434,13 +477,14 @@ complete_value(Path, #{ defer_target := Upstream } = Ctx,
             err(Path, null_value, InnerErrs);
         {ok, _C, _E} = V ->
             V;
-        #work { items = WUs } ->
+        #work { items = WUs } = Work ->
             %% This closure wraps the null properly and errors null-returns
             %% From the underlying computation if it completes later on with a
             %% null value.
             %%
             %% Note: The closure ignores the key
-            #work { items = [{Self, not_null_closure(Upstream, Self, Path,
+            Work#work { items =
+                            [{Self, not_null_closure(Upstream, Self, Path,
                                                      upstream_ref(WUs))}|WUs]}
     end;
 complete_value(_Path, _Ctx, _Ty, _Fields, {ok, null}) ->
@@ -534,7 +578,8 @@ assert_list_completion_structure(Ty, Fields, Results) ->
             {error, list_resolution}
     end.
 
-complete_value_list(Path, #{ defer_target := Upstream } = Ctx, Ty, Fields, Results) ->
+complete_value_list(Path, #{ defer_target := Upstream } = Ctx,
+                    Ty, Fields, Results) ->
     IndexedResults = index(Results),
     case assert_list_completion_structure(Ty, Fields, IndexedResults) of
         {error, list_resolution} ->
@@ -543,24 +588,25 @@ complete_value_list(Path, #{ defer_target := Upstream } = Ctx, Ty, Fields, Resul
         ok ->
             Self = make_ref(),
             InnerCtx = Ctx#{ defer_target := Self },
+            InitWork = #work {items = [], monitor = #{}, demonitor = [] },
             Completer =
                 fun
-                    F([]) -> {[], [], #{}};
+                    F([]) -> {[], InitWork, #{}};
                     F([{Index, Result}|Next]) ->
-                        {Rest, WUs, Missing} = F(Next),
+                        {Rest, Work1, Missing} = F(Next),
                         case complete_value([Index|Path], InnerCtx, Ty, Fields, Result) of
                             {ok, V, Errs} ->
                                 { [{ok, V, error_wrap(Errs)} | Rest],
-                                  WUs,
+                                  Work1,
                                   Missing };
                             {error, Err} ->
                                 { [{error, Err}| Rest],
-                                  WUs,
+                                  Work1,
                                   Missing };
-                            #work { items = Work } ->
+                            #work { items = Work } = Work2 ->
                                 Ref = upstream_ref(Work),
                                 { [{defer, Index} | Rest],
-                                  Work ++ WUs,
+                                  merge_work(Work1, Work2),
                                   Missing#{ Ref => Index } }
                         end
                 end,
@@ -578,7 +624,11 @@ complete_value_list(Path, #{ defer_target := Upstream } = Ctx, Ty, Fields, Resul
                     end;
                 _ ->
                     Closure = list_closure(Upstream, Self, M, Completed, #{}),
-                    #work { items = [{Self, Closure} | Ws] }
+                    merge_work(
+                      Ws,
+                      #work { demonitor = [],
+                              monitor = #{},
+                              items = [{Self, Closure}] })
             end
     end.
 
@@ -593,15 +643,19 @@ list_closure(Upstream, Self, Missing, List, Done) ->
                upstream = Upstream,
                key = Self,
                result = ok,
+               demonitor = undefined,
                cancel = maps:keys(Missing)
               };
         ({change_ref, From, To}) ->
             {Val, Removed} = maps:take(From, Missing),
-            #work { items = [{Self,
-                              list_closure(Upstream, Self,
-                                           Removed#{ To => Val },
-                                           List,
-                                           Done)}]};
+            #work {
+               items = [{Self, 
+                         list_closure(Upstream, Self,
+                                      Removed#{ To => Val },
+                                      List,
+                                      Done)}],
+               monitor = #{},
+               demonitor = [] };
         ({Ref, Result}) ->
             case maps:take(Ref, Missing) of
                 {Index, NewMissing} ->
@@ -618,6 +672,7 @@ list_closure(Upstream, Self, Missing, List, Done) ->
                                        upstream = Upstream,
                                        key = Self,
                                        cancel = [],
+                                       demonitor = undefined,
                                        result = {ok, Vs, lists:concat(Es) }
                                       };
                                 {_, Reasons} ->
@@ -625,6 +680,7 @@ list_closure(Upstream, Self, Missing, List, Done) ->
                                        upstream = Upstream,
                                        key = Self,
                                        cancel = [],
+                                       demonitor = undefined,
                                        result = {ok, null, Reasons}
                                       }
                             end;
@@ -633,7 +689,9 @@ list_closure(Upstream, Self, Missing, List, Done) ->
                                              list_closure(Upstream, Self,
                                                           NewMissing,
                                                           List,
-                                                          NewDone )}]}
+                                                          NewDone )}],
+                                   monitor = #{},
+                                   demonitor = [] }
                     end
             end
     end.
@@ -645,16 +703,20 @@ not_null_closure(Upstream, Self, Path, Ref) ->
                upstream = Upstream,
                key = Self,
                cancel = [Ref],
+               demonitor = undefined,
                result = ok
               };
         ({change_ref, _Old, New}) ->
-            #work { items = [{Self, not_null_closure(Upstream, Self, Path,
+            #work { demonitor = [],
+                    monitor = #{},
+                    items = [{Self, not_null_closure(Upstream, Self, Path,
                                                      New)}] };
         ({_Ref, {ok, null, InnerErrs}}) ->
             #done {
                upstream = Upstream,
                key = Self,
                cancel = [],
+               demonitor = undefined,
                result = err(Path, null_value, InnerErrs)
               };
         ({_Ref, Res}) ->
@@ -663,6 +725,7 @@ not_null_closure(Upstream, Self, Path, Ref) ->
                upstream = Upstream,
                key = Self,
                cancel = [],
+               demonitor = undefined,
                result = Res
               }
     end.
@@ -891,20 +954,29 @@ defer_loop(#defer_state { req_id = Id } = State) ->
         {'$graphql_reply', Id, Ref, Data} ->
             defer_handle_work(State, Ref, Data);
         {'$graphql_reply', _, _, _} ->
-            defer_loop(State)
+            defer_loop(State);
+        {'DOWN', MRef, process, Pid, Reason} ->
+            defer_monitor_down(State, MRef, Pid, Reason)
     after 750 ->
             exit(defer_timeout)
     end.
 
 %% Cancel a token
-cancel(_Token, []) -> ok;
-cancel(Token, [Pid|Pids]) ->
+cancel(Token, {M, Pid}) -> 
     Pid ! {graphql_cancel, Token},
-    cancel(Token, Pids).
+    erlang:demonitor(M, [flush]),
+    ok.
+
+defer_monitor_down(#defer_state{ monitored = Monitored} = State,
+                   MRef, Pid, Reason) ->
+    {Target, Monitored2} = maps:take(MRef, Monitored),
+    NextState = State#defer_state { monitored = Monitored2 },
+    defer_handle_work(NextState, Target, {crash, MRef, Pid, Reason}).
 
 %% Process work
-defer_handle_work(#defer_state {work = WorkMap,
-                                canceled = Cancelled } = State,
+defer_handle_work(#defer_state { work = WorkMap,
+                                 monitored = Monitored,
+                                 canceled = Cancelled } = State,
                   Target,
                   Input) ->
     case maps:take(Target, WorkMap) of
@@ -922,6 +994,8 @@ defer_handle_work(#defer_state {work = WorkMap,
         {Closure, WorkMap2} ->
             Result = Closure(Input),
             case Result of
+                %% TODO: We can assert the monitor state here, and we probably
+                %% should
                 #done { upstream = top_level,
                         result = {ok, Res, Errs}} ->
                     complete_top_level(Res, Errs);
@@ -931,16 +1005,31 @@ defer_handle_work(#defer_state {work = WorkMap,
                 #done { upstream = Upstream,
                         key = Key,
                         cancel = CancelRefs,
+                        demonitor = Demonitor,
                         result = Value } ->
-                    NextState = State#defer_state { work = WorkMap2 },
+                    NextState = State#defer_state {
+                                  work = WorkMap2,
+                                  monitored = case Demonitor of
+                                                  undefined -> Monitored;
+                                                  {M, _W} -> maps:remove(M, Monitored)
+                                              end
+                                 },
                     CancelState = defer_handle_cancel(NextState, CancelRefs),
                     defer_handle_work(
                       CancelState,
                       Upstream,
                       {Key, Value});
-                #work { items = New, change_ref = Change } ->
+                #work { items = New,
+                        change_ref = Change, 
+                        monitor = ToMonitor,
+                        demonitor = ToDemonitor } ->
                     NewWork = maps:from_list(New),
-                    NextState = State#defer_state { work = maps:merge(WorkMap2, NewWork) },
+                    NextState = State#defer_state {
+                                  work = maps:merge(WorkMap2, NewWork),
+                                  monitored =
+                                    maps:without([M || {M, _} <- ToDemonitor],
+                                                 maps:merge(Monitored,
+                                                            ToMonitor))},
                     case Change of
                         undefined ->
                             defer_loop(NextState);
@@ -969,7 +1058,7 @@ defer_handle_cancel(#defer_state { work = WorkMap,
                 _ ->
                     defer_handle_cancel(
                       State#defer_state { work = WorkMap2,
-                                          canceled = Cancelled },
+                                          canceled = [R|Cancelled] },
                       ToCancel ++ Rs)
             end
     end.
