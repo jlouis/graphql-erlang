@@ -664,8 +664,8 @@ nested_field_merge(Config) ->
 
 auxiliary_data(Config) ->
     Monster = dungeon:create(monster, [{name, <<"Auxiliary Undead">>}]),
-    [{GoblinId, _Goblin}] = dungeon:batch_create([{Monster, insert}]),
-    {ok, OpaqueId} = dungeon:wrap(GoblinId),
+    [{UndeadId, _Undead}] = dungeon:batch_create([{Monster, insert}]),
+    {ok, OpaqueId} = dungeon:wrap(UndeadId),
     Expected = #{
       aux => [{my_auxiliary_data, true}],
       data => #{ <<"monster">> => #{ <<"id">> => OpaqueId
