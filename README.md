@@ -22,8 +22,8 @@ the compatibility issues you are likely to encounter.
     streamlined. The new format is `{error, {Type, Data}}` rather than
     `{error, {Type, Data1}}` and also `{error, {Type, Data1, Data2}}`
     and so on.
-  - Feature: Support monitoring in the experimental
-    concurrent/parallel query engine.
+  - Feature: Support monitoring in the experimental concurrent /
+    parallel query engine.
 * 0.10.0 - New feature update:
   - Fix: null-value resolution. In some cases, execution could not
     correctly resolve `null` values in the system in the right way.
