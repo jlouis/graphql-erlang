@@ -12,7 +12,7 @@ the compatibility issues you are likely to encounter.
 
 Nothing yet
 
-## [0.11.0] 09-10-2017
+## [0.11.0] 2017-10-09
 ### Added
 - Feature: Support monitoring in the experimental concurrent /
   parallel query engine.
