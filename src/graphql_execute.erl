@@ -364,7 +364,7 @@ execute_field(Path, #{ op_type := OpType } = Ctx,
 
 remove_monitor(undefined) -> ok;
 remove_monitor({M, _W}) -> demonitor(M, [flush]).
-     
+
 field_closure(Path, #{ defer_target := Upstream } = Ctx,
               ElaboratedTy, Fields, Token, Monitor) ->
     Ref = graphql:token_ref(Token),
@@ -649,7 +649,7 @@ list_closure(Upstream, Self, Missing, List, Done) ->
         ({change_ref, From, To}) ->
             {Val, Removed} = maps:take(From, Missing),
             #work {
-               items = [{Self, 
+               items = [{Self,
                          list_closure(Upstream, Self,
                                       Removed#{ To => Val },
                                       List,
@@ -799,12 +799,14 @@ default_resolver(_, [], _) ->
     %% A empty list [] value is a valid object value
     {ok, []};
 default_resolver(#{ field := Field}, Cur, _Args) ->
-    case maps:get(Field, Cur, not_found) of
+    try maps:get(Field, Cur, not_found) of
         {'$lazy', F} when is_function(F, 0) -> F();
         not_found ->
             {error, field_not_found};
         V when is_list(V) -> {ok, [ {ok, R} || R <- V ]};
         V -> {ok, V}
+    catch
+       _:_ ->  {error, field_not_found}
     end.
 
 %% -- OUTPUT COERCION ------------------------------------
@@ -962,7 +964,7 @@ defer_loop(#defer_state { req_id = Id } = State) ->
     end.
 
 %% Cancel a token
-cancel(Token, {M, Pid}) -> 
+cancel(Token, {M, Pid}) ->
     Pid ! {graphql_cancel, Token},
     erlang:demonitor(M, [flush]),
     ok.
@@ -1020,7 +1022,7 @@ defer_handle_work(#defer_state { work = WorkMap,
                       Upstream,
                       {Key, Value});
                 #work { items = New,
-                        change_ref = Change, 
+                        change_ref = Change,
                         monitor = ToMonitor,
                         demonitor = ToDemonitor } ->
                     NewWork = maps:from_list(New),

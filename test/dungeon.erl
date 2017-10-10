@@ -204,9 +204,9 @@ inject(Config) ->
     ok.
 
 unwrap(X) ->
-    [Type, ID] = binary:split(base64:decode(X), <<":">>),
-    try binary_to_integer(ID) of
-        I ->
+    try
+        [Type, ID] = binary:split(base64:decode(X), <<":">>),
+        I = binary_to_integer(ID),
            case Type of
                <<"item">> -> {item, I};
                <<"monster">> -> {monster, I};
