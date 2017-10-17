@@ -1,34 +1,37 @@
 -module(basic).
 
 -export([inject/0]).
--export([resolve/3]).
+-export([execute/4]).
 
 inject() ->
-    User = {object, #{ id => 'User',
-         description => "A test user object",
-    	fields => #{
-    		id => #{
-    			type => string,
-    			description => "The identity of a user" },
-    		name => #{
-    			type => string,
-    			description => "The name of the user" }
-    }}},
+    User = {object, #{
+              id => 'User',
+              resolve_module => ?MODULE,
+              description => "A test user object",
+              fields => #{
+                id => #{
+                  type => string,
+                  description => "The identity of a user" },
+                name => #{
+                  type => string,
+                  description => "The name of the user" }
+               }}},
     ok = graphql:insert_schema_definition(User),
      
-    Query = {object, #{ id => 'Query',
-         description => "Hello World!",
-         fields => #{
-            user => #{
-            	type => 'User',
-            	args => #{ id => #{
-            		type => string,
-            		description => "User ID to fetch"
-            	}},
-            	resolve => fun ?MODULE:resolve/3 },
-             hello => #{
-         	type => string,
-         	resolve => fun(_, _, _) -> {ok, <<"world">>} end } } } },
+    Query = {object, #{
+               id => 'Query',
+               resolve_module => ?MODULE,
+               description => "Hello World!",
+               fields => #{
+                 user => #{
+                   type => 'User',
+                   args => #{ id => #{
+                                type => string,
+                                description => "User ID to fetch"
+                               }}},
+                 hello => #{
+                   type => string,
+                   description => "Hello World Test"}}}},
     ok = graphql:insert_schema_definition(Query),
 
     Root = {root, #{
@@ -38,11 +41,17 @@ inject() ->
     ok = graphql:insert_schema_definition(Root),
     ok.
 
-resolve(_, _, #{ <<"id">> := ID }) ->
+execute(_Ctx, _Object, <<"user">>, #{ <<"id">> := ID }) ->
     case maps:get(ID, data(), not_found) of
         not_found -> {error, not_found};
         X -> {ok, X}
-    end.
+    end;
+execute(_Ctx, _, <<"hello">>, _) ->
+    {ok, <<"world">>};
+execute(_Ctx, #{ <<"id">> := ID }, <<"id">>, _) ->
+    {ok, ID};
+execute(_Ctx, #{ <<"name">> := Name }, <<"name">>, _) ->
+    {ok, Name}.
 
 data() ->
     #{

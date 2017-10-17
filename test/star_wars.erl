@@ -1,131 +1,148 @@
 -module(star_wars).
 
+-export([execute/4]).
 -export([inject/0]).
 
 inject() ->
     init_starwars(),
-    Query = {object, #{ id => 'Query',
-      description => "Simple top-level Query Schema.",
-      fields =>
-        #{
-            hero => #{
-            	type => 'Character',
-            	args => #{
-            		episode => #{
-            			type => 'Episode',
-            			description =>
-            			    "Returns the hero of a particular episode "
-            			    "or the whole saga if omitted" } },
-            	resolve => fun(Ctx, _Cur, Args) -> get_hero(Ctx, Args) end },
-            human => #{
-            	type => 'Human',
-            	args => #{
-            		id => #{
-            			type => 'string!',
-            			description => "The ID of the human" } },
-            	resolve => fun(Ctx, _Cur, Args) -> get_human(Ctx, Args) end },
-            droid => #{
-            	type => 'Droid',
-            	args => #{
-            		id => #{
-            			type => 'string!',
-            			description => "The ID of the droid" } },
-            	resolve => fun(Ctx, _Cur, Args) -> get_droid(Ctx, Args) end }
-
-         } } },
+    Query = {object, #{
+               id => 'Query',
+               description => "Simple top-level Query Schema.",
+               fields =>
+                   #{
+                 hero => #{
+                   type => 'Character',
+                   args => #{
+                     episode => #{
+                       type => 'Episode',
+                       description =>
+                           "Returns the hero of a particular episode "
+                       "or the whole saga if omitted" } },
+                   resolve => fun(Ctx, _Cur, Args) -> get_hero(Ctx, Args) end },
+                 human => #{
+                   type => 'Human',
+                   args => #{
+                     id => #{
+                       type => 'string!',
+                       description => "The ID of the human" } },
+                   resolve => fun(Ctx, _Cur, Args) -> get_human(Ctx, Args) end },
+                 droid => #{
+                   type => 'Droid',
+                   args => #{
+                     id => #{
+                       type => 'string!',
+                       description => "The ID of the droid" } },
+                   resolve => fun(Ctx, _Cur, Args) -> get_droid(Ctx, Args) end }
+                } } },
     ok = graphql:insert_schema_definition(Query),
-
+    
     Root = {root, #{
-    	query => 'Query',
-    	interaces => []
-    }},
+              query => 'Query',
+              interaces => []
+             }},
     ok = graphql:insert_schema_definition(Root),
     ok.
 
 init_starwars() ->
     Episodes = {enum, #{
-         id => 'Episode',
-         description => "One of the films in the Star Wars Trilogy",
-         values => #{
-             'NEWHOPE' => #{ value => 4, description => "Released in 1977." },
-             'EMPIRE' => #{ value => 5, description => "Released in 1980." },
-             'JEDI' => #{ value => 6, description => "Released in 1983." } }
-    }},
+                  id => 'Episode',
+                  description => "One of the films in the Star Wars Trilogy",
+                  values => #{
+                    'NEWHOPE' => #{ value => 4,
+                                    description => "Released in 1977." },
+                    'EMPIRE' => #{ value => 5,
+                                   description => "Released in 1980." },
+                    'JEDI' => #{ value => 6,
+                                 description => "Released in 1983." } }
+                 }},
     Character = {interface, #{
-        id => 'Character',
-        description => "A character in the Star Wars Trilogy",
-        resolve_type => fun(X) ->
-            case is_human(X) of
-                true -> {ok, 'Human'};
-                false -> {ok, 'Droid'}
-            end
-          end,
-        fields => #{
-            id => #{
-                type => string,
-                description => "The ID of a character" },
-            name => #{
-                type => string,
-                description => "The name of the character" },
-            friends => #{
-                type => ['Character'],
-                description => "The friends of the character, possibly empty if they have none" },
-            appearsIn => #{
-                type => ['Episode'],
-                description => "Which movies they appear in." }
-    }}},
+                   id => 'Character',
+                   description => "A character in the Star Wars Trilogy",
+                   resolve_type => fun(X) ->
+                                           case is_human(X) of
+                                               true -> {ok, 'Human'};
+                                               false -> {ok, 'Droid'}
+                                           end
+                                   end,
+                   fields => #{
+                     id => #{
+                       type => string,
+                       description => "The ID of a character" },
+                     name => #{
+                       type => string,
+                       description => "The name of the character" },
+                     friends => #{
+                       type => ['Character'],
+                       description => "The friends of the character, possibly empty if they have none" },
+                     appearsIn => #{
+                       type => ['Episode'],
+                       description => "Which movies they appear in." }
+                    }}},
     Human = {object, #{
-    	id => 'Human',
-    	description => "A humanoid creature in the Star Wars Universe.",
-    	fields => #{
-    	    id => #{
-    	    	type => string,
-    	    	description => "The ID of the human" },
-    	    name => #{
-    	    	type => string,
-    	    	description => "The name of the human" },
-    	    friends => #{
-    	    	type => ['Character'],
-    	    	description => "The friends of the human, possibly empty list if no friends",
-    	    	resolve => fun(_, Human, _) -> get_friends(Human) end },
-    	    appearsIn => #{
-    	    	type => ['Episode'],
-    	    	description => "Which movies they appear in." },
-    	    homePlanet => #{
-    	    	type => string,
-    	    	description => "The home planet of the human, or null if unknown." }
-    	    },
-        interfaces => [ 'Character' ]
-    }},
+               id => 'Human',
+               resolve_module => ?MODULE,
+               description => "A humanoid creature in the Star Wars Universe.",
+               fields => #{
+                 id => #{
+                   type => string,
+                   description => "The ID of the human" },
+                 name => #{
+                   type => string,
+                   description => "The name of the human" },
+                 friends => #{
+                   type => ['Character'],
+                   description => "The friends of the human, possibly empty list if no friends",
+                   resolve => fun(_, Human, _) -> get_friends(Human) end },
+                 appearsIn => #{
+                   type => ['Episode'],
+                   description => "Which movies they appear in." },
+                 homePlanet => #{
+                   type => string,
+                   description => "The home planet of the human, or null if unknown." }
+                },
+               interfaces => [ 'Character' ]
+              }},
     Droid = {object, #{
-    	id => 'Droid',
-    	description => "A mechanical create in the Star Wars universe.",
-    	fields => #{
-    		id => #{
-    			type => string,
-    			description => "The ID of the droid." },
-    		name => #{
-    			type => string,
-    			description => "The name of the droid." },
-    		friends => #{
-    			type => ['Character'],
-    			description => "The friends of the droid.",
-    			resolve => fun(_, Droid, _) -> get_friends(Droid) end },
-    		appearsIn => #{
-    			type => ['Episode'],
-    			description => "Which movies they appear in." },
-    		primaryFunction => #{
-    			type => string,
-    			description => "The primary function of the droid." }
-    		},
-    	interfaces => ['Character']
-    }},
+               id => 'Droid',
+               resolve_module => ?MODULE,
+               description => "A mechanical create in the Star Wars universe.",
+               fields => #{
+                 id => #{
+                   type => string,
+                   description => "The ID of the droid." },
+                 name => #{
+                   type => string,
+                   description => "The name of the droid." },
+                 friends => #{
+                   type => ['Character'],
+                   description => "The friends of the droid.",
+                   resolve => fun(_, Droid, _) -> get_friends(Droid) end },
+                 appearsIn => #{
+                   type => ['Episode'],
+                   description => "Which movies they appear in." },
+                 primaryFunction => #{
+                   type => string,
+                   description => "The primary function of the droid." }
+                },
+               interfaces => ['Character']
+              }},
     ok = graphql:insert_schema_definition(Episodes),
     ok = graphql:insert_schema_definition(Character),
     ok = graphql:insert_schema_definition(Human),
     ok = graphql:insert_schema_definition(Droid),
     ok.
 
+%% Execution
+execute(_Ctx, null, _, _) ->
+    {ok, null};
+execute(_Ctx, Obj, FieldName, _Args) ->
+    case maps:get(FieldName, Obj, not_found) of
+        {'$lazy', F} when is_function(F, 0) -> F();
+        not_found -> {error, not_found};
+        Values when is_list(Values) -> {ok, [ {ok, R} || R <- Values ]};
+        Value -> {ok, Value}
+    end.
+    
 %% DATA
 is_human(ID) ->
     {Humans, _} = star_wars(),

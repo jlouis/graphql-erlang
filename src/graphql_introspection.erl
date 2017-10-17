@@ -5,6 +5,8 @@
 
 -export([inject/0, augment_root/1]).
 
+-export([execute/4]).
+
 %% Resolvers for the introspection
 -export([
     schema_resolver/3,
@@ -21,23 +23,25 @@
 augment_root(QName) ->
     #object_type{ fields = Fields } = Obj = graphql_schema:get(QName),
     Schema = #schema_field {
-        ty = {non_null, <<"__Schema">>},
-        description = <<"The introspection schema">>,
-        resolve = fun ?MODULE:schema_resolver/3 },
+                ty = {non_null, <<"__Schema">>},
+                description = <<"The introspection schema">>,
+                resolve = fun ?MODULE:schema_resolver/3
+               },
     Type = #schema_field {
-        ty = <<"__Type">>,
-        description = <<"The introspection type">>,
-        resolve = fun ?MODULE:type_resolver/3,
-        args = #{
-            <<"name">> =>
-               #schema_arg { ty = {non_null, {scalar, string}}, description = <<"The type to query">> }
-         }},
-     Augmented = Obj#object_type { fields = Fields#{
-         <<"__schema">> => Schema,
-         <<"__type">> => Type
-     }},
-     true = graphql_schema:insert(Augmented, #{}),
-     ok.
+              ty = <<"__Type">>,
+              description = <<"The introspection type">>,
+              args = #{
+                <<"name">> =>
+                    #schema_arg { ty = {non_null, {scalar, string}},
+                                  description = <<"The type to query">> }
+               },
+              resolve = fun ?MODULE:type_resolver/3 },
+    Augmented = Obj#object_type { fields = Fields#{
+                                             <<"__schema">> => Schema,
+                                             <<"__type">> => Type
+                                            }},
+    true = graphql_schema:insert(Augmented, #{}),
+    ok.
 
 schema_resolver(_Ctx, none, #{}) ->
     {ok, #{ <<"directives">> =>
@@ -216,6 +220,7 @@ render_deprecation(Reason) when is_binary(Reason) ->
 inject() ->
     Schema = {object, #{
                 id => '__Schema',
+                resolve_module => ?MODULE,
                 description => "Schema Definitions in GraphQL",
                 fields => #{
                   types => #{
@@ -240,6 +245,7 @@ inject() ->
                    }}}},
     Type = {object, #{
               id => '__Type',
+              resolve_module => ?MODULE,
               description => "Descriptions of general types/objects in the model",
               fields => #{
                 kind => #{
@@ -292,6 +298,7 @@ inject() ->
                }}},
     Field = {object, #{
                id => '__Field',
+               resolve_module => ?MODULE,
                description => "Fields in a Schema",
                fields => #{
                  name => #{
@@ -315,6 +322,7 @@ inject() ->
                 }}},
     InputValue = {object, #{
                     id => '__InputValue',
+                    resolve_module => ?MODULE,
                     description => "InputValues in the Schema",
                     fields => #{
                       name => #{
@@ -332,6 +340,7 @@ inject() ->
                      }}},
     Enum = {object, #{
               id => "__EnumValue",
+              resolve_module => ?MODULE,
               description => "Introspection of enumeration values",
               fields => #{
                 name => #{
@@ -350,7 +359,7 @@ inject() ->
     TypeKind = {enum, #{
                   id => '__TypeKind',
                   description => "The different type schemes (kinds)",
-		  resolve_module => graphql_enum_coerce,
+                  resolve_module => graphql_enum_coerce,
                   values => #{
                     'SCALAR' => #{ value => 1, description => "Scalar types" },
                     'OBJECT' => #{ value => 2, description => "Object types" },
@@ -363,6 +372,7 @@ inject() ->
                    }}},
     Directive = {object, #{
                    id => '__Directive',
+                   resolve_module => ?MODULE,
                    description => "Representation of directives",
                    fields => #{
                      name => #{
@@ -390,7 +400,7 @@ inject() ->
     DirectiveLocation = {enum, #{
                            id => '__DirectiveLocation',
                            description => "Where a given directive can be used",
-			   resolve_module => graphql_enum_coerce,
+                           resolve_module => graphql_enum_coerce,
                            values => #{
                              'QUERY' => #{ value => 1, description => "Queries" },
                              'MUTATION' => #{ value => 2, description => "Mutations" },
@@ -432,3 +442,14 @@ directive(Kind) ->
                <<"type">> => Bool,
                <<"defaultValue">> => false }]
      }.
+
+%% Resolver for introspection
+execute(_Ctx, null, _, _) ->
+    {ok, null};
+execute(_Ctx, Obj, FieldName, _Args) ->
+    case maps:get(FieldName, Obj, not_found) of
+        {'$lazy', F} when is_function(F, 0) -> F();
+        not_found -> {error, not_found};
+        Values when is_list(Values) -> {ok, [ {ok, R} || R <- Values ]};
+        Value -> {ok, Value}
+    end.
