@@ -9,7 +9,7 @@ suite() ->
 
 init_per_suite(Config) ->
     application:ensure_all_started(graphql),
-    {ok, Doc} = read_doc(Config, "dungeon.graphql"),
+    {ok, Doc} = read_doc(Config, "query.graphql"),
     ok = dungeon:inject(Config),
     ok = dungeon:start(),
     ok = graphql:validate_schema(),
@@ -125,7 +125,9 @@ default_query(Config) ->
     ok.
 
 introspection(Config) ->
-    case run(Config, <<"introspection.graphql">>, <<"IntrospectionQuery">>, #{}) of
+    case run(Config,
+             <<"introspection.graphql">>,
+             <<"IntrospectionQuery">>, #{}) of
         #{ errors := [] } ->
             ok;
         #{ errors := Errs } ->
