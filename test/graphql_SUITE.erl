@@ -669,11 +669,9 @@ v_5_4_1_2(_Config) ->
         "{ dog { ...inlineFragment } } fragment inlineFragment on Dog { ... on Dog { name } }",
     true = th:v(Q2),
 
-    %% Note: This doesn't validate if we have no directives support. The test case will fail once
-    %% we have it in which case the test here should pass.
     Q3 =
         "{ dog { ...inlineFragment2 } } fragment inlineFragment2 on Dog { ... @include(if: true) { name } }",
-    false = th:v(Q3),
+    true = th:v(Q3),
 
     Q4 =
         "{ dog { ...F } } fragment F on NotInSchema { name }",
