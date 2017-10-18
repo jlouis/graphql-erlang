@@ -1,8 +1,9 @@
 %% Schema definitions
 -type mod() :: atom().
 -type schema_base_type() :: scalar_type()
-                          | binary()
-                          | {scalar, string | int | bool | float | id}.
+                          | enum_type()
+                          | binary().
+
 -type schema_type() ::
         {non_null, schema_base_type()}
       | {non_null, {list, schema_base_type()}}

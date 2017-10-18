@@ -2,7 +2,7 @@
 
 %% All identifiers in the AST are given like this
 -type name() :: {name, pos_integer(), binary()}.
--type graphql_base_type() :: name() | binary() | {scalar, string | int | float | id | bool}.
+-type graphql_base_type() :: name() | binary().
 -type graphql_type() ::
           {non_null, graphql_type()}
         | {list, graphql_type()}
