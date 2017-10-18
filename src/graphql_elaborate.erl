@@ -48,43 +48,57 @@ mk_funenv(Ops) ->
 
 
 %% -- TYPE ELABORATION -----------------------------------------------
-%% Elaborate the output type of a query
-output_type({non_null, Ty}) -> {non_null, output_type(Ty)};
-output_type({list, Ty}) -> {list, output_type(Ty)};
-output_type({scalar, S}) -> {scalar, S};
-output_type(B) when is_binary(B) ->
-    case graphql_schema:lookup(B) of
-        %% Non-polar
-        #enum_type{} = Enum -> Enum;
-        #scalar_type{} = Scalar -> Scalar;
 
-        %% Output/Neg-polar
-        #object_type{} = OT -> OT;
-        #interface_type{} = IFace -> IFace;
-        #union_type{} = Union -> Union
-    end.
-
-%% Determine the type of a vardef by looking it up in the schema
-vdef_type({non_null, Ty}) ->
-    case vdef_type(Ty) of
-        {ok, V} -> {ok, {non_null, V}};
-        {error, Reason} -> {error, Reason}
+%% Elaborate a type and also determine its polarity. This is used for
+%% input and output types
+type({non_null, Ty}) ->
+    case type(Ty) of
+        {error, Reason} -> {error, Reason};
+        {Polarity, V} -> {Polarity, {non_null, V}}
     end;
-vdef_type({list, Ty}) ->
-    case vdef_type(Ty) of
-        {ok, V} -> {ok, {list, V}};
-        {error, Reason} -> {error, Reason}
+type({list, Ty}) ->
+    case type(Ty) of
+        {error, Reason} -> {error, Reason};
+        {Polarity, V} -> {Polarity, {list, V}}
     end;
-vdef_type({scalar, S}) -> {ok, {scalar, S}};
-vdef_type({name, _, N}) -> vdef_type(N);
-vdef_type(N) when is_binary(N) ->
+type({scalar, S}) -> {'*', {scalar, S}};
+type({name, _, N}) -> type(N);
+type(N) when is_binary(N) ->
     case graphql_schema:lookup(N) of
         not_found -> {error, not_found};
-        #enum_type{} = Enum -> {ok, Enum};
-        #scalar_type{} = Scalar -> {ok, Scalar};
-        #input_object_type{} = IOType -> {ok, IOType};
-        _Unknown -> {error, {invalid_input_type, N}}
+        %% Non-polar types
+        #enum_type{} = Enum -> {'*', Enum};
+        #scalar_type{} = Scalar -> {'*', Scalar};
+
+        %% Positive types
+        #input_object_type{} = IOType -> {'+', IOType};
+
+        %% Negative types
+        #object_type{} = OT -> {'-', OT};
+        #interface_type{} = IFace -> {'-', IFace};
+        #union_type{} = Union -> {'-', Union};
+        
+        _Unknown -> {error, {invalid_type, N}}
     end.
+
+%% Assert a type is an input type
+input_type(Ty) ->
+    case type(Ty) of
+        {error, Reason} -> {error, Reason};
+        {'*', V} -> {ok, V};
+        {'+', V} -> {ok, V};
+        {'-', _} -> {error, {invalid_input_type, Ty}}
+    end.
+
+%% Assert a type is an output type
+output_type(Ty) ->
+    case type(Ty) of
+        {error, Reason} -> {error, Reason};
+        {'*', V} -> {ok, V};
+        {'-', V} -> {ok, V};
+        {'+', _} -> {error, {invalid_output_type, Ty}}
+    end.
+
 
 %% -- ROOT ----------------------------------------
 root(Path, #op { ty = T } = Op) ->
@@ -147,7 +161,7 @@ op(Path, #op { id = {name, _, _}, directives = [_|_] } = Op) ->
 
 %% Handle a list of vardefs by elaboration of their types
 var_defs(Path, VDefs) ->
-    [case vdef_type(V#vardef.ty) of
+    [case input_type(V#vardef.ty) of
          {ok, Ty} -> V#vardef { ty = Ty };
          {error, not_found} -> err(Path, {type_not_found, graphql_ast:id(V)});
          {error, {invalid_input_type, T}} -> err(Path, {not_input_type, T})
@@ -204,7 +218,7 @@ field(Path, _OType, #field { id = ID, args = Args, selection_set = SSet, directi
         not_found ->
             err([F|Path], unknown_field);
         #schema_field{ ty = Ty, args = SArgs } = SF ->
-            Type = output_type(Ty),
+            {ok, Type} = output_type(Ty),
             SSet2 = field_lookup([F|Path], Type, SSet),
             F#field {
                 args = field_args([F | Path], Args, SArgs),
