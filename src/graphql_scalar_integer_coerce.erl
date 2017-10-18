@@ -5,8 +5,5 @@
 input(_, X) ->
     {ok, X}.
 
-output(<<"Int">>, I) when is_integer(I) ->
-    {ok, I};
-
-output(_,_) ->
-  {ok, null}.
+output(<<"Int">>, I) when is_integer(I) -> {ok, I};
+output(_,_)                             -> {ok, null}.

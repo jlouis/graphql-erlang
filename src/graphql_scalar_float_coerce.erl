@@ -5,11 +5,6 @@
 input(_, X) ->
     {ok, X}.
 
-output(<<"Float">>, F) when is_float(F) ->
-    {ok, F};
-
-output(<<"Float">>,I) when is_integer(I) ->
-    {ok, float(I)};
-
-output(_,_) ->
-  {ok, null}.
+output(<<"Float">>, F) when is_float(F)  -> {ok, F};
+output(<<"Float">>,I) when is_integer(I) -> {ok, float(I)};
+output(_,_)                              -> {ok, null}.
