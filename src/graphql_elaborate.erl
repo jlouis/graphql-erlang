@@ -61,7 +61,10 @@ type({list, Ty}) ->
         {error, Reason} -> {error, Reason};
         {Polarity, V} -> {Polarity, {list, V}}
     end;
-type({scalar, S}) -> {'*', {scalar, S}};
+type({scalar, _} = S) -> {'*', S};
+type(#scalar_type{} = Ty) -> {'*', Ty};
+type({enum, _} = E) -> {'*', E};
+type(#enum_type{} = Ty) -> {'*', Ty};
 type({name, _, N}) -> type(N);
 type(N) when is_binary(N) ->
     case graphql_schema:lookup(N) of
@@ -236,22 +239,9 @@ field_arg(Path, K, V, SArgs) ->
         not_found ->
             err(Path, {unknown_argument, N});
         #schema_arg{ ty = Ty } ->
-            {K, #{ type => field_arg_type(Ty), value => V}}
+            {ok, ElabTy} = input_type(Ty),
+            {K, #{ type => ElabTy, value => V}}
     end.
-
-field_arg_type({non_null, Ty}) -> {non_null, field_arg_type(Ty)};
-field_arg_type({list, Ty}) -> {list, field_arg_type(Ty)};
-field_arg_type({scalar, _} = Ty) -> Ty;
-field_arg_type(#scalar_type{} = Ty) -> Ty;
-field_arg_type({enum, _} = Ty) -> Ty;
-field_arg_type(#enum_type{} = Ty) -> Ty;
-field_arg_type(Ty) when is_binary(Ty) ->
-    case graphql_schema:lookup(Ty) of
-        #scalar_type{} = ScalarTy -> ScalarTy;
-        #enum_type{} = EnumTy -> EnumTy;
-        #input_object_type{} = IOType -> IOType
-    end.
-
 
 field_lookup(Path, {non_null, Obj}, SSet) ->
     field_lookup(Path, Obj, SSet);
