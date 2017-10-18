@@ -4,7 +4,6 @@
 -include("graphql_schema.hrl").
 
 -export([x/1, x/2]).
--export([default_resolver/3]).
 -export([err_msg/1]).
 -export([builtin_input_coercer/1]).
 
@@ -433,8 +432,6 @@ resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectTy
             {defer, Token, undefined};
         {defer, Token, #{ worker := W }} ->
             {defer, Token, W};
-        default ->
-            resolve_field_value(Ctx, ObjectType, Value, Name, FAns, fun ?MODULE:default_resolver/3, Args);
         Wrong ->
             error_logger:error_msg(
               "Resolver returned wrong value: ~p(..) -> ~p",
@@ -783,31 +780,12 @@ fragments(Frags) ->
 %% -- FUNCTION RESOLVERS ---------------------------------
 
 resolver_function(_ObjType, R) when is_function(R, 3) -> R;
-resolver_function(#object_type { resolve_module = undefined }, undefined) ->
-    fun ?MODULE:default_resolver/3;
+resolver_function(#object_type {
+                     id = Id,
+                     resolve_module = undefined }, undefined) ->
+    exit({no_resolver, Id});
 resolver_function(#object_type { resolve_module = M }, undefined) ->
     fun M:execute/4.
-
-default_resolver(_, none, _) ->
-    {error, no_object};
-default_resolver(_, undefined, _) ->
-    {error, undefined_object};
-default_resolver(_, null, _) ->
-    %% A Null value is a valid object value
-    {ok, null};
-default_resolver(_, [], _) ->
-    %% A empty list [] value is a valid object value
-    {ok, []};
-default_resolver(#{ field := Field}, Cur, _Args) ->
-    try maps:get(Field, Cur, not_found) of
-        {'$lazy', F} when is_function(F, 0) -> F();
-        not_found ->
-            {error, field_not_found};
-        V when is_list(V) -> {ok, [ {ok, R} || R <- V ]};
-        V -> {ok, V}
-    catch
-       _:_ ->  {error, field_not_found}
-    end.
 
 %% -- OUTPUT COERCION ------------------------------------
 

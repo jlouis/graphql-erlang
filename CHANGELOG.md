@@ -10,7 +10,15 @@ the compatibility issues you are likely to encounter.
 
 ## [Unreleased]
 
-Nothing yet
+### Removed
+- The default resolver, which has never been in official documentation
+  has been removed from the source code. This simplifies the execution
+  engine a fair bit.
+- The default handling of ?LAZY. If you need to handle lazy
+  evaluation, you can now do that yourself by returning a lazy
+  function in an object and then updating your resolve modules to
+  handle lazy evaluation by forcing the computation when you hit your
+  lazy-construction.
 
 ## [0.11.0] 2017-10-09
 ### Added
