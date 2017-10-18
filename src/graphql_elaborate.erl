@@ -46,6 +46,13 @@ mk_funenv(Ops) ->
     end,
     lists:foldl(F, #{}, Ops).
 
+%% -- ROOT ----------------------------------------
+root(Path, #op { ty = T } = Op) ->
+    case graphql_schema:lookup('ROOT') of
+        not_found -> err([Op | Path], no_root_schema);
+        Schema -> graphql_schema:resolve_root_type(T, Schema)
+    end.
+
 %% -- FRAGMENTS -----------------------------------
 
 %% Fragment elaboration splits into the two major cases. In case #1,
@@ -83,9 +90,9 @@ frag_fields(Path, #frag { schema = #union_type{}} = F) ->
     %% This should return quickly, but is here for consistency
     fields([F | Path], F, #{}).
 
-
 %% -- OPERATIONS -----------------------------------
 
+%% Operations are straightforward congruences: elaborate into the structure
 op(Path, #op { vardefs = VDefs, directives = [] } = Op) ->
     RootSchema = root(Path, Op),
     case graphql_schema:lookup(RootSchema) of
@@ -97,42 +104,35 @@ op(Path, #op { vardefs = VDefs, directives = [] } = Op) ->
 op(Path, #op { id = {name, _, _}, directives = [_|_] } = Op) ->
     err([Op | Path], directives_on_op).
 
-
-vdef(#vardef { ty = Ty }) ->
-    try vdef_type(Ty) of
-        V -> V
-    catch
-        throw:Err -> Err
-    end.
-
+%% Determine the type of a vardef by looking it up in the schema
 vdef_type({non_null, Ty}) ->
-    {non_null, vdef_type(Ty)};
+    case vdef_type(Ty) of
+        {ok, V} -> {ok, {non_null, V}};
+        {error, Reason} -> {error, Reason}
+    end;
 vdef_type({list, Ty}) ->
-    {list, vdef_type(Ty)};
-vdef_type({scalar, S}) -> {scalar, S};
-vdef_type({name, _, N}) ->
-    vdef_type(N);
+    case vdef_type(Ty) of
+        {ok, V} -> {ok, {list, V}};
+        {error, Reason} -> {error, Reason}
+    end;
+vdef_type({scalar, S}) -> {ok, {scalar, S}};
+vdef_type({name, _, N}) -> vdef_type(N);
 vdef_type(N) when is_binary(N) ->
     case graphql_schema:lookup(N) of
-        not_found -> throw(not_found);
-        #enum_type{} = Enum -> Enum;
-        #scalar_type{} = Scalar -> Scalar;
-        #input_object_type{} = IOType -> IOType;
-        _Obj -> throw({invalid_input_type, N})
+        not_found -> {error, not_found};
+        #enum_type{} = Enum -> {ok, Enum};
+        #scalar_type{} = Scalar -> {ok, Scalar};
+        #input_object_type{} = IOType -> {ok, IOType};
+        _Unknown -> {error, {invalid_input_type, N}}
     end.
 
+%% Handle a list of vardefs by elaboration of their types
 var_defs(Path, VDefs) ->
-    [case vdef(V) of
-        not_found -> err(Path, {type_not_found, graphql_ast:id(V)});
-        {invalid_input_type, T} -> err(Path, {not_input_type, T});
-        Ty -> V#vardef { ty = Ty }
-      end || V <- VDefs].
-
-root(Path, #op { ty = T } = Op) ->
-    case graphql_schema:lookup('ROOT') of
-        not_found -> err([Op | Path], no_root_schema);
-        Schema -> graphql_schema:resolve_root_type(T, Schema)
-    end.
+    [case vdef_type(V#vardef.ty) of
+         {ok, Ty} -> V#vardef { ty = Ty };
+         {error, not_found} -> err(Path, {type_not_found, graphql_ast:id(V)});
+         {error, {invalid_input_type, T}} -> err(Path, {not_input_type, T})
+     end || V <- VDefs].
 
 %% -- DIRECTIVES -----------------------------------
 directives(Path, Ds) ->
