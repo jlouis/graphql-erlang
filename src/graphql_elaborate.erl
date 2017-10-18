@@ -146,33 +146,15 @@ directives(Path, Ds) ->
 directive(Path, #directive{ id = ID, args = Args } = D) ->
     Schema = #directive_type { args = SArgs } =
         case graphql_ast:name(ID) of
-            <<"include">> -> directive_schema(include);
-            <<"skip">> -> directive_schema(skip);
-            _Name -> throw({unknown, D})
+            <<"include">> ->
+                graphql_builtins:directive_schema(include);
+            <<"skip">> ->
+                graphql_builtins:directive_schema(skip);
+            _Name ->
+                throw({unknown, D})
         end,
     D#directive { args = field_args([D | Path], Args, SArgs),
                   schema = Schema }.
-
-directive_schema(include) ->
-    #directive_type {
-       id = <<"include">>,
-       args = #{
-         <<"if">> =>
-             #schema_arg{
-                ty = graphql_schema:get(<<"Bool">>),
-                default = false,
-                description = <<"Wether or not the item should be included">> }
-        }};
-directive_schema(skip) ->
-    #directive_type {
-       id = <<"skip">>,
-       args = #{
-         <<"if">> =>
-             #schema_arg{
-                ty = graphql_schema:get(<<"Bool">>),
-                default = false,
-                description = <<"Wether or not the item should be skipped">> }
-        }}.
 
 %% -- SELECTION SETS -------------------------------
 

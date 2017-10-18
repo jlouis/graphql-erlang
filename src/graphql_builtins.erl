@@ -1,5 +1,8 @@
 -module(graphql_builtins).
 
+-include("graphql_schema.hrl").
+
+-export([directive_schema/1]).
 -export([standard_types_inject/0]).
 
 -spec standard_types_inject() -> ok.
@@ -25,3 +28,26 @@ standard_types_inject() ->
     ok = graphql:insert_schema_definition(Bool),
     ok = graphql:insert_schema_definition(ID),
     ok.
+
+%% Construct schema types for the directives the system supports
+directive_schema(include) ->
+    #directive_type {
+       id = <<"include">>,
+       args = #{
+         <<"if">> =>
+             #schema_arg{
+                ty = graphql_schema:get(<<"Bool">>),
+                default = false,
+                description = <<"Wether or not the item should be included">> }
+        }};
+directive_schema(skip) ->
+    #directive_type {
+       id = <<"skip">>,
+       args = #{
+         <<"if">> =>
+             #schema_arg{
+                ty = graphql_schema:get(<<"Bool">>),
+                default = false,
+                description = <<"Wether or not the item should be skipped">> }
+        }}.
+
