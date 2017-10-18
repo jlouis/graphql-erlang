@@ -16,7 +16,7 @@ document({document, Ops}) ->
 operations(Path, Operations) ->
     [operation_(Path, Op) || Op <- Operations].
 
-operation_(Path, #frag{} = F) -> frag(Path, F, undefined);
+operation_(Path, #frag{} = F) -> frag(Path, F);
 operation_(Path, #op{} = O) -> op(Path, O).
 
 %% -- VARIABLE ENVIRONMENTS -----------------------
@@ -47,30 +47,40 @@ mk_funenv(Ops) ->
     lists:foldl(F, #{}, Ops).
 
 %% -- FRAGMENTS -----------------------------------
-frag(Path, #frag { id = {name, _, _}, directives = [_|_] } = F, _) ->
+
+%% Fragment elaboration splits into the two major cases. In case #1,
+%% we have a situation where there is no type designator on the
+%% fragment, but there is a schema type on the object already. In the
+%% other case, we have a type, but no schema entry. For that variant,
+%% we lookup the schema type, elaborate the fragment with the type and
+%% recurse.
+frag(Path, #frag { id = {name, _, _}, directives = [_|_] } = F) ->
     err([F | Path], directives_on_named_fragment);
-frag(Path, #frag { ty = undefined, directives = Dirs } = Frag, ObjectType) ->
-    frag_(Path,
+frag(Path, #frag { ty = undefined, directives = Dirs } = Frag) ->
+    frag_fields(Path,
           Frag#frag {
-            ty = undefined,
-            schema = ObjectType,
             directives = directives([Frag | Path], Dirs)
            });
-frag(Path, #frag { ty = T, directives = Dirs } = F, _ObjecType) ->
+frag(Path, #frag { ty = T, directives = Dirs } = Frag) ->
     Ty = graphql_ast:name(T),
     case graphql_schema:lookup(Ty) of
         not_found ->
-            err([F | Path], {type_not_found, Ty});
-        Schema ->
-            frag_(Path, F#frag { schema = Schema, directives = directives([F|Path], Dirs) })
+            err([Frag | Path], {type_not_found, Ty});
+        TypeSchema ->
+            frag_fields(Path,
+                  Frag#frag {
+                    schema = TypeSchema,
+                    directives = directives([Frag|Path], Dirs) })
     end.
 
-frag_(Path, #frag { schema = #object_type{ fields = Fields }} = F) ->
+%% Handle the fields in a fragment by looking at its object type
+frag_fields(Path, #frag { schema = #object_type{ fields = Fields }} = F) ->
     fields([F | Path], F, Fields);
-frag_(Path, #frag { schema = #interface_type{ fields = Fields }} = F) ->
+frag_fields(Path, #frag { schema = #interface_type{ fields = Fields }} = F) ->
     fields([F | Path], F, Fields);
-frag_(Path, #frag { schema = #union_type{}} = F) ->
+frag_fields(Path, #frag { schema = #union_type{}} = F) ->
     %% Unions are always on the empty field set
+    %% This should return quickly, but is here for consistency
     fields([F | Path], F, #{}).
 
 
@@ -179,7 +189,7 @@ field(Path, _OType, #frag_spread { directives = Dirs } = FragSpread, _Fields) ->
     FragSpread#frag_spread { directives = ElabDirs };
 %% Inline fragments are elaborated the same way as fragments
 field(Path, OType, #frag { id = '...' } = Frag, _Fields) ->
-    frag(Path, Frag, OType);
+    frag(Path, Frag#frag { schema = OType });
 field(Path, _OType, #field { id = ID, args = Args, selection_set = SSet, directives = Dirs } = F, Fields) ->
     Name = graphql_ast:name(ID),
     ElabDirs = directives([F | Path], Dirs),
