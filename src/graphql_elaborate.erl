@@ -46,63 +46,23 @@ mk_funenv(Ops) ->
     end,
     lists:foldl(F, #{}, Ops).
 
-%% -- ROOT ----------------------------------------
-root(Path, #op { ty = T } = Op) ->
-    case graphql_schema:lookup('ROOT') of
-        not_found -> err([Op | Path], no_root_schema);
-        Schema -> graphql_schema:resolve_root_type(T, Schema)
+
+%% -- TYPE ELABORATION -----------------------------------------------
+%% Elaborate the output type of a query
+output_type({non_null, Ty}) -> {non_null, output_type(Ty)};
+output_type({list, Ty}) -> {list, output_type(Ty)};
+output_type({scalar, S}) -> {scalar, S};
+output_type(B) when is_binary(B) ->
+    case graphql_schema:lookup(B) of
+        %% Non-polar
+        #enum_type{} = Enum -> Enum;
+        #scalar_type{} = Scalar -> Scalar;
+
+        %% Output/Neg-polar
+        #object_type{} = OT -> OT;
+        #interface_type{} = IFace -> IFace;
+        #union_type{} = Union -> Union
     end.
-
-%% -- FRAGMENTS -----------------------------------
-
-%% Fragment elaboration splits into the two major cases. In case #1,
-%% we have a situation where there is no type designator on the
-%% fragment, but there is a schema type on the object already. In the
-%% other case, we have a type, but no schema entry. For that variant,
-%% we lookup the schema type, elaborate the fragment with the type and
-%% recurse.
-frag(Path, #frag { id = {name, _, _}, directives = [_|_] } = F) ->
-    err([F | Path], directives_on_named_fragment);
-frag(Path, #frag { ty = undefined, directives = Dirs } = Frag) ->
-    frag_fields(Path,
-          Frag#frag {
-            directives = directives([Frag | Path], Dirs)
-           });
-frag(Path, #frag { ty = T, directives = Dirs } = Frag) ->
-    Ty = graphql_ast:name(T),
-    case graphql_schema:lookup(Ty) of
-        not_found ->
-            err([Frag | Path], {type_not_found, Ty});
-        TypeSchema ->
-            frag_fields(Path,
-                  Frag#frag {
-                    schema = TypeSchema,
-                    directives = directives([Frag|Path], Dirs) })
-    end.
-
-%% Handle the fields in a fragment by looking at its object type
-frag_fields(Path, #frag { schema = #object_type{ fields = Fields }} = F) ->
-    fields([F | Path], F, Fields);
-frag_fields(Path, #frag { schema = #interface_type{ fields = Fields }} = F) ->
-    fields([F | Path], F, Fields);
-frag_fields(Path, #frag { schema = #union_type{}} = F) ->
-    %% Unions are always on the empty field set
-    %% This should return quickly, but is here for consistency
-    fields([F | Path], F, #{}).
-
-%% -- OPERATIONS -----------------------------------
-
-%% Operations are straightforward congruences: elaborate into the structure
-op(Path, #op { vardefs = VDefs, directives = [] } = Op) ->
-    RootSchema = root(Path, Op),
-    case graphql_schema:lookup(RootSchema) of
-        not_found ->
-            err([Op | Path], {type_not_found, RootSchema});
-        #object_type{ fields = Fields } = Obj ->
-            fields([Op | Path], Op#op{ schema = Obj, vardefs = var_defs([Op | Path], VDefs) }, Fields)
-    end;
-op(Path, #op { id = {name, _, _}, directives = [_|_] } = Op) ->
-    err([Op | Path], directives_on_op).
 
 %% Determine the type of a vardef by looking it up in the schema
 vdef_type({non_null, Ty}) ->
@@ -125,6 +85,65 @@ vdef_type(N) when is_binary(N) ->
         #input_object_type{} = IOType -> {ok, IOType};
         _Unknown -> {error, {invalid_input_type, N}}
     end.
+
+%% -- ROOT ----------------------------------------
+root(Path, #op { ty = T } = Op) ->
+    case graphql_schema:lookup('ROOT') of
+        not_found -> err([Op | Path], no_root_schema);
+        Schema -> graphql_schema:resolve_root_type(T, Schema)
+    end.
+
+%% -- FRAGMENTS -----------------------------------
+
+%% Fragment elaboration splits into the two major cases. In case #1,
+%% we have a situation where there is no type designator on the
+%% fragment, but there is a schema type on the object already. In the
+%% other case, we have a type, but no schema entry. For that variant,
+%% we lookup the schema type, elaborate the fragment with the type and
+%% recurse.
+frag(Path, #frag { id = {name, _, _}, directives = [_|_] } = F) ->
+    err([F | Path], directives_on_named_fragment);
+frag(Path, #frag { ty = undefined, directives = Dirs } = Frag) ->
+    frag_sset(Path,
+          Frag#frag {
+            directives = directives([Frag | Path], Dirs)
+           });
+frag(Path, #frag { ty = T, directives = Dirs } = Frag) ->
+    Ty = graphql_ast:name(T),
+    case graphql_schema:lookup(Ty) of
+        not_found ->
+            err([Frag | Path], {type_not_found, Ty});
+        TypeSchema ->
+            frag_sset(Path,
+                  Frag#frag {
+                    schema = TypeSchema,
+                    directives = directives([Frag|Path], Dirs) })
+    end.
+
+%% Handle the fields in a fragment by looking at its object type
+frag_sset(Path, #frag { schema = #object_type{ fields = Fields }} = F) ->
+    sset([F | Path], F, Fields);
+frag_sset(Path, #frag { schema = #interface_type{ fields = Fields }} = F) ->
+    sset([F | Path], F, Fields);
+frag_sset(Path, #frag { schema = #union_type{}} = F) ->
+    %% Unions are always on the empty field set
+    %% This should return quickly, but is here for consistency
+    sset([F | Path], F, #{}).
+
+%% -- OPERATIONS -----------------------------------
+
+%% Operations are straightforward congruences: elaborate into the structure
+op(Path, #op { vardefs = VDefs, directives = [] } = Op) ->
+    RootSchema = root(Path, Op),
+    case graphql_schema:lookup(RootSchema) of
+        not_found ->
+            err([Op | Path], {type_not_found, RootSchema});
+        #object_type{ fields = Fields } = Obj ->
+            sset([Op | Path], Op#op{ schema = Obj, vardefs = var_defs([Op | Path], VDefs) }, Fields)
+    end;
+op(Path, #op { id = {name, _, _}, directives = [_|_] } = Op) ->
+    err([Op | Path], directives_on_op).
+
 
 %% Handle a list of vardefs by elaboration of their types
 var_defs(Path, VDefs) ->
@@ -158,14 +177,15 @@ directive(Path, #directive{ id = ID, args = Args } = D) ->
 
 %% -- SELECTION SETS -------------------------------
 
-fields(Path, #frag { schema = OType, selection_set = SSet} = F, Fields) ->
-    F#frag{ selection_set = sset(Path, OType, SSet, Fields)};
-fields(Path, #op{ schema = OType, selection_set = SSet} = O, Fields) ->
-    O#op{ selection_set = sset(Path, OType, SSet, Fields)}.
+%% A selection set is handled by recursing into the fragment or operation,
+%% then process each field inside the selection set of that operation.
+sset(Path, #frag { schema = OType, selection_set = SSet} = F, Fields) ->
+    F#frag{ selection_set = [field(Path, OType, S, Fields) || S <- SSet] };
+sset(Path, #op{ schema = OType, selection_set = SSet} = O, Fields) ->
+    O#op{ selection_set = [field(Path, OType, S, Fields) || S <- SSet]}.
 
-sset(Path, OType, SSet, Fields) ->
-    [field(Path, OType, S, Fields) || S <- SSet].
-
+%% Fields are either fragment spreads, inline fragments, or fields. Recurse and
+%% elaborate on the congruence in a straightforward way.
 field(Path, _OType, #frag_spread { directives = Dirs } = FragSpread, _Fields) ->
     ElabDirs = directives([FragSpread | Path], Dirs),
     FragSpread#frag_spread { directives = ElabDirs };
@@ -176,13 +196,15 @@ field(Path, _OType, #field { id = ID, args = Args, selection_set = SSet, directi
     Name = graphql_ast:name(ID),
     ElabDirs = directives([F | Path], Dirs),
     case maps:get(Name, Fields, not_found) of
+        %% Elaborate for the introspection system. __typename is always a valid name
+        %% since it refers to the type of the object
         not_found when Name == <<"__typename">> ->
             F#field { schema = {introspection, typename},
                       directives = ElabDirs };
         not_found ->
             err([F|Path], unknown_field);
         #schema_field{ ty = Ty, args = SArgs } = SF ->
-            Type = field_type(Ty),
+            Type = output_type(Ty),
             SSet2 = field_lookup([F|Path], Type, SSet),
             F#field {
                 args = field_args([F | Path], Args, SArgs),
@@ -190,21 +212,6 @@ field(Path, _OType, #field { id = ID, args = Args, selection_set = SSet, directi
                 directives = ElabDirs,
                 selection_set = SSet2 }
      end.
-
-field_type({non_null, Ty}) -> {non_null, field_type(Ty)};
-field_type({list, Ty}) -> {list, field_type(Ty)};
-field_type({scalar, S}) -> {scalar, S};
-field_type(B) when is_binary(B) ->
-    case graphql_schema:lookup(B) of
-        %% Non-polar
-        #enum_type{} = Enum -> Enum;
-        #scalar_type{} = Scalar -> Scalar;
-
-        %% Output/Neg-polar
-        #object_type{} = OT -> OT;
-        #interface_type{} = IFace -> IFace;
-        #union_type{} = Union -> Union
-    end.
 
 field_args(Path, Args, SArgs) ->
     [field_arg(Path, K, V, SArgs) || {K,V} <- Args].
@@ -245,17 +252,17 @@ field_lookup(Path, {scalar, _}, [_|_]) ->
 field_lookup(Path, #scalar_type{}, [_|_]) ->
     err(Path, selection_on_scalar);
 field_lookup(Path, #scalar_type{}, SSet) ->
-    sset(Path, undefined, SSet, #{});
+    [field(Path, undefined, S, #{}) || S <- SSet];
 field_lookup(Path, #object_type{}, []) ->
     err(Path, fieldless_object);
 field_lookup(Path, #object_type{ fields = Fields } = OType, SSet) ->
-    sset(Path, OType, SSet, Fields);
+    [field(Path, OType, S, Fields) || S <- SSet];
 field_lookup(Path, #interface_type{}, []) ->
     err(Path, fieldless_interface);
-field_lookup(Path, #interface_type{ fields = Fields } = OType, SSet) ->
-    sset(Path, OType, SSet, Fields);
-field_lookup(Path, #union_type{} = OType, SSet) ->
-    sset(Path, OType, SSet, #{});
+field_lookup(Path, #interface_type{ fields = Fields } = IType, SSet) ->
+    [field(Path, IType, S, Fields) || S <- SSet];
+field_lookup(Path, #union_type{} = UType, SSet) ->
+    [field(Path, UType, S, #{}) || S <- SSet];
 field_lookup(_Path, #enum_type{}, []) ->
     [];
 field_lookup(Path, #enum_type{}, _SSet) ->
