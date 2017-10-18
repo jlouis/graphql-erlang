@@ -429,20 +429,25 @@ TypeExtensionDefinition -> 'extend' ObjectTypeDefinition :
 Erlang code.
 
 -include("graphql_internal.hrl").
+-include("graphql_schema.hrl").
 
 g_query({query, _L} = Q) -> Q.
 g_mutation({mutation, _L} = Mut) -> Mut.
 g_subscription({subscription, _L} = Sub) -> Sub.
 
-g_ty({name, _, <<"String">>}) -> {scalar, string};
-g_ty({name, _, <<"string">>}) -> {scalar, string};
-g_ty({name, _, <<"Int">>}) -> {scalar, int};
-g_ty({name, _, <<"int">>}) -> {scalar, int};
-g_ty({name, _, <<"float">>}) -> {scalar, float};
-g_ty({name, _, <<"Float">>}) -> {scalar, float};
-g_ty({name, _, <<"id">>}) -> {scalar, id};
-g_ty({name, _, <<"Id">>}) -> {scalar, id};
-g_ty({name, _, <<"ID">>}) -> {scalar, id};
+g_ty({name, _, <<"String">>}) -> scalar_lookup(<<"String">>);
+g_ty({name, _, <<"string">>}) -> scalar_lookup(<<"String">>);
+g_ty({name, _, <<"Int">>}) -> scalar_lookup(<<"Int">>);
+g_ty({name, _, <<"int">>}) -> scalar_lookup(<<"Int">>);
+g_ty({name, _, <<"float">>}) -> scalar_lookup(<<"Float">>);
+g_ty({name, _, <<"Float">>}) -> scalar_lookup(<<"Float">>);
+g_ty({name, _, <<"bool">>}) -> scalar_lookup(<<"Bool">>);
+g_ty({name, _, <<"Bool">>}) -> scalar_lookup(<<"Bool">>);
+g_ty({name, _, <<"boolean">>}) -> scalar_lookup(<<"Bool">>);
+g_ty({name, _, <<"Boolean">>}) -> scalar_lookup(<<"Bool">>);
+g_ty({name, _, <<"id">>}) -> scalar_lookup(<<"ID">>);
+g_ty({name, _, <<"Id">>}) -> scalar_lookup(<<"ID">>);
+g_ty({name, _, <<"ID">>}) -> scalar_lookup(<<"ID">>);
 g_ty({name, _, _} = N) -> N.
 
 g_enum({name, _Line, N}) -> N.
@@ -459,3 +464,7 @@ g_input_object(KVPairs) -> maps:from_list(KVPairs).
 %% Convert keywords into binaries if they don't occur in the KW-position
 keyword({A, Line}) when is_atom(A) ->
     {name, Line, atom_to_binary(A, utf8)}.
+
+scalar_lookup(Name) ->
+  #scalar_type{} = Ty = graphql_schema:get(Name),
+  Ty.

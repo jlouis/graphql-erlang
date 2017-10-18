@@ -23,14 +23,14 @@ inject() ->
                    type => 'Human',
                    args => #{
                      id => #{
-                       type => 'string!',
+                       type => 'String!',
                        description => "The ID of the human" } },
                    resolve => fun(Ctx, _Cur, Args) -> get_human(Ctx, Args) end },
                  droid => #{
                    type => 'Droid',
                    args => #{
                      id => #{
-                       type => 'string!',
+                       type => 'String!',
                        description => "The ID of the droid" } },
                    resolve => fun(Ctx, _Cur, Args) -> get_droid(Ctx, Args) end }
                 } } },
@@ -66,10 +66,10 @@ init_starwars() ->
                                    end,
                    fields => #{
                      id => #{
-                       type => string,
+                       type => 'String',
                        description => "The ID of a character" },
                      name => #{
-                       type => string,
+                       type => 'String',
                        description => "The name of the character" },
                      friends => #{
                        type => ['Character'],
@@ -84,10 +84,10 @@ init_starwars() ->
                description => "A humanoid creature in the Star Wars Universe.",
                fields => #{
                  id => #{
-                   type => string,
+                   type => 'String',
                    description => "The ID of the human" },
                  name => #{
-                   type => string,
+                   type => 'String',
                    description => "The name of the human" },
                  friends => #{
                    type => ['Character'],
@@ -97,7 +97,7 @@ init_starwars() ->
                    type => ['Episode'],
                    description => "Which movies they appear in." },
                  homePlanet => #{
-                   type => string,
+                   type => 'String',
                    description => "The home planet of the human, or null if unknown." }
                 },
                interfaces => [ 'Character' ]
@@ -108,10 +108,10 @@ init_starwars() ->
                description => "A mechanical create in the Star Wars universe.",
                fields => #{
                  id => #{
-                   type => string,
+                   type => 'String',
                    description => "The ID of the droid." },
                  name => #{
-                   type => string,
+                   type => 'String',
                    description => "The name of the droid." },
                  friends => #{
                    type => ['Character'],
@@ -121,7 +121,7 @@ init_starwars() ->
                    type => ['Episode'],
                    description => "Which movies they appear in." },
                  primaryFunction => #{
-                   type => string,
+                   type => 'String',
                    description => "The primary function of the droid." }
                 },
                interfaces => ['Character']

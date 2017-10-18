@@ -1,6 +1,7 @@
 -module(graphql_schema_parse).
 
 -include("graphql_internal.hrl").
+-include("graphql_schema.hrl").
 
 -export([inject/2]).
 inject(BaseMapping, {ok, {document, Entries}}) ->
@@ -51,7 +52,6 @@ mk(#{ objects := OM }, #p_type {
        annotations => annotations(Annots),
        resolve_module => Mod,
        interfaces => Implements }};
-
 mk(#{ enums := En }, #p_enum { id = ID,
 			       annotations = Annots,
 			       variants = Vs }) ->
@@ -65,7 +65,6 @@ mk(#{ enums := En }, #p_enum { id = ID,
        annotations => annotations(Annots),
        values => Variants,
        resolve_module => Mod }};
-
 mk(_Map, #p_input_object {
             id = ID,
             annotations = Annots,
@@ -195,13 +194,8 @@ mapi(F,  [X|Xs], K) -> [F(X, K) | mapi(F, Xs, K+1)].
 
 handle_type({non_null, T}) -> {non_null, handle_type(T)};
 handle_type({list, T}) -> {list, handle_type(T)};
-handle_type({name, _, T}) ->
-    case T of
-        <<"Boolean">> -> {scalar, bool};
-        <<"Boolean!">> -> {non_null, {scalar, bool}};
-        B when is_binary(B) -> binary_to_atom(B, utf8)
-    end;
-handle_type({scalar, X}) -> {scalar, X}.
+handle_type({name, _, T}) -> binary_to_atom(T, utf8);
+handle_type(#scalar_type{ id = Id }) -> binary_to_atom(Id, utf8).
 
 mapping(Name, Map) ->
     case maps:get(Name, Map, undefined) of
