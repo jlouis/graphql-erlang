@@ -61,6 +61,8 @@ path(Path) ->
 
 format_ty(#enum_type { id = Ty }) -> Ty;
 format_ty(#input_object_type { id = Ty }) -> Ty;
+format_ty({scalar, Ty, Value}) ->
+    iolist_to_binary([atom_to_binary(Ty, utf8), ":", Value]);
 format_ty(#scalar_type { id = Ty }) -> Ty;
 format_ty({input_object, Ty}) -> Ty;
 format_ty({object, Fields}) ->
@@ -75,8 +77,6 @@ format_ty([Ty]) ->
 format_ty({list, Ty}) ->
     Inner = format_ty(Ty),
     <<"{list, ", Inner/binary, "}">>;
-format_ty({scalar, X, _}) -> format_scalar(X);
-format_ty({scalar, X}) -> format_scalar(X);
 format_ty({non_null, Ty}) ->
     Inner = format_ty(Ty),
     <<Inner/binary, "!">>;
@@ -100,13 +100,6 @@ format_val(F) when is_float(F) -> float_to_binary(F);
 format_val(true) -> <<"true">>;
 format_val(false) -> <<"false">>;
 format_val(null) -> <<"null">>.
-
-format_scalar(string) -> <<"string">>;
-format_scalar(bool) -> <<"bool">>;
-format_scalar(int) -> <<"int">>;
-format_scalar(float) -> <<"float">>;
-format_scalar(id) -> <<"id">>;
-format_scalar(B) when is_binary(B) -> B.
 
 %% -- AST MANIPULATION -------------------------
 name('ROOT') -> <<"ROOT">>;

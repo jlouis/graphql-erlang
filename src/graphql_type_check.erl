@@ -83,7 +83,6 @@ tc_params(Path, TyVarEnv, InitialParams) ->
     F =
       fun(K, V0, PS) ->
         case tc_param(Path, K, V0, maps:get(K, PS, not_found)) of
-            ok -> PS;
             {replace, V1} -> PS#{ K => V1 }
         end
       end,
@@ -101,7 +100,6 @@ tc_param(Path, K, #vardef { ty = Ty }, Val) ->
 %% we need to look up underlying types and check them.
 
 check_param(Path, {non_null, Ty}, V) -> check_param(Path, Ty, V);
-check_param(Path, {scalar, Sc}, V) -> input_coerce_scalar(Path, Sc, V);
 check_param(Path, #scalar_type{} = STy, V) -> input_coerce_scalar(Path, STy, V);
 check_param(Path, #enum_type{} = ETy, {enum, V}) when is_binary(V) ->
     check_param(Path, ETy, V);
@@ -119,7 +117,6 @@ check_param(Path, {list, T}, L) when is_list(L) ->
     %% structure before replacing the list parameter.
     NewList = [
         case check_param(Path, T, X) of
-            ok -> X;
             {replace, X2} -> X2
         end || X <- L],
     {replace, NewList};
@@ -158,30 +155,18 @@ check_object_fields(Path, [{Name, #schema_arg { ty = Ty, default = Def }} | Next
             end;
         V ->
             case check_param([Name | Path], Ty, V) of
-                ok -> V;
                 {replace, V2} -> V2
             end
     end,
     check_object_fields(Path, Next, maps:remove(Name, Obj), Result#{ Name => Val }).
 
-input_coerce_scalar(_Path, id, V) when is_binary(V) -> ok;
-input_coerce_scalar(_Path, string, V) when is_binary(V) -> ok;
-input_coerce_scalar(_Path, int, V) when is_integer(V) -> ok;
-input_coerce_scalar(_Path, float, V) when is_float(V) -> ok;
-input_coerce_scalar(_Path, float, I) when is_integer(I) -> {replace, float(I)};
-input_coerce_scalar(_Path, bool, true) -> ok;
-input_coerce_scalar(_Path, bool, false) -> ok;
 input_coerce_scalar(Path, #scalar_type {} = SType, Val) ->
-    input_coercer(Path, SType, Val);
-input_coerce_scalar(Path, Ty, _V) ->
-    err(Path, {type_mismatch, #{ schema => {scalar, Ty}}}).
+    input_coercer(Path, SType, Val).
 
 input_coercer(Path, #scalar_type { id = ID, resolve_module = RM}, Value) ->
     complete_value_scalar(Path, ID, RM, Value);
-
 input_coercer(_Path, #enum_type { id = _ID, resolve_module = undefined }, Value) ->
     {ok, Value};
-
 input_coercer(Path, #enum_type { id = ID, resolve_module = ResolveModule}, Value) ->
     complete_value_scalar(Path, ID, ResolveModule, Value).
 
@@ -323,7 +308,6 @@ uniq([{X, _}, {X, _} | _]) -> {not_unique, X};
 uniq([_ | Next]) -> uniq(Next).
 
 -spec schema_type(binary() | schema_type()) -> schema_type().
-schema_type({scalar, X}) when is_atom(X) -> {scalar, X};
 schema_type({non_null, T}) -> {non_null, schema_type(T)};
 schema_type({list, Tag}) -> {list, schema_type(Tag)};
 schema_type(#enum_type{} = Ty) -> Ty;
@@ -368,8 +352,7 @@ value_type(_Ctx, Path, {scalar, Tag}, V) ->
             err(Path, {invalid_scalar_value, V})
     end;
 value_type(_Ctx, _Path, _, {name, N, _}) -> N;
-value_type(_Ctx, _Path, _, S) when is_binary(S) ->
-    {scalar, string, S};
+value_type(_Ctx, _Path, _, S) when is_binary(S) -> {scalar, string, S};
 value_type(_Ctx, _Path, _, I) when is_integer(I) -> {scalar, int, I};
 value_type(_Ctx, _Path, _, F) when is_float(F) -> {scalar, float, F};
 value_type(_Ctx, _Path, _, true) -> {scalar, bool, true};
@@ -402,12 +385,12 @@ refl(_Path, null, _T) -> ok;
 refl(Path, {non_null, A}, T) -> refl(Path, A, T);
 refl(Path, A, {non_null, T}) -> refl(Path, A, T);
 %% Ground:
-refl(_Path, {scalar, Tag, V}, {scalar, Tag}) -> {replace, V};
 refl(Path, {scalar, Tag, V}, #scalar_type { id = ID } = SType) ->
     case Tag of
         string -> input_coercer(Path, SType, V);
         int -> input_coercer(Path, SType, V);
         float -> input_coercer(Path, SType, V);
+        bool -> input_coercer(Path, SType, V);
         ID -> input_coercer(Path, SType, V)
     end;
 refl(_Path, #input_object_type { id = ID }, {input_object, #input_object_type { id = ID }}) ->

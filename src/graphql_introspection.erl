@@ -32,7 +32,7 @@ augment_root(QName) ->
               description = <<"The introspection type">>,
               args = #{
                 <<"name">> =>
-                    #schema_arg { ty = {non_null, {scalar, string}},
+                    #schema_arg { ty = {non_null, <<"String">>},
                                   description = <<"The type to query">> }
                },
               resolve = fun ?MODULE:type_resolver/3 },
@@ -98,7 +98,6 @@ render_type(Ty) -> {ok, #{
     <<"inputFields">> => type_input_fields(Ty),
     <<"ofType">> => type_unwrap(Ty) }}.
 
-type_kind({scalar, _}) -> <<"SCALAR">>;
 type_kind(#scalar_type{}) -> <<"SCALAR">>;
 type_kind(#object_type {}) -> <<"OBJECT">>;
 type_kind(#input_object_type {}) -> <<"INPUT_OBJECT">>;
@@ -108,7 +107,6 @@ type_kind(#enum_type{}) -> <<"ENUM">>;
 type_kind({list, _}) -> <<"LIST">>;
 type_kind({non_null, _Ty}) -> <<"NON_NULL">>.
 
-type_name({scalar, Ty}) -> scalar_name(Ty);
 type_name(#scalar_type { id = N }) -> N;
 type_name(#enum_type { id = N }) -> N;
 type_name(#interface_type { id = N }) -> N;
@@ -117,12 +115,6 @@ type_name(#input_object_type { id = N }) -> N;
 type_name(#union_type { id = N }) -> N;
 type_name({non_null, _}) -> null;
 type_name({list, _}) -> null.
-
-scalar_name(string) -> <<"String">>;
-scalar_name(int) -> <<"Int">>;
-scalar_name(float) -> <<"Float">>;
-scalar_name(bool) -> <<"Bool">>;
-scalar_name(id) -> <<"ID">>.
 
 type_description(#object_type { description = D }) -> D;
 type_description(#input_object_type { description = D }) -> D;
@@ -252,10 +244,10 @@ inject() ->
                   type => '__TypeKind!',
                   description => "The general kind of the type" },
                 name => #{
-                  type => string,
+                  type => 'String',
                   description => "The name of the type" },
                 description => #{
-                  type => string,
+                  type => 'String',
                   description => "The description field of the type" },
                 %% OBJECT and INTERFACE only
                 fields => #{
@@ -263,7 +255,7 @@ inject() ->
                   description => "The fields in the object/interface",
                   args => #{
                     includeDeprecated => #{
-                      type => bool,
+                      type => 'Bool',
                       description => "Should deprecated fields be included or not",
                       default => false
                      }}},
@@ -283,7 +275,7 @@ inject() ->
                   description => "The possible values of an Enum",
                   args => #{
                     includeDeprecated => #{
-                      type => bool,
+                      type => 'Bool',
                       description => "Should deprecated fields be included or not",
                       default => false
                      }}},
@@ -302,10 +294,10 @@ inject() ->
                description => "Fields in a Schema",
                fields => #{
                  name => #{
-                   type => 'string!',
+                   type => 'String!',
                    description => "The name of the field" },
                  description => #{
-                   type => 'string',
+                   type => 'String',
                    description => "The description of a field" },
                  args => #{
                    type => ['__InputValue!'],
@@ -314,10 +306,10 @@ inject() ->
                    type => '__Type',
                    description => "The type of the given field" },
                  isDeprecated => #{
-                   type => 'bool!',
+                   type => 'Bool!',
                    description => "True if the field is deprecated, false otherwise" },
                  deprecationReason => #{
-                   type => string,
+                   type => 'String',
                    description => "The Reason for the deprecation, if any" }
                 }}},
     InputValue = {object, #{
@@ -326,16 +318,16 @@ inject() ->
                     description => "InputValues in the Schema",
                     fields => #{
                       name => #{
-                        type => 'string!',
+                        type => 'String!',
                         description => "The name of the inputvalue" },
                       description => #{
-                        type => string,
+                        type => 'String',
                         description => "The description of the field" },
                       type => #{
                         type => '__Type!',
                         description => "The type of the field" },
                       defaultValue => #{
-                        type => string,
+                        type => 'String',
                         description => "The default value of the field rendered as a string" }
                      }}},
     Enum = {object, #{
@@ -344,16 +336,16 @@ inject() ->
               description => "Introspection of enumeration values",
               fields => #{
                 name => #{
-                  type => 'string!',
+                  type => 'String!',
                   description => "The name of the enumeration value" },
                 description => #{
-                  type => string,
+                  type => 'String',
                   description => "The description of the value" },
                 isDeprecated => #{
-                  type => 'bool!',
+                  type => 'Bool!',
                   description => "True if this is a deprecated field" },
                 deprecationReason => #{
-                  type => string,
+                  type => 'String',
                   description => "The reason for the deprecation, if any" }
                }}},
     TypeKind = {enum, #{
@@ -376,22 +368,22 @@ inject() ->
                    description => "Representation of directives",
                    fields => #{
                      name => #{
-                       type => 'string!',
+                       type => 'String!',
                        description => "The name of the directive" },
                      description => #{
-                       type => 'string',
+                       type => 'String',
                        description => "The description of the directive" },
                      locations => #{
                        type => {non_null, ['__DirectiveLocation!']},
                        description => "Where the directives can be used" },
                      onOperation => #{
-                        type => bool,
+                        type => 'Bool',
                         description => "Not documented yet" },
                      onFragment => #{
-                        type => bool,
+                        type => 'Bool',
                         description => "Not documented yet" },
                      onField => #{
-                        type => bool,
+                        type => 'Bool',
                         description => "Not documented yet" },
                      args => #{
                        type => {non_null, ['__InputValue!']},

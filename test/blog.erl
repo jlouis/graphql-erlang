@@ -11,13 +11,13 @@ inject() ->
                    description => "Blog Images",
                    fields => #{
                      url => #{
-                       type => string,
+                       type => 'String',
                        description => "The URL of an image" },
                      width => #{
-                       type => int,
+                       type => 'Int',
                        description => "The width of the image in pixels" },
                      height => #{
-                       type => int,
+                       type => 'Int',
                        description => "The height of the image in pixels" }
                     }}},
     	
@@ -27,18 +27,18 @@ inject() ->
                     description => "Blog Authors",
                     fields => #{
                       id => #{
-                        type => id,
+                        type => 'ID',
                         description => "The ID of the author" },
                       name => #{
-                        type => string,
+                        type => 'String',
                         description => "The name of the author" },
                       pic => #{
                         type => 'Image',
                         args => #{
                           width => #{
-                            type => int, description => "Width request" },
+                            type => 'Int', description => "Width request" },
                           height => #{
-                            type => int, description => "Height request" }
+                            type => 'Int', description => "Height request" }
                          },
                         resolve => fun pic_resolve/3 },
                       recentArticle => #{
@@ -52,22 +52,22 @@ inject() ->
                      description => "Blog Articles",
                      fields => #{
                        id => #{
-                         type => 'id!',
+                         type => 'ID!',
                          description => "The ID of the article" },
                        isPublished => #{
-                         type => bool,
+                         type => 'Bool',
                          description => "True is the article has been published"},
                        author => #{
                          type => 'Author',
                          description => "Author of the article" },
                        title => #{
-                         type => string,
+                         type => 'String',
                          description => "The Title of the article" },
                        body => #{
-                         type => string,
+                         type => 'String',
                          description => "The Article body itself" },
                        keywords => #{
-                         type => [string],
+                         type => ['String'],
                          description => "Keywords for the article" }
                       }}},
     	
@@ -80,7 +80,7 @@ inject() ->
                        type => 'Article',
                        description => "Query for a specific article",
                        args => #{
-                         id => #{ type => int,
+                         id => #{ type => 'Int',
                                   description => "ID of the article to request" }
                         },
                        resolve => fun query_id_resolve/3

@@ -8,7 +8,6 @@
 -export([name/1, id/1, typename/1]).
 
 -spec resolve_type(graphql_type()) -> graphql_base_type().
-resolve_type({scalar, Sc}) -> {scalar, Sc};
 resolve_type({non_null, Ty}) -> resolve_type(Ty);
 resolve_type({list, Ty}) -> {list, resolve_type(Ty)};
 resolve_type(B) when is_binary(B) -> B;
@@ -21,7 +20,6 @@ resolve_type(#union_type{} = Ty) -> Ty;
 resolve_type({name, _, N}) -> N.
 
 -spec unwrap_to_base_type(graphql_type()) -> graphql_base_type().
-unwrap_to_base_type({scalar, X}) -> {scalar, X};
 unwrap_to_base_type({name, _, N}) -> N;
 unwrap_to_base_type(#enum_type{} = Ty) -> Ty;
 unwrap_to_base_type(#input_object_type{} = Ty) -> Ty;

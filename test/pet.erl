@@ -17,7 +17,7 @@ inject() ->
     	id => 'Pet',
     	description => "Things that are Pets",
     	fields => #{
-    		name => #{ type => 'string!', description => "The name of the pet" }}
+    		name => #{ type => 'String!', description => "The name of the pet" }}
     }},
     ok = graphql:insert_schema_definition(Pet),
     
@@ -25,7 +25,7 @@ inject() ->
     	id => 'Sentient',
     	description => "Things that are sentient beings",
     	fields => #{
-    		name => #{ type => 'string!', description => "The name of the sentient" }}
+    		name => #{ type => 'String!', description => "The name of the sentient" }}
     }},
     ok = graphql:insert_schema_definition(Sentient),
     
@@ -34,11 +34,11 @@ inject() ->
     	description => "Dogs",
     	interfaces => ['Pet'],
     	fields => #{
-    		name => #{ type => 'string!', description => "Name of the dog" },
-    		nickname => #{ type => 'string', description => "Nickname of the dog, if any" },
-    		barkVolume => #{ type => int, description => "Bark volume in dB" },
+    		name => #{ type => 'String!', description => "Name of the dog" },
+    		nickname => #{ type => 'String', description => "Nickname of the dog, if any" },
+    		barkVolume => #{ type => 'Int', description => "Bark volume in dB" },
     		doesKnowCommand => #{
-    			type => 'bool!',
+    			type => 'Bool!',
     			description => "Does the dog know a specific command?",
     			args => #{
     				dogCommand => #{
@@ -46,11 +46,11 @@ inject() ->
     					description => "The dog command we want to ask for" }}
     		},
     		isHouseTrained => #{
-    			type => 'bool!',
+    			type => 'Bool!',
     			description => "Is the dog house trained",
     			args => #{
     				atOtherHomes => #{
-    					type => 'bool',
+    					type => 'Bool',
     					description => "Is the query including other homes?" }}
     		},
     		owner => #{
@@ -65,8 +65,8 @@ inject() ->
     	description => "Facehuggers big bro",
     	interfaces => ['Sentient'],
     	fields => #{
-    		name => #{ type => 'string!', description => "The name of the alien" },
-    		homePlanet => #{ type => 'string', description => "The home planet of the alien, if any" }
+    		name => #{ type => 'String!', description => "The name of the alien" },
+    		homePlanet => #{ type => 'String', description => "The home planet of the alien, if any" }
     	}
     }},
     ok = graphql:insert_schema_definition(Alien),
@@ -76,7 +76,7 @@ inject() ->
     	description => "Things which gets eaten by aliens",
     	interfaces => ['Sentient'],
     	fields => #{
-    		name => #{ type => 'string!', description => "The name of the human" },
+    		name => #{ type => 'String!', description => "The name of the human" },
     		pets => #{ type => ['Pet'], description => "The pets the human owns" }
     	}
     }},
@@ -96,11 +96,11 @@ inject() ->
     	description => "Overlords of the humans",
     	fields => #{
     		name => #{
-    			type => 'string!', description => "The name of the cat" },
+    			type => 'String!', description => "The name of the cat" },
     		nickname => #{
-    			type => 'string', description => "The nickname of the cat, if any" },
+    			type => 'String', description => "The nickname of the cat, if any" },
     		doesKnowCommand => #{
-    			type => 'bool!',
+    			type => 'Bool!',
     			description => "Does the cat know of a specific command type",
     			args => #{
     				catCommand => #{
@@ -109,7 +109,7 @@ inject() ->
     			}
     		},
     		meowVolume => #{
-    			type => 'int',
+    			type => 'Int',
     			description => "The volume of a meow, in dB"
     		}
     	}
@@ -142,43 +142,43 @@ inject() ->
     	description => "Testing complex argument specifications",
     	fields => #{
     		multipleReqs => #{
-    			type => 'int!',
+    			type => 'Int!',
     			description => "Test multiple required args",
     			args => #{
-    				x => #{ type => 'int!', description => "The X arg"},
-    				y => #{ type => 'int!', description => "The Y arg"}
+    				x => #{ type => 'Int!', description => "The X arg"},
+    				y => #{ type => 'Int!', description => "The Y arg"}
     			}},
     		booleanArgField => #{
-    			type => 'bool',
+    			type => 'Bool',
     			description => "Test of a boolean arg field",
     			args => #{
-    				booleanArg => #{ type => 'bool', description => "The Bool Arg" }
+    				booleanArg => #{ type => 'Bool', description => "The Bool Arg" }
     			}},
     		floatArgField => #{
-    			type => 'float',
+    			type => 'Float',
     			description => "Test of a float arg field",
     			args => #{
-    				floatArg => #{type => 'float', description => "The Float Arg" }
+    				floatArg => #{type => 'Float', description => "The Float Arg" }
     			}},
     		intArgField => #{
-    			type => 'int',
+    			type => 'Int',
     			description => "Test of a int arg field",
     			args => #{
-    				intArg => #{type => 'int', description => "The Int Arg" }
+    				intArg => #{type => 'Int', description => "The Int Arg" }
     			}},
     		nonNullBooleanArgField => #{
-    			type => 'bool!',
+    			type => 'Bool!',
     			description => "Test of non-null args",
     			args => #{
     				nonNullBooleanArg => #{
-    					type => 'bool!',
+    					type => 'Bool!',
     					description => "The non-null bool arg" }
     			}},
 		booleanListArgField => #{
-			type => [bool],
+			type => ['Bool'],
 			description => "Test lists of bools",
 			args => #{
-				booleanListArg => #{ type => {non_null, [bool]}, description => "The list of bools"}
+				booleanListArg => #{ type => {non_null, ['Bool']}, description => "The list of bools"}
 			}}
     }}},
     ok = graphql:insert_schema_definition(Arguments),

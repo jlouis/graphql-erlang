@@ -447,17 +447,12 @@ resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectTy
 
 complete_value(Path, Ctx, Ty, Fields, {ok, {enum, Value}}) ->
     complete_value(Path, Ctx, Ty, Fields, {ok, Value});
-
-complete_value(Path, Ctx, {scalar, Scalar}, Fields, {ok, Value}) ->
-    complete_value(Path, Ctx, scalar_resolve(Scalar), Fields, {ok, Value});
-
 complete_value(Path, Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
     error_logger:warning_msg(
       "Canary: Type lookup during value completion for: ~p~n",
       [Ty]),
     SchemaType = graphql_schema:get(Ty),
     complete_value(Path, Ctx, SchemaType, Fields, {ok, Value});
-
 complete_value(Path, #{ defer_target := Upstream } = Ctx,
                {non_null, InnerTy}, Fields, Result) ->
     %% Note we handle arbitrary results in this case. This makes sure errors
@@ -486,20 +481,15 @@ complete_value(Path, #{ defer_target := Upstream } = Ctx,
     end;
 complete_value(_Path, _Ctx, _Ty, _Fields, {ok, null}) ->
     {ok, null, []};
-
 complete_value(Path, _Ctx, {list, _}, _Fields, {ok, V}) when not is_list(V) ->
     err(Path, not_a_list);
-
 complete_value(Path, Ctx, {list, InnerTy}, Fields, {ok, Value}) ->
     complete_value_list(Path, Ctx, InnerTy, Fields, Value);
-
 complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
     complete_value_scalar(Path, ID, RM, Value);
-
 complete_value(_Path, _Ctx, #enum_type { id = ID, resolve_module = RM}, _Fields, {ok, Value}) ->
     %% the enums are scalars too.
     complete_value_scalar(_Path, ID, RM, Value);
-
 complete_value(Path, Ctx, #interface_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
     complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value});
 complete_value(Path, Ctx, #union_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
@@ -789,38 +779,6 @@ resolver_function(#object_type { resolve_module = M }, undefined) ->
 
 %% -- OUTPUT COERCION ------------------------------------
 
-scalar_resolve(id) ->
-    #scalar_type { id = <<"ID">>,
-                   description = <<"Builtin output coercer type">>,
-                   resolve_module = graphql_scalar_binary_coerce
-                   };
-scalar_resolve(string) ->
-    #scalar_type { id = <<"String">>,
-                   description = <<"Builtin output coercer type">>,
-                   resolve_module = graphql_scalar_binary_coerce
-                 };
-scalar_resolve(bool) ->
-    #scalar_type { id = <<"Bool">>,
-                   description = <<"Builtin output coercer type">>,
-                   resolve_module = graphql_scalar_bool_coerce
-                 };
-scalar_resolve(int) ->
-    #scalar_type { id = <<"Int">>,
-                   description = <<"Builtin output coercer type">>,
-                   resolve_module = graphql_scalar_integer_coerce
-                 };
-scalar_resolve(float) ->
-    #scalar_type { id = <<"Float">>,
-                   description = <<"Builtin output coercer type">>,
-                   resolve_module = graphql_scalar_float_coerce
-                 };
-scalar_resolve(#scalar_type{} = SType) -> SType;
-scalar_resolve(UserDefined) when is_binary(UserDefined) ->
-    case graphql_schema:lookup(UserDefined) of
-        #scalar_type{} = SType -> SType;
-        not_found -> not_found
-    end.
-
 builtin_input_coercer(X) ->
     {ok, X}.
 
@@ -870,30 +828,10 @@ value(Ctx, Ty, Val) ->
             Val;
         #enum_type {} ->
             Val;
-        {scalar, ScalarTy} ->
-            %% Built-in scalars are currently handled specially
-            value_scalar(ScalarTy, Val);
         Bin when is_binary(Bin) ->
             LoadedTy = graphql_schema:get(Bin),
             value(Ctx, LoadedTy, Val)
     end.
-
-value_scalar(string, null) -> null;
-value_scalar(string, S) when is_binary(S) -> S;
-value_scalar(id, null) -> null;
-value_scalar(id, S) when is_binary(S) -> S;
-value_scalar(bool, true) -> true;
-value_scalar(bool, false) -> false;
-value_scalar(int, I) when is_integer(I) -> I;
-value_scalar(int, null) -> null;
-value_scalar(float, F) when is_float(F) -> F;
-value_scalar(float, I) when is_integer(I) -> float(I);
-value_scalar(float, null) -> null;
-value_scalar(Ty, V) ->
-    error_logger:error_msg(
-      "Report this: Scalar resolver missing for built-in type: ~p (value: ~p)~n",
-      [Ty, V]),
-    V.
 
 value_object(_, _, []) -> [];
 value_object(Ctx, FieldEnv, [{K, Val} | Rest]) ->

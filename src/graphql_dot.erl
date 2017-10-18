@@ -110,17 +110,7 @@ field({ID, #schema_field { ty = Ty, args = Args }}) ->
     
 arg({ID, #schema_arg{ ty = Ty }}) -> [ID, " : ", ty(Ty)].
 
-ty({scalar, Ty}) -> ty(Ty);
-ty(string) -> "String";
-ty('string!') -> "String!";
-ty(int) -> "Int";
-ty('int!') -> "Int!";
-ty(float) -> "Float";
-ty('float!') -> "Float!";
-ty(bool) -> "Bool";
-ty('bool!') -> "Bool!";
-ty(id) -> "ID";
-ty('id!') -> "ID!";
+ty(#scalar_type { id = Id }) -> Id;
 ty(B) when is_binary(B) -> B;
 ty({list, Ty}) -> ["[", ty(Ty), "]"];
 ty({non_null, Ty}) -> [ty(Ty), "!"].

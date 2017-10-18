@@ -10,10 +10,10 @@ inject() ->
               description => "A test user object",
               fields => #{
                 id => #{
-                  type => string,
+                  type => 'String',
                   description => "The identity of a user" },
                 name => #{
-                  type => string,
+                  type => 'String',
                   description => "The name of the user" }
                }}},
     ok = graphql:insert_schema_definition(User),
@@ -26,11 +26,11 @@ inject() ->
                  user => #{
                    type => 'User',
                    args => #{ id => #{
-                                type => string,
+                                type => 'String',
                                 description => "User ID to fetch"
                                }}},
                  hello => #{
-                   type => string,
+                   type => 'String',
                    description => "Hello World Test"}}}},
     ok = graphql:insert_schema_definition(Query),
 

@@ -118,17 +118,6 @@ c_field_val(M) ->
 c_field_val_ty(#{ type := Ty }) ->
     handle_type(Ty).
 
-handle_type({scalar, T}) -> handle_type(T);
-handle_type('string!') -> {non_null, {scalar, string}};
-handle_type(string) -> {scalar, string};
-handle_type('int!') -> {non_null, {scalar, int}};
-handle_type(int) -> {scalar, int};
-handle_type(float) -> {scalar, float};
-handle_type('float!') -> {non_null, {scalar, float}};
-handle_type(id) -> {scalar, id};
-handle_type('id!') -> {non_null, {scalar, id}};
-handle_type(bool) -> {scalar, bool};
-handle_type('bool!') -> {non_null, {scalar, bool}};
 handle_type({non_null, Ty}) -> {non_null, handle_type(Ty)};
 handle_type([Ty]) -> {list, handle_type(Ty)};
 handle_type({list, Ty}) -> {list, handle_type(Ty)};

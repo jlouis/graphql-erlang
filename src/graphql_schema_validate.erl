@@ -169,11 +169,6 @@ input_type(X) when is_binary(X) ->
             err({invalid_input_type, X})
     end.
 
-scalar(string) -> ok;
-scalar(id) -> ok;
-scalar(float) -> ok;
-scalar(int) -> ok;
-scalar(bool) -> ok;
 scalar(X) -> is_scalar(X).
 
 all(_F, []) -> ok;

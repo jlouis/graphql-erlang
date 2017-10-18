@@ -734,7 +734,7 @@ is_schema() ->
         id => 'TestType',
         description => "A simple test object.",
         fields => #{
-            testField => #{ type => string, description => "A test field" }
+            testField => #{ type => 'String', description => "A test field" }
         }
     }},
     Schema = {root, #{
