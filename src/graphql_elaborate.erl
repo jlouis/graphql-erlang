@@ -222,7 +222,7 @@ field(Path, _OType, #field { id = ID, args = Args, selection_set = SSet, directi
             err([F|Path], unknown_field);
         #schema_field{ ty = Ty, args = SArgs } = SF ->
             {ok, Type} = output_type(Ty),
-            SSet2 = field_lookup([F|Path], Type, SSet),
+            SSet2 = field_sset([F|Path], Type, SSet),
             F#field {
                 args = field_args([F | Path], Args, SArgs),
                 schema = SF#schema_field{ ty = Type },
@@ -243,36 +243,24 @@ field_arg(Path, K, V, SArgs) ->
             {K, #{ type => ElabTy, value => V}}
     end.
 
-field_lookup(Path, {non_null, Obj}, SSet) ->
-    field_lookup(Path, Obj, SSet);
-field_lookup(Path, {list, Obj}, SSet) ->
-    field_lookup(Path, Obj, SSet);
-field_lookup(Path, not_found, _SSet) ->
-    err(Path, unknown_field);
-field_lookup(_Path, {scalar, _}, []) ->
-    [];
-field_lookup(Path, {scalar, _}, [_|_]) ->
-    err(Path, selection_on_scalar);
-field_lookup(Path, #scalar_type{}, [_|_]) ->
-    err(Path, selection_on_scalar);
-field_lookup(Path, #scalar_type{}, SSet) ->
-    [field(Path, undefined, S, #{}) || S <- SSet];
-field_lookup(Path, #object_type{}, []) ->
-    err(Path, fieldless_object);
-field_lookup(Path, #object_type{ fields = Fields } = OType, SSet) ->
-    [field(Path, OType, S, Fields) || S <- SSet];
-field_lookup(Path, #interface_type{}, []) ->
-    err(Path, fieldless_interface);
-field_lookup(Path, #interface_type{ fields = Fields } = IType, SSet) ->
-    [field(Path, IType, S, Fields) || S <- SSet];
-field_lookup(Path, #union_type{} = UType, SSet) ->
-    [field(Path, UType, S, #{}) || S <- SSet];
-field_lookup(_Path, #enum_type{}, []) ->
-    [];
-field_lookup(Path, #enum_type{}, _SSet) ->
-    err(Path, selection_on_enum).
+%% Evaluate the Type of a field and its selection set in order to
+%% elaborate the selection set of fields according to the type given
+field_sset(Path, {non_null, Obj}, SSet)                            -> field_sset(Path, Obj, SSet);
+field_sset(Path, {list, Obj}, SSet)                                -> field_sset(Path, Obj, SSet);
+field_sset(Path, not_found, _SSet)                                 -> err(Path, unknown_field);
+field_sset(_Path, {scalar, _}, [])                                 -> [];
+field_sset(Path, {scalar, _}, [_|_])                               -> err(Path, selection_on_scalar);
+field_sset(Path, #scalar_type{}, [_|_])                            -> err(Path, selection_on_scalar);
+field_sset(Path, #scalar_type{}, SSet)                             -> [field(Path, undefined, S, #{}) || S <- SSet];
+field_sset(Path, #object_type{}, [])                               -> err(Path, fieldless_object);
+field_sset(Path, #object_type{ fields = Fields } = OType, SSet)    -> [field(Path, OType, S, Fields) || S <- SSet];
+field_sset(Path, #interface_type{}, [])                            -> err(Path, fieldless_interface);
+field_sset(Path, #interface_type{ fields = Fields } = IType, SSet) -> [field(Path, IType, S, Fields) || S <- SSet];
+field_sset(Path, #union_type{} = UType, SSet)                      -> [field(Path, UType, S, #{}) || S <- SSet];
+field_sset(_Path, #enum_type{}, [])                                -> [];
+field_sset(Path, #enum_type{}, _SSet)                              -> err(Path, selection_on_enum).
 
-%% -- Error Handling
+%% -- ERROR HANDLING ------------------------------------------
 -spec err(term(), term()) -> no_return().
 err(Path, Reason) ->
     graphql_err:abort(Path, elaborate, Reason).

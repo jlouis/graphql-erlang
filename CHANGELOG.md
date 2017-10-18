@@ -10,6 +10,10 @@ the compatibility issues you are likely to encounter.
 
 ## [Unreleased]
 
+### Refactored
+- Refactor all of the elaborator phase in the system. Improve and
+  simplify its flow.
+
 ### Removed
 - The default resolver, which has never been in official documentation
   has been removed from the source code. This simplifies the execution
