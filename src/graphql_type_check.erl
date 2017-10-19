@@ -258,14 +258,30 @@ frag(Ctx, Path, #frag {selection_set = SSet} = Frag) ->
 
 %% -- OPERATIONS -------------------------------
 
+%% Type check an operation.
 op(Ctx, Path, #op { vardefs = VDefs, selection_set = SSet} = Op) ->
     VarEnv = graphql_elaborate:mk_varenv(VDefs),
     Op#op { selection_set = sset(Ctx#{ varenv => VarEnv }, [id(Op) | Path], SSet) }.
 
 %% -- SELECTION SETS ------------------------------------
+
+%% Type check a selection set by recursing into each field in the selection
 sset(Ctx, Path, SSet) ->
     [field(Ctx, Path, S) || S <- SSet].
 
+%% Fields are either fragment spreads, inline fragments, introspection
+%% queries or true field entries. Split on the variant of field and
+%% handle each accordingly.
+%%
+%% Handling fields themselves is a congruence over its
+%% (sub-)selection-set.
+%%
+%% The key is to type-check directives and eventual arguments to
+%% fields in this recursion.
+%%
+%% Since fields have negative polarity, we only consider type checking
+%% of the fields which the client requested. Every other field is
+%% ignored.
 field(#{ fragenv := FE } = Ctx, Path, #frag_spread { id = ID, directives = Ds } = FSpread) ->
     Name = graphql_ast:name(ID),
     case maps:get(Name, FE, not_found) of
@@ -294,6 +310,9 @@ field(Ctx, Path, #field { args = Args,
               selection_set = sset(Ctx, [F | Path], SSet) }.
 
 %% -- DIRECTIVES --------------------------------
+
+%% Type check directives. These can take arguments, so type checking
+%% these amounts to type checking the arguments inside the directive.
 directives(Ctx, Path, Ds) ->
     [directive(Ctx, Path, D) || D <- Ds].
 
@@ -303,23 +322,30 @@ directive(Ctx, Path,
     D#directive { args = args(Ctx, [D | Path], Args, SArgs) }.
 
 %% -- ARGS -------------------------------------
+
+%% Type checking of arguments to fields, directives, ...
+%%
+%% Arguments must be unique.
+%%
+%% Since arguments have positive polarity, they are checked according
+%% to the schema arguments.
 args(Ctx, Path, Args, Schema) ->
-    NArgs = names(Args),
-    case uniq(lists:sort(NArgs)) of
+    NamedArgs = [{graphql_ast:name(K), V} || {K, V} <- Args],
+    case uniq(lists:sort(NamedArgs)) of
         ok ->
           SchemaArgs = maps:to_list(Schema),
-          args_(Ctx, Path, NArgs, SchemaArgs, []);
+          args(Ctx, Path, NamedArgs, SchemaArgs, []);
         {not_unique, X} ->
             err(Path, {not_unique, X})
     end.
 
-names(Args) -> [{graphql_ast:name(K), V} || {K, V} <- Args].
-
-args_(_Ctx, _Path, [], [], Acc) -> Acc;
-args_(_Ctx, Path, [_|_] = Args, [], _Acc) ->
+%% The meat of the argument checker. Walk over each schema arg and
+%% verify it type checks according to the type checking rules.
+args(_Ctx, _Path, [], [], Acc) -> Acc;
+args(_Ctx, Path, [_|_] = Args, [], _Acc) ->
     err(Path, {excess_args, Args});
-args_(Ctx, Path, Args, [{Name, #schema_arg { ty = STy }} = SArg | Next], Acc) ->
-    case find_arg(Args, SArg) of
+args(Ctx, Path, Args, [{Name, #schema_arg { ty = STy }} = SArg | Next], Acc) ->
+    case take_arg(Args, SArg) of
         {error, Reason} ->
             err([Name | Path], Reason);
         {ok, {_, #{ type := Ty, value := Val}} = A, NextArgs} ->
@@ -333,24 +359,26 @@ args_(Ctx, Path, Args, [{Name, #schema_arg { ty = STy }} = SArg | Next], Acc) ->
                     err(Path, {type_mismatch,
                                #{ id => Name, document => Got, schema => Expected }});
                 ok ->
-                    args_(Ctx, Path, NextArgs, Next, [A | Acc]);
+                    args(Ctx, Path, NextArgs, Next, [A | Acc]);
                 Val ->
-                    args_(Ctx, Path, NextArgs, Next, [A | Acc]);
+                    args(Ctx, Path, NextArgs, Next, [A | Acc]);
                 RVal ->
-                    args_(Ctx, Path, NextArgs, Next, [{Name, {Ty, RVal}} | Acc])
+                    args(Ctx, Path, NextArgs, Next, [{Name, {Ty, RVal}} | Acc])
             end
     end.
 
-%% Search a list of arguments for the next argument. Handle non-null values
-%% correctly as we are conducting the search
-find_arg(Args, {Key, #schema_arg { ty = {non_null, _}, default = null}}) ->
+%% Search a list of arguments for the next argument. Handle non-null
+%% values correctly as we are conducting the search. Return both the
+%% arg found and the remaining set of arguments so we can eventually
+%% check if we exhausted the full set.
+take_arg(Args, {Key, #schema_arg { ty = {non_null, _}, default = null}}) ->
     case lists:keytake(Key, 1, Args) of
         false ->
             {error, missing_non_null_param};
         {value, Arg, NextArgs} ->
             {ok, Arg, NextArgs}
     end;
-find_arg(Args, {Key, #schema_arg { ty = Ty, default = Default }}) ->
+take_arg(Args, {Key, #schema_arg { ty = Ty, default = Default }}) ->
     case lists:keytake(Key, 1, Args) of
         false ->
             {ok, {Key, #{ type => Ty, value => Default }}, Args};
@@ -358,6 +386,8 @@ find_arg(Args, {Key, #schema_arg { ty = Ty, default = Default }}) ->
             {ok, Arg, NextArgs}
     end.
 
+%% Determine if an association list has unique keys
+-spec uniq([{term(), term()}]) -> ok | {not_unique, term()}.
 uniq([]) -> ok;
 uniq([_]) -> ok;
 uniq([{X, _}, {X, _} | _]) -> {not_unique, X};
