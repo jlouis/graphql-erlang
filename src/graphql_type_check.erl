@@ -91,7 +91,8 @@ tc_params(Path, TyVarEnv, InitialParams) ->
     F =
       fun(K, V0, PS) ->
         case tc_param(Path, K, V0, maps:get(K, PS, not_found)) of
-            {replace, V1} -> PS#{ K => V1 }
+            V0 -> PS;
+            V1 -> PS#{ K => V1 }
         end
       end,
     maps:fold(F, InitialParams, TyVarEnv).
@@ -103,21 +104,25 @@ tc_params(Path, TyVarEnv, InitialParams) ->
 tc_param(Path, K, #vardef { ty = {non_null, _}, default = null }, not_found) ->
     err([K | Path], missing_non_null_param);
 tc_param(_Path, _K, #vardef { default = Default }, not_found) ->
-    {replace, Default};
+    Default;
 tc_param(Path, K, #vardef { ty = Ty }, Val) ->
     check_param([K | Path], Ty, Val).
 
 %% When checking params, the top level has been elaborated by the
 %% elaborator, but the levels under it has not. So we have a case where
 %% we need to look up underlying types and check them.
+%%
+%% This function case-splits on different types of positive polarity and
+%% calls out to the correct helper-function
 check_param(Path, {non_null, Ty}, V) -> check_param(Path, Ty, V);
 check_param(Path, #scalar_type{} = STy, V) -> input_coerce_scalar(Path, STy, V);
 check_param(Path, #enum_type{} = ETy, {enum, V}) when is_binary(V) ->
     check_param(Path, ETy, V);
 check_param(Path, #enum_type { id = Ty }, V) when is_binary(V) ->
+    %% Determine the type of any enum term, and then coerce it
     case graphql_schema:lookup_enum_type(V) of
-        #enum_type { id = Ty } = Et ->
-            input_coercer(Path, Et, V);
+        #enum_type { id = Ty } = ETy ->
+            input_coercer(Path, ETy, V);
         not_found ->
             err(Path, {enum_not_found, Ty, V});
         OtherTy ->
@@ -126,11 +131,7 @@ check_param(Path, #enum_type { id = Ty }, V) when is_binary(V) ->
 check_param(Path, {list, T}, L) when is_list(L) ->
     %% Build a dummy structure to match the recursor. Unwrap this
     %% structure before replacing the list parameter.
-    NewList = [
-        case check_param(Path, T, X) of
-            {replace, X2} -> X2
-        end || X <- L],
-    {replace, NewList};
+    [check_param(Path, T, X) || X <- L];
 check_param(Path, #input_object_type{} = IOType, Obj) when is_map(Obj) ->
     check_input_object(Path, IOType, Obj);
 %% The following expands un-elaborated (nested) types
@@ -146,30 +147,33 @@ check_param(Path, Ty, V) when is_binary(Ty) ->
 check_param(Path, Ty, V) ->
     err(Path, {param_mismatch, Ty, V}).
 
+%% Input objects are first coerced. Then they are checked.
 check_input_object(Path, #input_object_type{ fields = Fields }, Obj) ->
-    Coerced = coerce_object(Obj),
-    {replace, check_object_fields(Path, maps:to_list(Fields), Coerced, #{})}.
+    Coerced = coerce_input_object(Obj),
+    check_input_object_fields(Path, maps:to_list(Fields), Coerced, #{}).
 
-check_object_fields(Path, [], Obj, Result) ->
+%% Input objects are in positive polarity, so the schema's fields are used
+%% to verify that every field is present, and that there are no excess fields
+%% As we process fields in the object, we remove them so we can check that
+%% there are no more fields in the end.
+check_input_object_fields(Path, [], Obj, Result) ->
     case maps:size(Obj) of
         0 -> Result;
         K when K > 0 -> err(Path, {excess_fields_in_object, Obj})
     end;
-check_object_fields(Path, [{Name, #schema_arg { ty = Ty, default = Def }} | Next], Obj, Result) ->
+check_input_object_fields(Path, [{Name, #schema_arg { ty = Ty, default = Default }} | Next], Obj, Result) ->
     Val = case maps:get(Name, Obj, not_found) of
-        not_found ->
-            case {Def, Ty} of
-                {null, {non_null, _}} ->
-                    err([Name | Path], missing_non_null_param);
-                {Def, _} ->
-                    Def
-            end;
-        V ->
-            case check_param([Name | Path], Ty, V) of
-                {replace, V2} -> V2
-            end
-    end,
-    check_object_fields(Path, Next, maps:remove(Name, Obj), Result#{ Name => Val }).
+              not_found ->
+                  case Ty of
+                      {non_null, _} when Default == null ->
+                          err([Name | Path], missing_non_null_param);
+                      _ ->
+                          Default
+                  end;
+              V ->
+                  check_param([Name | Path], Ty, V)
+          end,
+    check_input_object_fields(Path, Next, maps:remove(Name, Obj), Result#{ Name => Val }).
 
 input_coerce_scalar(Path, #scalar_type {} = SType, Val) ->
     input_coercer(Path, SType, Val).
@@ -184,11 +188,9 @@ input_coercer(Path, #enum_type { id = ID, resolve_module = ResolveModule}, Value
 complete_value_scalar(Path, ID, ResolveModule, Value) ->
     try ResolveModule:input(ID, Value) of
         {ok, NewVal} ->
-            {replace, NewVal};
-
+            NewVal;
         {error, Reason} ->
             graphql_err:abort(Path, {input_coercion, ID, Value, Reason})
-
     catch
         Cl:Err ->
             error_report(ID, Value, Cl, Err),
@@ -283,16 +285,18 @@ tc_args_(Ctx, Path, Args, [{Name, #schema_arg { ty = STy }} = SArg | Next], Acc)
             ValueType = value_type(Ctx, Path, Ty, Val),
             SchemaType = schema_type(STy),
             case refl(Path, ValueType, SchemaType) of
-                ok ->
-                    tc_args_(Ctx, Path, NextArgs, Next, [A | Acc]);
-                {replace, RVal} ->
-                    tc_args_(Ctx, Path, NextArgs, Next, [{Name, {Ty, RVal}} | Acc]);
                 {error, Expected} ->
                     err(Path, {type_mismatch,
                                #{ id => Name, schema => Expected }});
                 {error, Got, Expected} ->
                     err(Path, {type_mismatch,
-                               #{ id => Name, document => Got, schema => Expected }})
+                               #{ id => Name, document => Got, schema => Expected }});
+                ok ->
+                    tc_args_(Ctx, Path, NextArgs, Next, [A | Acc]);
+                Val ->
+                    tc_args_(Ctx, Path, NextArgs, Next, [A | Acc]);
+                RVal ->
+                    tc_args_(Ctx, Path, NextArgs, Next, [{Name, {Ty, RVal}} | Acc])
             end
     end.
 
@@ -368,20 +372,22 @@ value_type(_Ctx, _Path, _, I) when is_integer(I) -> {scalar, int, I};
 value_type(_Ctx, _Path, _, F) when is_float(F) -> {scalar, float, F};
 value_type(_Ctx, _Path, _, true) -> {scalar, bool, true};
 value_type(_Ctx, _Path, _, false) -> {scalar, bool, false};
-value_type(_Ctx, _Path, _, Obj) when is_map(Obj) -> coerce_object(Obj);
+value_type(_Ctx, _Path, _, Obj) when is_map(Obj) -> coerce_input_object(Obj);
 value_type(_Ctx, Path, Ty, Val) ->
     err(Path, {invalid_value_type_coercion, Ty, Val}).
 
 refl_list(_Path, [], _T, Result) ->
-    {replace, lists:reverse(Result)};
+    lists:reverse(Result);
 refl_list(Path, [{A, V}|As], T, Acc) ->
     case refl(Path, A, T) of
+        {error, _Reason} ->
+            {error, {list, T}};
         ok ->
             refl_list(Path, As, T, [V|Acc]);
-        {replace, RV} ->
-            refl_list(Path, As, T, [RV|Acc]);
-        {error, _Reason} ->
-            {error, {list, T}}
+        V ->
+            refl_list(Path, As, T, [V|Acc]);
+        RV ->
+            refl_list(Path, As, T, [RV|Acc])
    end.
 
 %% EQ Match:
@@ -404,14 +410,15 @@ refl(Path, {scalar, Tag, V}, #scalar_type { id = ID } = SType) ->
         bool -> input_coercer(Path, SType, V);
         ID -> input_coercer(Path, SType, V)
     end;
-refl(_Path, #input_object_type { id = ID }, {input_object, #input_object_type { id = ID }}) ->
+refl(_Path, #input_object_type { id = ID },
+            {input_object, #input_object_type { id = ID }}) ->
     ok;
 refl(Path, Obj, #input_object_type{} = Ty) when is_map(Obj) ->
     check_input_object(Path, Ty, Obj);
 %% Failure:
 refl(_Path, A, T) -> {error, A, T}.
 
-coerce_object(Obj) when is_map(Obj) ->
+coerce_input_object(Obj) when is_map(Obj) ->
     coerce_object_(Obj).
 
 coerce_object_(Obj) when is_map(Obj) ->
