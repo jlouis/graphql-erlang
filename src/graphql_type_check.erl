@@ -223,7 +223,7 @@ check_input_object_fields(Path,
 %% Handle non-polar inputs
 non_polar_coerce(_Path,
                  #enum_type { resolve_module = undefined }, Value) ->
-    {ok, Value};
+    Value;
 non_polar_coerce(Path,
                  #enum_type { id = ID,
                               resolve_module = ResolveModule }, Value) ->
@@ -236,7 +236,8 @@ non_polar_coerce(Path,
 resolve_input_coercion(Path, ID, ResolveModule, Value) ->
     try ResolveModule:input(ID, Value) of
         {ok, NewVal} -> NewVal;
-        {error, Reason} -> graphql_err:abort(Path, {input_coercion, ID, Value, Reason})
+        {error, Reason} -> graphql_err:abort(Path,
+                                             {input_coercion, ID, Value, Reason})
     catch
         Cl:Err ->
             error_report({input_coercer, ID, Value}, Cl, Err),
