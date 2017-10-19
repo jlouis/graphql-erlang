@@ -1,5 +1,25 @@
 %%% @doc Type checking of GraphQL query documents
 %%%
+%%% The type checker carries out three tasks:
+%%%
+%%% Make sure that types check. That is, the user supplies a well
+%%% typed query document.
+%%%
+%%% Make sure that types are properly inferred. Some times, the types
+%%% the user supply needs an inference pass in order to figure out
+%%% what the user supplied. The type-checker also infers the possible
+%%% types and makes sure the query document is well typed.
+%%%
+%%% Handle coercion for the constant fragment of a query document.
+%%% Whenever a coercible constant value is encountered in a query
+%%% document, or a coercible parameter occurs in a parameter, the type
+%%% checker runs "input coercion" which is part canonicalization, part
+%%% input validation on input data. The coerved value is expanded into
+%%% the query document or parameter string, so the execution engine
+%%% always works with coerced data. This choice is somewhat peculiar,
+%%% but it serves an optimization purpose since we only have to carry
+%%% out a coercion once for a query with constant values.
+%%%
 %%% @end
 -module(graphql_type_check).
 
@@ -161,48 +181,49 @@ check_input_object_fields(Path, [], Obj, Result) ->
         0 -> Result;
         K when K > 0 -> err(Path, {excess_fields_in_object, Obj})
     end;
-check_input_object_fields(Path, [{Name, #schema_arg { ty = Ty, default = Default }} | Next], Obj, Result) ->
-    Val = case maps:get(Name, Obj, not_found) of
-              not_found ->
-                  case Ty of
-                      {non_null, _} when Default == null ->
-                          err([Name | Path], missing_non_null_param);
-                      _ ->
-                          Default
-                  end;
-              V ->
-                  check_param([Name | Path], Ty, V)
-          end,
-    check_input_object_fields(Path, Next, maps:remove(Name, Obj), Result#{ Name => Val }).
+check_input_object_fields(Path,
+                          [{Name, #schema_arg { ty = Ty,
+                                                default = Default }} | Next],
+                          Obj,
+                          Result) ->
+    CoercedVal = case maps:get(Name, Obj, not_found) of
+                     not_found ->
+                         case Ty of
+                             {non_null, _} when Default == null ->
+                                 err([Name | Path], missing_non_null_param);
+                             _ ->
+                                 Default
+                         end;
+                     V ->
+                         check_param([Name | Path], Ty, V)
+                 end,
+    check_input_object_fields(Path,
+                              Next,
+                              maps:remove(Name, Obj),
+                              Result#{ Name => CoercedVal }).
 
 %% Handle non-polar inputs
-non_polar_coerce(_Path, #enum_type { resolve_module = undefined }, Value) ->
+non_polar_coerce(_Path,
+                 #enum_type { resolve_module = undefined }, Value) ->
     {ok, Value};
-non_polar_coerce(Path, #enum_type { id = ID, resolve_module = ResolveModule }, Value) ->
-    complete_value_scalar(Path, ID, ResolveModule, Value);
-non_polar_coerce(Path, #scalar_type { id = ID, resolve_module = ResolveModule }, Value) ->
-    complete_value_scalar(Path, ID, ResolveModule, Value).
+non_polar_coerce(Path,
+                 #enum_type { id = ID,
+                              resolve_module = ResolveModule }, Value) ->
+    resolve_input_coercion(Path, ID, ResolveModule, Value);
+non_polar_coerce(Path,
+                 #scalar_type { id = ID,
+                                resolve_module = ResolveModule }, Value) ->
+    resolve_input_coercion(Path, ID, ResolveModule, Value).
 
-
-complete_value_scalar(Path, ID, ResolveModule, Value) ->
+resolve_input_coercion(Path, ID, ResolveModule, Value) ->
     try ResolveModule:input(ID, Value) of
-        {ok, NewVal} ->
-            NewVal;
-        {error, Reason} ->
-            graphql_err:abort(Path, {input_coercion, ID, Value, Reason})
+        {ok, NewVal} -> NewVal;
+        {error, Reason} -> graphql_err:abort(Path, {input_coercion, ID, Value, Reason})
     catch
         Cl:Err ->
-            error_report(ID, Value, Cl, Err),
+            error_report({input_coercer, ID, Value}, Cl, Err),
             err(Path, {input_coerce_abort, {Cl, Err}})
     end.
-
-error_report(ID, Val, Cl, Err) ->
-  error_logger:error_report(
-    [
-     {input_coercer, ID, Val},
-     {error, Cl, Err},
-     {stack, erlang:get_stacktrace()}
-    ]).
 
 %% -- FRAGMENTS --------------------------------
 
@@ -491,3 +512,12 @@ err_msg({invalid_value_type_coercion, Ty, Val}) ->
     io_lib:format(
       "The value ~p cannot be coerced into the type ~p",
       [Val, Ty]).
+
+%% Tell the error logger that something is off
+error_report(Term, Cl, Err) ->
+  error_logger:error_report(
+    [
+     Term,
+     {error, Cl, Err},
+     {stack, erlang:get_stacktrace()}
+    ]).
