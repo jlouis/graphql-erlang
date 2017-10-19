@@ -23,22 +23,23 @@ x(Doc) ->
     x(#{}, Doc).
 
 x(Ctx, {document, Clauses}) ->
-   tc(Ctx, [document], Clauses).
+   type_check(Ctx, [document], Clauses).
 
-tc(Ctx, Path, Clauses) ->
+type_check(Ctx, Path, Clauses) ->
    {Fragments, _Rest} = fragments(Clauses),
    FragCtx = Ctx#{ fragenv => mk_fragenv(Fragments) },
-   NewClauses = tc_clauses(FragCtx, Path, Clauses),
+   NewClauses = clauses(FragCtx, Path, Clauses),
    {ok, #{
        fun_env => graphql_elaborate:mk_funenv(NewClauses),
        ast => {document, NewClauses}
    }}.
 
-tc_clauses(Ctx, Path, Cs) ->
-    [tc_clause(Ctx, Path, C) || C <- Cs].
-
-tc_clause(Ctx, Path, #frag{} = Frag) -> tc_frag(Ctx, Path, Frag);
-tc_clause(Ctx, Path, #op{} = Op) -> tc_op(Ctx, Path, Op).
+clauses(_Ctx, _Path, []) ->
+    [];
+clauses(Ctx, Path, [#frag{} = Frag | Next]) ->
+    [frag(Ctx, Path, Frag) | clauses(Ctx, Path, Next)];
+clauses(Ctx, Path, [#op{} = Op | Next]) ->
+    [op(Ctx, Path, Op) | clauses(Ctx, Path, Next)].
 
 %% -- TYPE CHECK OF PARAMETER ENVS ------------------
 
@@ -53,6 +54,7 @@ tc_clause(Ctx, Path, #op{} = Op) -> tc_op(Ctx, Path, Op).
 %% input parameters can not be coerced into the parameters expected by
 %% the function scheme, and error occurs.
 
+%% Determine the operation in the query which is the one to execute
 get_operation(FunEnv, undefined, Params) ->
     case maps:to_list(FunEnv) of
         [] when Params == #{} ->
@@ -68,6 +70,9 @@ get_operation(FunEnv, undefined, Params) ->
 get_operation(FunEnv, OpName, _Params) ->
     maps:get(OpName, FunEnv, not_found).
 
+%% This is the entry-point when checking parameters for an already parsed,
+%% type checked and internalized query. It serves to verify that a requested
+%% operation and its parameters matches the types in the operation referenced
 -spec x_params(any(), any(), any()) -> graphql:param_context().
 x_params(FunEnv, OpName, Params) ->
     case get_operation(FunEnv, OpName, Params) of
@@ -79,6 +84,9 @@ x_params(FunEnv, OpName, Params) ->
             tc_params([OpName], TyVarEnv, Params)
     end.
 
+%% Parameter checking has positive polarity, so we fold over
+%% the type var environment from the schema and verify that each
+%% type is valid
 tc_params(Path, TyVarEnv, InitialParams) ->
     F =
       fun(K, V0, PS) ->
@@ -86,8 +94,12 @@ tc_params(Path, TyVarEnv, InitialParams) ->
             {replace, V1} -> PS#{ K => V1 }
         end
       end,
-    maps:fold(F, InitialParams, (TyVarEnv)).
+    maps:fold(F, InitialParams, TyVarEnv).
 
+%% When checking parameters, we must consider the case of default values.
+%% If a given parameter is not given, and there is a default, we can supply
+%% the default value in some cases. The spec requires special handling of
+%% null values, which are handled here.
 tc_param(Path, K, #vardef { ty = {non_null, _}, default = null }, not_found) ->
     err([K | Path], missing_non_null_param);
 tc_param(_Path, _K, #vardef { default = Default }, not_found) ->
@@ -98,7 +110,6 @@ tc_param(Path, K, #vardef { ty = Ty }, Val) ->
 %% When checking params, the top level has been elaborated by the
 %% elaborator, but the levels under it has not. So we have a case where
 %% we need to look up underlying types and check them.
-
 check_param(Path, {non_null, Ty}, V) -> check_param(Path, Ty, V);
 check_param(Path, #scalar_type{} = STy, V) -> input_coerce_scalar(Path, STy, V);
 check_param(Path, #enum_type{} = ETy, {enum, V}) when is_binary(V) ->
@@ -201,12 +212,12 @@ mk_fragenv(Frags) ->
     F = fun(#frag { id = ID } = Frag) -> {graphql_ast:name(ID), Frag} end,
     maps:from_list([F(Frg) || Frg <- Frags]).
 
-tc_frag(Ctx, Path, #frag {selection_set = SSet} = Frag) ->
+frag(Ctx, Path, #frag {selection_set = SSet} = Frag) ->
     Frag#frag { selection_set = tc_sset(Ctx, Path, SSet) }.
 
 %% -- OPERATIONS -------------------------------
 
-tc_op(Ctx, Path, #op { vardefs = VDefs, selection_set = SSet} = Op) ->
+op(Ctx, Path, #op { vardefs = VDefs, selection_set = SSet} = Op) ->
     VarEnv = graphql_elaborate:mk_varenv(VDefs),
     Op#op { selection_set = tc_sset(Ctx#{ varenv => VarEnv }, [id(Op) | Path], SSet) }.
 
