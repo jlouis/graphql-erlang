@@ -20,6 +20,21 @@
 %%% but it serves an optimization purpose since we only have to carry
 %%% out a coercion once for a query with constant values.
 %%%
+%%% Polarity:
+%%%
+%%% This type checker mentions polarity of types. There are 3 kinds of
+%%% polarity: positive, negative and non-polar. The flows of these are
+%%% that Client -> Server is positive and Server -> Client is
+%%% negative. Non-polar types flows both ways. Since the server engine
+%%% doesn't trust the client, type checking follows some polarity
+%%% rules. If we check a positive polarity context, we don't trust the
+%%% client and we use the schema data to verify that everything is
+%%% covered by the client in a valid way. If we check in negative
+%%% polarity context, we are the server and can trust things are
+%%% correct. So we fold over the query document when considering if
+%%% types are correct. Non-polar values fall naturally in both
+%%% contexts.
+%%%
 %%% @end
 -module(graphql_type_check).
 
