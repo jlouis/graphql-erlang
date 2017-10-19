@@ -115,14 +115,14 @@ tc_param(Path, K, #vardef { ty = Ty }, Val) ->
 %% This function case-splits on different types of positive polarity and
 %% calls out to the correct helper-function
 check_param(Path, {non_null, Ty}, V) -> check_param(Path, Ty, V);
-check_param(Path, #scalar_type{} = STy, V) -> input_coerce_scalar(Path, STy, V);
+check_param(Path, #scalar_type{} = STy, V) -> non_polar_coerce(Path, STy, V);
 check_param(Path, #enum_type{} = ETy, {enum, V}) when is_binary(V) ->
     check_param(Path, ETy, V);
 check_param(Path, #enum_type { id = Ty }, V) when is_binary(V) ->
     %% Determine the type of any enum term, and then coerce it
     case graphql_schema:lookup_enum_type(V) of
         #enum_type { id = Ty } = ETy ->
-            input_coercer(Path, ETy, V);
+            non_polar_coerce(Path, ETy, V);
         not_found ->
             err(Path, {enum_not_found, Ty, V});
         OtherTy ->
@@ -137,7 +137,7 @@ check_param(Path, #input_object_type{} = IOType, Obj) when is_map(Obj) ->
 %% The following expands un-elaborated (nested) types
 check_param(Path, Ty, V) when is_binary(Ty) ->
     case graphql_schema:lookup(Ty) of
-        #scalar_type {} = ScalarTy -> input_coerce_scalar(Path, ScalarTy, V);
+        #scalar_type {} = ScalarTy -> non_polar_coerce(Path, ScalarTy, V);
         #input_object_type {} = IOType -> check_input_object(Path, IOType, V);
         #enum_type {} = Enum -> check_param(Path, Enum, V);
         _ ->
@@ -175,15 +175,14 @@ check_input_object_fields(Path, [{Name, #schema_arg { ty = Ty, default = Default
           end,
     check_input_object_fields(Path, Next, maps:remove(Name, Obj), Result#{ Name => Val }).
 
-input_coerce_scalar(Path, #scalar_type {} = SType, Val) ->
-    input_coercer(Path, SType, Val).
-
-input_coercer(Path, #scalar_type { id = ID, resolve_module = RM}, Value) ->
-    complete_value_scalar(Path, ID, RM, Value);
-input_coercer(_Path, #enum_type { id = _ID, resolve_module = undefined }, Value) ->
+%% Handle non-polar inputs
+non_polar_coerce(_Path, #enum_type { resolve_module = undefined }, Value) ->
     {ok, Value};
-input_coercer(Path, #enum_type { id = ID, resolve_module = ResolveModule}, Value) ->
+non_polar_coerce(Path, #enum_type { id = ID, resolve_module = ResolveModule }, Value) ->
+    complete_value_scalar(Path, ID, ResolveModule, Value);
+non_polar_coerce(Path, #scalar_type { id = ID, resolve_module = ResolveModule }, Value) ->
     complete_value_scalar(Path, ID, ResolveModule, Value).
+
 
 complete_value_scalar(Path, ID, ResolveModule, Value) ->
     try ResolveModule:input(ID, Value) of
@@ -404,11 +403,11 @@ refl(Path, A, {non_null, T}) -> refl(Path, A, T);
 %% Ground:
 refl(Path, {scalar, Tag, V}, #scalar_type { id = ID } = SType) ->
     case Tag of
-        string -> input_coercer(Path, SType, V);
-        int -> input_coercer(Path, SType, V);
-        float -> input_coercer(Path, SType, V);
-        bool -> input_coercer(Path, SType, V);
-        ID -> input_coercer(Path, SType, V)
+        string -> non_polar_coerce(Path, SType, V);
+        int -> non_polar_coerce(Path, SType, V);
+        float -> non_polar_coerce(Path, SType, V);
+        bool -> non_polar_coerce(Path, SType, V);
+        ID -> non_polar_coerce(Path, SType, V)
     end;
 refl(_Path, #input_object_type { id = ID },
             {input_object, #input_object_type { id = ID }}) ->
