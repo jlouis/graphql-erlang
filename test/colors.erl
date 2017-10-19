@@ -25,18 +25,18 @@ inject() ->
      				'fromEnum' =>
      				    #{ type => 'Color', description => "" },
 				'fromInt' =>
-				    #{ type => int, description => "" },
+				    #{ type => 'Int', description => "" },
 				'fromString' =>
-				    #{ type => string, description => "" }
+				    #{ type => 'String', description => "" }
 			},
 			resolve => fun color_enum/3
 		},
 		colorInt => #{
-			type => int,
+			type => 'Int',
 			description => "Colors as integers",
 			args => #{
 				fromEnum => #{ type => 'Color', description => "" },
-				fromInt => #{ type => int, description => "" }
+				fromInt => #{ type => 'Int', description => "" }
 			},
 			resolve => fun color_int/3
 		}

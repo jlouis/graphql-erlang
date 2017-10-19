@@ -127,12 +127,6 @@ is_object(Obj) ->
         _ -> err({not_object, Obj})
     end.
 
-is_scalar(Obj) ->
-    case lookup(Obj) of
-        #scalar_type{} -> ok;
-        _ -> err({not_scalar, Obj})
-    end.
-
 is_union_type(Obj) ->
     case lookup(Obj) of
         #object_type{} -> ok;
@@ -141,7 +135,6 @@ is_union_type(Obj) ->
 
 type({non_null, T}) -> type(T);
 type({list, T}) -> type(T);
-type({scalar, S}) -> scalar(S);
 type(X) when is_binary(X) ->
     case lookup(X) of
         #input_object_type {} ->
@@ -153,28 +146,14 @@ type(X) when is_binary(X) ->
 
 input_type({non_null, T}) -> input_type(T);
 input_type({list, T}) -> input_type(T);
-input_type({scalar, S}) -> scalar(S);
 input_type(X) when is_binary(X) ->
     case lookup(X) of
-        #input_object_type {} ->
-            ok;
-
-        #enum_type {} ->
-            ok;
-
-        #scalar_type {} ->
-            ok;
-
+        #input_object_type {} -> ok;
+        #enum_type {} -> ok;
+        #scalar_type {} -> ok;
         _V ->
             err({invalid_input_type, X})
     end.
-
-scalar(string) -> ok;
-scalar(id) -> ok;
-scalar(float) -> ok;
-scalar(int) -> ok;
-scalar(bool) -> ok;
-scalar(X) -> is_scalar(X).
 
 all(_F, []) -> ok;
 all(F, [E|Es]) ->

@@ -61,7 +61,6 @@ type({list, Ty}) ->
         {error, Reason} -> {error, Reason};
         {Polarity, V} -> {Polarity, {list, V}}
     end;
-type({scalar, _} = S) -> {'*', S};
 type(#scalar_type{} = Ty) -> {'*', Ty};
 type({enum, _} = E) -> {'*', E};
 type(#enum_type{} = Ty) -> {'*', Ty};
@@ -248,8 +247,6 @@ field_arg(Path, K, V, SArgs) ->
 field_sset(Path, {non_null, Obj}, SSet)                            -> field_sset(Path, Obj, SSet);
 field_sset(Path, {list, Obj}, SSet)                                -> field_sset(Path, Obj, SSet);
 field_sset(Path, not_found, _SSet)                                 -> err(Path, unknown_field);
-field_sset(_Path, {scalar, _}, [])                                 -> [];
-field_sset(Path, {scalar, _}, [_|_])                               -> err(Path, selection_on_scalar);
 field_sset(Path, #scalar_type{}, [_|_])                            -> err(Path, selection_on_scalar);
 field_sset(Path, #scalar_type{}, SSet)                             -> [field(Path, undefined, S, #{}) || S <- SSet];
 field_sset(Path, #object_type{}, [])                               -> err(Path, fieldless_object);
