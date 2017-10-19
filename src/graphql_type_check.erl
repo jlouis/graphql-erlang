@@ -452,7 +452,7 @@ refl(Path, {list, As}, {list, T}) ->
     refl_list(Path, As, T, []);
 refl(Path, {non_null, ValueType}, {non_null, SchemaType}) ->
     refl(Path, ValueType, SchemaType);
-refl(_Path, kull, {non_null, _}) -> {error, non_null};
+refl(_Path, null, {non_null, _}) -> {error, non_null};
 refl(_Path, null, _T) -> ok;
 refl(Path, {non_null, A}, T) -> refl(Path, A, T);
 refl(Path, A, {non_null, T}) -> refl(Path, A, T);
