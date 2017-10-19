@@ -260,9 +260,9 @@ frag(Ctx, Path, #frag {selection_set = SSet} = Frag) ->
 %% -- OPERATIONS -------------------------------
 
 %% Type check an operation.
-op(Ctx, Path, #op { vardefs = VDefs, selection_set = SSet} = Op) ->
+op(Ctx, Path, #op { id = ID, vardefs = VDefs, selection_set = SSet} = Op) ->
     VarEnv = graphql_elaborate:mk_varenv(VDefs),
-    Op#op { selection_set = sset(Ctx#{ varenv => VarEnv }, [id(Op) | Path], SSet) }.
+    Op#op { selection_set = sset(Ctx#{ varenv => VarEnv }, [ID | Path], SSet) }.
 
 %% -- SELECTION SETS ------------------------------------
 
