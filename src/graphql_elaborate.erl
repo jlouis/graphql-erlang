@@ -4,6 +4,7 @@
 -include("graphql_internal.hrl").
 
 -export([x/1]).
+-export([type/1]).
 -export([mk_varenv/1, mk_funenv/1]).
 -export([err_msg/1]).
 

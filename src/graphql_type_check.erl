@@ -350,7 +350,11 @@ args(Ctx, Path, Args, [{Name, #schema_arg { ty = STy }} = SArg | Next], Acc) ->
             err([Name | Path], Reason);
         {ok, {_, #{ type := Ty, value := Val}} = A, NextArgs} ->
             ValueType = value_type(Ctx, Path, Ty, Val),
-            SchemaType = schema_type(STy),
+            SchemaType =
+                case graphql_elaborate:type(STy) of
+                    {error, Reason} -> exit(Reason);
+                    {_Polarity, SchemaTypeRsult} -> SchemaTypeRsult
+                end,
             case refl(Path, ValueType, SchemaType) of
                 {error, Expected} ->
                     err(Path, {type_mismatch,
@@ -392,26 +396,6 @@ uniq([]) -> ok;
 uniq([_]) -> ok;
 uniq([{X, _}, {X, _} | _]) -> {not_unique, X};
 uniq([_ | Next]) -> uniq(Next).
-
--spec schema_type(binary() | schema_type()) -> schema_type().
-schema_type({non_null, T}) -> {non_null, schema_type(T)};
-schema_type({list, Tag}) -> {list, schema_type(Tag)};
-schema_type(#enum_type{} = Ty) -> Ty;
-schema_type(#input_object_type{} = Ty) -> Ty;
-schema_type(#scalar_type{} = Ty) -> Ty;
-%% Elaborate types which are not elaborated.
-%% Strictly, this ought to be unnecessary given enough
-%% elaboration and optimization.
-schema_type(Tag) ->
-    case graphql_schema:lookup(Tag) of
-        #scalar_type{} = SType -> SType;
-        #enum_type{} = Enum -> Enum;
-        #object_type{} = OType -> OType;
-        #input_object_type{} = IOType -> IOType;
-        #interface_type{} = IFType -> IFType;
-        not_found ->
-            exit({schema_not_found, Tag})
-    end.
 
 value_type(Ctx, Path, {non_null, Ty}, V) ->
     {non_null, value_type(Ctx, Path, Ty, V)};
