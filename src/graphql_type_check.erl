@@ -350,21 +350,12 @@ args(Ctx, Path, Args, [{Name, #schema_arg { ty = STy }} = SArg | Next], Acc) ->
         {error, Reason} ->
             err([Name | Path], Reason);
         {ok, {_, #{ type := Ty, value := Val}} = A, NextArgs} ->
-            ValueType = value_type(Ctx, Path, Ty, Val),
             SchemaType =
                 case graphql_elaborate:type(STy) of
                     {error, Reason} -> exit(Reason);
                     {_Polarity, SchemaTypeRsult} -> SchemaTypeRsult
                 end,
-            case refl(Path, ValueType, SchemaType) of
-                {error, Expected} ->
-                    err(Path, {type_mismatch,
-                               #{ id => Name, schema => Expected }});
-                {error, Got, Expected} ->
-                    err(Path, {type_mismatch,
-                               #{ id => Name, document => Got, schema => Expected }});
-                ok ->
-                    args(Ctx, Path, NextArgs, Next, [A | Acc]);
+            case judge(Ctx, [Name | Path], Val, SchemaType) of
                 Val ->
                     args(Ctx, Path, NextArgs, Next, [A | Acc]);
                 RVal ->
@@ -398,104 +389,127 @@ uniq([_]) -> ok;
 uniq([{X, _}, {X, _} | _]) -> {not_unique, X};
 uniq([_ | Next]) -> uniq(Next).
 
-value_type(Ctx, Path, {non_null, Ty}, V) ->
-    {non_null, value_type(Ctx, Path, Ty, V)};
-value_type(Ctx, Path, {list, Ty}, Vs) when is_list(Vs) ->
-    {list, [{value_type(Ctx, Path, Ty, V), V} || V <- Vs]};
-value_type(#{ varenv := VE }, Path, _, {var, ID}) ->
-    Name = graphql_ast:name(ID),
-    case maps:get(Name, VE, not_found) of
-        not_found -> err(Path, {unbound_variable, Name});
-        #vardef { ty = Ty } -> Ty
+%% Decide if two types are the same or not. We assume that the first
+%% parameter is the 'D' type and the second parameter is the 'S' type.
+%% These are the document and schema types respectively. In some
+%% situations, it is allowed to have a more strict type in the
+%% document then in the schema, but not vice versa.
+%%
+%% Some of the cases are reflexivity. Some of the cases are congruences.
+%% And some are special handling explicitly.
+type_dec(#scalar_type { id = ID }, #scalar_type { id = ID }) -> yes;
+type_dec(#enum_type { id = ID }, #enum_type { id = ID }) -> yes;
+type_dec(#input_object_type { id = ID }, #input_object_type { id = ID }) -> yes;
+type_dec({non_null, DTy}, {non_null, STy}) ->
+    type_dec(DTy, STy);
+type_dec({non_null, DTy}, STy) ->
+    %% A more strict document type of non-null is always allowed since
+    %% it can't be null in the schema then
+    type_dec(DTy, STy);
+type_dec(_DTy, {non_null, _STy}) ->
+    %% If the schema requires a non-null type but the document doesn't
+    %% supply that, it is an error
+    no;
+type_dec({list, DTy}, {list, STy}) ->
+    %% Lists are decided by means of a congruence
+    type_dec(DTy, STy);
+type_dec(DTy, STy) ->
+    error_logger:error_report([{type_mismatch, DTy, STy}]),
+    no.
+
+%% Judge a list of values with the same type.
+judge_list(_Ctx, _Path, [], _Type, _K) ->
+    [];
+judge_list(Ctx, Path, [V|Vs], Type, K) ->
+    R = judge(Ctx, [K|Path], V, Type),
+    [R | judge_list(Ctx, Path, Vs, Type, K+1)].
+
+%% Judge a type and a value. Used to verify a type judgement of the
+%% form 'a : T' for a value 'a' and a type 'T'. Analysis has shown that
+%% it is most efficient to make the inversion analysis work on the value
+%% from the document first and then make the inversion analysis on the schema-type.
+judge(Ctx, Path, {name, _, N}, SType) ->
+    judge(Ctx, Path, N, SType);
+judge(Ctx, Path, Value, {non_null, InnerSType} = SType) ->
+    case Value of
+        null ->
+            err(Path, {type_mismatch,
+                       #{ document => Value, schema => SType }});
+        _Valid ->
+            judge(Ctx, Path, Value, InnerSType)
     end;
-value_type(_Ctx, _Path, _, null) -> null;
-value_type(_Ctx, _Path, #enum_type{} = Ty, {enum, _N}) ->
-    Ty;
-value_type(_Ctx, Path, _, {enum, N}) ->
+judge(_Ctx, _Path, null, _SType) ->
+    %% If a value is null, and we don't have a non-null case,
+    %% then the value is valid
+    null;
+judge(#{ varenv := VE }, Path, {var, ID}, SType) ->
+    Var = graphql_ast:name(ID),
+    case maps:get(Var, VE, not_found) of
+        not_found -> err(Path, {unbound_variable, Var});
+        #vardef { ty = DType } ->
+            case type_dec(DType, SType) of
+                yes ->
+                    {var, ID};
+                no ->
+                    err(Path, {type_mismatch,
+                               #{ document => {var, Var, DType},
+                                  schema => SType }})
+            end
+    end;
+judge(_Ctx, Path, {enum, N}, SType) ->
     case graphql_schema:lookup_enum_type(N) of
-        not_found -> err(Path, {unknown_enum, N});
-        #enum_type {} = Enum -> Enum
+        not_found ->
+            err(Path, {unknown_enum, N});
+        SType ->
+            non_polar_coerce(Path, SType, N);
+        Other ->
+            err(Path, {type_mismatch,
+                       #{ document => Other,
+                          schema => SType }})
     end;
-value_type(_Ctx, Path, {scalar, Tag}, V) ->
-    case valid_scalar_value(V) of
-        true -> {scalar, Tag, V};
-        false ->
-            err(Path, {invalid_scalar_value, V})
+judge(_Ctx, Path, InputObj, SType) when is_map(InputObj) ->
+    case SType of
+        #input_object_type{} = IOType ->
+            Coerced = coerce_input_object(InputObj),
+            check_input_object(Path, IOType, Coerced);
+        _OtherType ->
+            err(Path, {type_mismatch, #{ document => InputObj, schema => SType }})
     end;
-value_type(_Ctx, _Path, _, {name, N, _}) -> N;
-value_type(_Ctx, _Path, _, S) when is_binary(S) -> {scalar, string, S};
-value_type(_Ctx, _Path, _, I) when is_integer(I) -> {scalar, int, I};
-value_type(_Ctx, _Path, _, F) when is_float(F) -> {scalar, float, F};
-value_type(_Ctx, _Path, _, true) -> {scalar, bool, true};
-value_type(_Ctx, _Path, _, false) -> {scalar, bool, false};
-value_type(_Ctx, _Path, _, Obj) when is_map(Obj) -> coerce_input_object(Obj);
-value_type(_Ctx, Path, Ty, Val) ->
-    err(Path, {invalid_value_type_coercion, Ty, Val}).
-
-refl_list(_Path, [], _T, Result) ->
-    lists:reverse(Result);
-refl_list(Path, [{A, V}|As], T, Acc) ->
-    case refl(Path, A, T) of
-        {error, _Reason} ->
-            {error, {list, T}};
-        ok ->
-            refl_list(Path, As, T, [V|Acc]);
-        V ->
-            refl_list(Path, As, T, [V|Acc]);
-        RV ->
-            refl_list(Path, As, T, [RV|Acc])
-   end.
-
-%% EQ Match:
-refl(_Path, X, X) -> ok;
-%% Compound:
-refl(Path, {list, As}, {list, T}) ->
-    refl_list(Path, As, T, []);
-refl(Path, {non_null, ValueType}, {non_null, SchemaType}) ->
-    refl(Path, ValueType, SchemaType);
-refl(_Path, null, {non_null, _}) -> {error, non_null};
-refl(_Path, null, _T) -> ok;
-refl(Path, {non_null, A}, T) -> refl(Path, A, T);
-refl(Path, A, {non_null, T}) -> refl(Path, A, T);
-%% Ground:
-refl(Path, {scalar, Tag, V}, #scalar_type { id = ID } = SType) ->
-    case Tag of
-        string -> non_polar_coerce(Path, SType, V);
-        int -> non_polar_coerce(Path, SType, V);
-        float -> non_polar_coerce(Path, SType, V);
-        bool -> non_polar_coerce(Path, SType, V);
-        ID -> non_polar_coerce(Path, SType, V)
+judge(Ctx, Path, Values, SType) when is_list(Values) ->
+    case SType of
+        {list, InnerType} ->
+            judge_list(Ctx, Path, Values, InnerType, 0)
     end;
-refl(_Path, #input_object_type { id = ID },
-            {input_object, #input_object_type { id = ID }}) ->
-    ok;
-refl(Path, Obj, #input_object_type{} = Ty) when is_map(Obj) ->
-    check_input_object(Path, Ty, Obj);
-%% Failure:
-refl(_Path, A, T) -> {error, A, T}.
-
-coerce_input_object(Obj) when is_map(Obj) ->
-    coerce_object_(Obj).
-
-coerce_object_(Obj) when is_map(Obj) ->
-    Elems = maps:to_list(Obj),
-    maps:from_list([{coerce_name(K), coerce_object_(V)} || {K, V} <- Elems]);
-coerce_object_(Other) -> Other.
+%% ------------
+%% At this point, we are done looking at a the values
+%% and we start looking at the schema types
+%% ------------
+judge(Ctx, Path, Value, {list, _} = SType) ->
+    %% If the value is not of list-type, but we expect a list,
+    %% then hoist the value into a singleton list and recurse
+    judge(Ctx, Path, [Value], SType);
+judge(_Ctx, Path, Value, #scalar_type{} = SType) ->
+    non_polar_coerce(Path, SType, Value);
+judge(_Ctx, Path, String, #enum_type{}) when is_binary(String) ->
+    %% The spec (Oct 2016, section 3.1.5) says that this is not allowed, unless
+    %% given as a parameter. In this case, it is not given as a parameter, but
+    %% is expanded in as a string in a query document. Reject.
+    err(Path, enum_string_literal);
+judge(_Ctx, Path, Value, #enum_type{} = EType) ->
+    non_polar_coerce(Path, EType, Value);
+judge(_Ctx, Path, Value, Unknown) ->
+    err(Path, {type_mismatch,
+               #{ document => Value, schema => Unknown }}).
 
 coerce_name(B) when is_binary(B) -> B;
 coerce_name(Name) -> graphql_ast:name(Name).
 
-%% -- AST MANIPULATION -------------------------
+coerce_input_object(Obj) when is_map(Obj) ->
+    Elems = maps:to_list(Obj),
+    AssocList = [{coerce_name(K), coerce_input_object(V)} || {K, V} <- Elems],
+    maps:from_list(AssocList);
+coerce_input_object(Value) -> Value.
 
-%% True if input is a scalar value
-valid_scalar_value(S) when is_binary(S) -> true;
-valid_scalar_value(F) when is_float(F) -> true;
-valid_scalar_value(I) when is_integer(I) -> true;
-valid_scalar_value(true) -> true;
-valid_scalar_value(false) -> true;
-valid_scalar_value(_) -> false.
-
-id(#op { id = ID }) -> ID.
 
 %% -- Error handling -------------------------------------
 
@@ -540,6 +554,8 @@ err_msg({not_unique, X}) ->
 err_msg({unbound_variable, Var}) ->
     ["The document refers to a variable ", Var,
      " but no such var exists. Perhaps the variable is a typo?"];
+err_msg(enum_string_literal) ->
+    ["Enums must not be given as string literals in query documents"];
 err_msg({unknown_enum, E}) ->
     ["The enum name ", E, " is not present in the schema"];
 err_msg({invalid_scalar_value, V}) ->

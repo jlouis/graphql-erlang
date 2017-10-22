@@ -2,6 +2,9 @@
 
 -export([input/2, output/2]).
 
-input(_, X) -> {ok, X}.
+input(_, Str) when is_binary(Str) -> {ok, {enum, Str}};
+input(_, _) -> {error, not_valid_enum_input}.
 
-output(_, Y) -> {ok, Y}.
+output(_, {enum, X}) -> {ok, X};
+output(_, Str) when is_binary(Str) -> {ok, Str}.
+

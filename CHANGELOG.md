@@ -10,9 +10,33 @@ the compatibility issues you are likely to encounter.
 
 ## [Unreleased]
 
+### Changed
+- Coercion of enums have been changed. Now an enum is presented to the
+  coercer as `input(Type, Str)` where `Str` is a `binary()` value.
+  The function default to returning `{enum, Str}` for the enumerated
+  value. The change is to handle the fact that enumerated values might
+  enter the coercer in many formats, so by this change we make sure
+  they enter in a valid way. The change also allows one to use
+  something such as `binary_to_existing_atom` to handle enumerations
+  in the system (in a safe way to boot!).
+
+### Fixed
+- The errors returned when type checking fails have been changed. The
+  change better reflects the type of error which occur, but it
+  requires change if you rely on error messages having a specific
+  form. See the test updates for `errors.unknown_variable` and
+  `errors.invalid_enums` for errors which have changed. The path
+  component is more precise for unknown variables and invalid enums.
+
+  This is a buff.
+
 ### Refactored
 - Refactor all of the elaborator phase in the system. Improve and
   simplify its flow.
+- Refactor the type checker phase in the system. Improve and simplify
+  its flow as well.
+- Rewrite the central judgement in the type checker engine to a more
+  direct flow which is easier to handle and follow.
 
 ### Removed
 - The default resolver, which has never been in official documentation

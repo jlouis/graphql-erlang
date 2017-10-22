@@ -682,7 +682,8 @@ unknown_variable(Config) ->
           #{key := {unbound_variable,<<"i">>},
             path := [<<"document">>,
                      <<"GoblinQuery">>,
-                     <<"monster">>]}} =
+                     <<"monster">>,
+                     <<"id">>]}} =
         run(Config,
             "unknown_variable.graphql",
             <<"TestFieldMerge">>,
@@ -749,13 +750,13 @@ invalid_enums(Config) ->
         errors := #{
             key := {enum_not_found,<<"Mood">>,<<"AGGRESSIF">>},
             message := <<"The value <<\"AGGRESSIF\">> is not a valid enum value for type Mood">>,
-            path := [<<"document">>,<<"IMonster">>,<<"introduceMonster">>, <<"mood">>]}} =
+            path := [<<"document">>,<<"IMonster">>,<<"introduceMonster">>, <<"input">>, <<"mood">>]}} =
                 run(Config, "invalid_enum_1.graphql", <<"IMonster">>, #{}),
     #{
         errors := #{
             key := {enum_not_found,<<"Mood">>,<<>>},
             message := <<"The value <<>> is not a valid enum value for type Mood">>,
-            path := [<<"document">>,<<"IMonster">>,<<"introduceMonster">>, <<"mood">>]}} =
+            path := [<<"document">>,<<"IMonster">>,<<"introduceMonster">>, <<"input">>, <<"mood">>]}} =
                 run(Config, "invalid_enum_2.graphql", <<"IMonster">>, #{}),
     ok.
 
