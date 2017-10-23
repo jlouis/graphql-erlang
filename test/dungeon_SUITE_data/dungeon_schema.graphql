@@ -140,6 +140,7 @@ type MutationRoot {
 type QueryRoot {
   monster(id: ID!) : Monster
   monsters(ids: [ID!]) : [Monster]
+  findMonsters(moods: [Mood]) : [Monster]
   thing(id: ID!) : Thing
   room(id: ID!) : Room
   rooms(ids: [ID!]) : [Room!]

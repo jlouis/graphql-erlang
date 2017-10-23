@@ -1,5 +1,17 @@
 ## QUERIES
 
+query FindQueryParam($m : [Mood]!) {
+  findMonsters(moods: $m) {
+    name
+  }
+}
+
+query FindQuery {
+  findMonsters(moods: [DODGY]) {
+    name
+  }
+}
+
 query GoblinQuery($id : Id! = "bW9uc3Rlcjox") {
   goblin: monster(id: $id) {
     id
