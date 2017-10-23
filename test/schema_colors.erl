@@ -70,16 +70,24 @@ inject() ->
     ok = graphql:insert_schema_definition(Root),
     ok.
 
+%% Internal representation is a set of atoms
+resolve_input(enum, {enum, X}) when is_binary(X) -> resolve_input(string, X);
+resolve_input(int, 0) -> 'RED';
+resolve_input(int, 1) -> 'GREEN';
+resolve_input(int, 2) -> 'BLUE';
+resolve_input(string, <<"YELLOW">>) -> 'YELLOW';
+resolve_input(string, <<"RED">>) -> 'RED';
+resolve_input(string, <<"GREEN">>) -> 'GREEN';
+resolve_input(string, <<"BLUE">>) -> 'BLUE'.
 
-resolve_input({enum, X}) when is_binary(X) -> resolve_input(X);
-resolve_input(<<"RED">>) -> 0;
-resolve_input(<<"GREEN">>) -> 1;
-resolve_input(<<"BLUE">>) -> 2.
-
-resolve_output(0) -> <<"RED">>;
-resolve_output(1) -> <<"GREEN">>;
-resolve_output(2) -> <<"BLUE">>.
-
+resolve_output(enum, 'YELLOW') -> {ok, <<"YELLOW">>}; %% This one is invalid
+resolve_output(enum, 'RED') -> {ok, <<"RED">>};
+resolve_output(enum, 'GREEN') -> {ok, <<"GREEN">>};
+resolve_output(enum, 'BLUE') -> {ok, <<"BLUE">>};
+resolve_output(int, 'RED') -> {ok, 0};
+resolve_output(int, 'GREEN') -> {ok, 1};
+resolve_output(int, 'BLUE') -> {ok, 2}.
+    
 color_enum(_Ctx, _, #{
     <<"fromEnum">> := null,
     <<"fromInt">> := null,
@@ -87,29 +95,29 @@ color_enum(_Ctx, _, #{
 color_enum(_Ctx, _, #{
     <<"fromEnum">> := X,
     <<"fromInt">> := null,
-    <<"fromString">> := null}) -> {ok, resolve_output(
-                                         resolve_input(X))};
+    <<"fromString">> := null}) -> resolve_output(enum,
+                                    resolve_input(enum, X));
 color_enum(_Ctx, _, #{
     <<"fromEnum">> := null,
     <<"fromInt">> := X,
     <<"fromString">> := null})
-  when X >= 0 andalso X < 3 -> {ok, resolve_output(X)};
+  when X >= 0 andalso X < 3 -> resolve_output(enum,
+                                 resolve_input(int, X));
 color_enum(_Ctx, _, #{
     <<"fromEnum">> := null,
     <<"fromInt">> := null,
-    <<"fromString">> := X}) -> {ok, resolve_output(
-                                      resolve_input(X))}.
+    <<"fromString">> := X}) -> resolve_output(enum,
+                                 resolve_input(string, X)).
 
 color_int(_Ctx, _, #{
     <<"fromEnum">> := null,
     <<"fromInt">> := null }) -> {ok, null};
 color_int(_Ctx, _, #{
     <<"fromEnum">> := null,
-    <<"fromInt">> := X}) when X /= null -> {ok, X};
+    <<"fromInt">> := X}) when X /= null -> resolve_output(int,
+                                             resolve_input(int, X));
 color_int(_Ctx, _, #{
     <<"fromEnum">> := X,
-    <<"fromInt">> := null }) when X /= null -> {ok, resolve_input(X)}.
-
-
-
+    <<"fromInt">> := null }) when X /= null -> resolve_output(int,
+                                                 resolve_input(enum, X)).
 

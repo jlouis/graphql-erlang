@@ -5,7 +5,7 @@
 
 -include("dungeon.hrl").
 
--export([dirty_load/1, load/1, wrap/1, unwrap/1, insert/1]).
+-export([dirty_load/1, load/1, load_txn/1, wrap/1, unwrap/1, insert/1]).
 -export([inject/1, start/0, stop/0]).
 
 -export([insert/2, reserve_number/1, create/1, create/2, batch_create/1, opaque_id/1, next_id/1]).

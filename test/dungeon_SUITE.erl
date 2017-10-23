@@ -38,6 +38,8 @@ init_per_group(_Group, Config) ->
 end_per_group(_Group, _Config) ->
     ok.
 
+init_per_testcase(find_monster, _Config) ->
+    {skip, fscked_enums_in_dungeon};
 init_per_testcase(x, Config) ->
     {ok, _} = dbg:tracer(),
     dbg:p(all, c),
@@ -78,6 +80,7 @@ groups() ->
          , coercion_int_float
          , replace_enum_representation
          , auxiliary_data
+         , find_monster
          ]},
     Errors =
         {errors, [],
@@ -640,6 +643,11 @@ fragment_over_union_interface(Config) ->
     Expected = run(Config, <<"FragmentOverUnion2">>, #{ <<"id">> => ID }),
     ct:log("Same as before, but via an interface type"),
     Expected = run(Config, <<"FragmentOverUnion3">>, #{ <<"id">> => ID }),
+    ok.
+
+find_monster(Config) ->
+    Expected = #{ data => #{ <<"findMonster">> => [] }},
+    Expected = run(Config, <<"FindQuery">>, #{}),
     ok.
 
 simple_field_merge(Config) ->

@@ -1,5 +1,8 @@
 -module(dungeon_query).
+-include_lib("stdlib/include/qlc.hrl").
+
 -include("dungeon.hrl").
+
 
 -export([execute/4]).
 
@@ -13,6 +16,11 @@ execute(_Ctx, _, <<"monsters">>, #{ <<"ids">> := InputIDs }) ->
               {monster, _} = OID = dungeon:unwrap(ID),
               dungeon:dirty_load(OID)
           end || ID <- InputIDs]};
+execute(_Ctx, _, <<"findMonsters">>, #{ <<"moods">> := Moods }) ->
+    QH = qlc:q([M || M <- mnesia:table(monster),
+                     mood_member(Moods, M#monster.mood)]),
+    Monsters = dungeon:load_txn(QH),
+    {ok, [{ok, M} || M <- Monsters]};
 execute(_Ctx, _, <<"thing">>, #{ <<"id">> := InputID }) ->
     case dungeon:unwrap(InputID) of
         {monster, _ID} = OID -> dungeon:dirty_load(OID);
@@ -28,3 +36,10 @@ execute(_Ctx, _, <<"rooms">>, #{ <<"ids">> := InputIDs }) ->
               {room, _} = OID = dungeon:unwrap(ID),
               dungeon:dirty_load(OID)
           end || ID <- InputIDs]}.
+
+mood_member(Moods, {enum, #{ mood := Value }}) ->
+    error_logger:info_report([
+                              {moods, Moods},
+                              {value, Value}]),
+    M = iolist_to_binary(string:to_upper(Value)),
+    lists:member(M, Moods).

@@ -19,6 +19,8 @@ the compatibility issues you are likely to encounter.
   they enter in a valid way. The change also allows one to use
   something such as `binary_to_existing_atom` to handle enumerations
   in the system (in a safe way to boot!).
+- Major restructuring of the test suite. Split tests into their own
+  suites where applicable.
 
 ### Fixed
 - The errors returned when type checking fails have been changed. The

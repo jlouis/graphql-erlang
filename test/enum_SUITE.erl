@@ -5,8 +5,23 @@
          init_per_group/2, end_per_group/2,
          init_per_testcase/2, end_per_testcase/2]).
 
--compile([export_all]).
-
+%% Test cases
+-export([
+         input/1,
+         output/1,
+         input_output/1,
+         no_string_literal/1,
+         no_incorrect_internal_value/1,
+         no_internal_enum/1,
+         no_literal_int/1,
+         accept_json/1,
+         mutation_accept_json/1,
+         no_accept_internal_query/1,
+         no_accept_internal_query_2/1,
+         no_accept_internal_query_3/1,
+         internal_zero/1,
+         input_nullable/1
+        ]).
 
 suite() ->
     [{timetrap, {seconds, 30}}].
@@ -28,8 +43,8 @@ end_per_suite(_Config) ->
     application:stop(graphql),
     ok.
 
-init_per_testcase(enum_no_incorrect_internal_value, _Config) ->
-    {skip, no_output_validation_yet};
+init_per_testcase(no_incorrect_internal_value, _Config) ->
+    {skip, no_enum_output_validation_yet};
 init_per_testcase(_Case, Config) ->
     Config.
 
@@ -38,20 +53,20 @@ end_per_testcase(_Case, _Config) ->
 
 groups() ->
     EnumType = {enum_type, [shuffle, parallel], [
-        enum_input,
-        enum_output,
-        enum_input_output,
-        enum_no_string_literal,
-        enum_no_incorrect_internal_value,
-        enum_no_internal_enum,
-        enum_no_literal_int,
-        enum_accept_json,
-        enum_mutation_accept_json,
-        enum_no_accept_internal_query,
-        enum_no_accept_internal_query_2,
-        enum_no_accept_internal_query_3,
-        enum_internal_zero,
-        enum_input_nullable
+        input,
+        output,
+        input_output,
+        no_string_literal,
+        no_incorrect_internal_value,
+        no_internal_enum,
+        no_literal_int,
+        accept_json,
+        mutation_accept_json,
+        no_accept_internal_query,
+        no_accept_internal_query_2,
+        no_accept_internal_query_3,
+        internal_zero,
+        input_nullable
     ]},
 
     [EnumType].
@@ -60,79 +75,79 @@ groups() ->
 all() ->
     [{group, enum_type}].
 
-enum_input(Config) ->
+input(Config) ->
     Q1 = "{ colorInt(fromEnum: GREEN) }",
     #{ data := #{ <<"colorInt">> := 1 }} = th:x(Config, Q1),
     ok.
 
-enum_output(Config) ->
+output(Config) ->
     Q1 = "{ colorEnum(fromInt: 1) }",
     #{ data := #{ <<"colorEnum">> := <<"GREEN">> }} = th:x(Config, Q1),
     ok.
 
-enum_input_output(Config) ->
+input_output(Config) ->
     Q1 = "{ colorEnum(fromEnum: GREEN) }",
     #{ data := #{ <<"colorEnum">> := <<"GREEN">> }} = th:x(Config, Q1),
     ok.
 
-enum_no_string_literal(Config) ->
+no_string_literal(Config) ->
     Q1 = "{ colorEnum(fromEnum: \"GREEN\") }",
     th:errors(th:x(Config, Q1)),
     ok.
 
-enum_no_incorrect_internal_value(Config) ->
-    Q1 = "{ colorEnum(fromString: \"GREEN\") }",
+no_incorrect_internal_value(Config) ->
+    Q1 = "{ colorEnum(fromString: \"YELLOW\") }",
     #{ data := #{
         <<"colorEnum">> := null }} = th:x(Config, Q1),
     ok.
 
-enum_no_internal_enum(Config) ->
+no_internal_enum(Config) ->
     Q1 = "{ colorEnum(fromEnum: 1) }",
     th:errors(th:x(Config, Q1)),
     ok.
 
-enum_no_literal_int(Config) ->
+no_literal_int(Config) ->
     Q1 = "{ colorEnum(fromInt: GREEN) }",
     th:errors(th:x(Config, Q1)),
     ok.
 
-enum_accept_json(Config) ->
+accept_json(Config) ->
     Q1 = "query test($color: Color!) { colorEnum(fromEnum: $color) }",
     #{ data :=
        #{ <<"colorEnum">> := <<"BLUE">> }} =
            th:x(Config, Q1, <<"test">>, #{ <<"color">> => <<"BLUE">> }),
     ok.
 
-enum_mutation_accept_json(Config) ->
+mutation_accept_json(Config) ->
     Q1 = "mutation x($color: Color!) { favoriteEnum(color: $color) }",
     #{ data :=
        #{ <<"favoriteEnum">> := <<"GREEN">> }} =
            th:x(Config, Q1, <<"x">>, #{ <<"color">> => <<"GREEN">> }),
     ok.
 
-enum_no_accept_internal_query(Config) ->
+no_accept_internal_query(Config) ->
     Q1 = "query test($color: Color!) { colorEnum(fromEnum: $color) }",
     th:errors(th:x(Config, Q1, <<"test">>, #{ <<"color">> => 2 })),
     ok.
 
-enum_no_accept_internal_query_2(Config) ->
+no_accept_internal_query_2(Config) ->
     Q1 = "query test($color: String!) { colorEnum(fromEnum: $color) }",
     th:errors(th:x(Config, Q1, <<"test">>, #{ <<"color">> => <<"BLUE">> })),
     ok.
 
-enum_no_accept_internal_query_3(Config) ->
+no_accept_internal_query_3(Config) ->
     Q1 = "query test($color: Int!) { colorEnum(fromEnum: $color) }",
     th:errors(th:x(Config, Q1, <<"test">>, #{ <<"color">> => 2 })),
     ok.
 
-enum_internal_zero(Config) ->
+internal_zero(Config) ->
     Q1 = "{ colorEnum(fromEnum: RED) colorInt(fromEnum: RED) }",
     #{ data :=
         #{ <<"colorEnum">> := <<"RED">>,
             <<"colorInt">> := 0 }} = th:x(Config, Q1),
     ok.
 
-enum_input_nullable(Config) ->
+input_nullable(Config) ->
     Q1 = "{ colorEnum colorInt }",
     #{ data := #{
         <<"colorEnum">> := null,
