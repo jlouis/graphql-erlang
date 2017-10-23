@@ -14,10 +14,6 @@ init_per_group(schema_test, Config) ->
     ok = blog:inject(),
     ok = graphql:validate_schema(),
     Config;
-init_per_group(star_wars, Config) ->
-    ok = star_wars:inject(),
-    ok = graphql:validate_schema(),
-    Config;
 init_per_group(basic, Config) ->
     ok = basic:inject(),
     ok = graphql:validate_schema(),
@@ -65,24 +61,6 @@ groups() ->
               ]},
 
     Basic = {basic, [shuffle, parallel], [ hello_world, user_queries ] },
-    SW = {star_wars, [shuffle, parallel], [
-        %% Basic tests
-        star_wars_hero,
-        star_wars_friends,
-        star_wars_query_id_params,
-        star_wars_query_aliases,
-        star_wars_fragments,
-        star_wars_typename,
-
-        %% Validation tests
-        star_wars_complex,
-        star_wars_non_existent_field,
-        star_wars_fields_on_objects,
-        star_wars_no_fields_on_scalars,
-        star_wars_no_fields_on_interfaces,
-        star_wars_object_field_in_inline_fragments,
-        star_wars_object_field_in_fragments
-    ]},
 
     SchemaTest = {schema_test, [shuffle, parallel], [
         schema_test
@@ -108,13 +86,12 @@ groups() ->
          , v_5_4_2_3_1
          ]},
 
-    [Basic, SW, Schema, SchemaTest, Validation, Introspection].
+    [Basic, Schema, SchemaTest, Validation, Introspection].
 
 all() -> [
     {group, schema},
     {group, validation},
     {group, basic},
-    {group, star_wars},
     {group, schema_test},
     {group, introspection} ].
 
@@ -163,242 +140,6 @@ parse_schema(Config) ->
         {error, Reason} ->
             ct:fail(Reason)
     end.
-
-%% -- STAR WARS™ --------------------------------
-
-star_wars_hero(Config) ->
-    Q1 =
-        "query HeroNameQuery {"
-        "  hero {"
-        "     name"
-        "  }"
-        "}",
-    #{ data :=
-        #{ <<"hero">> := #{ <<"name">> := <<"R2-D2">> } } } = th:x(Config, Q1),
-
-    Q2 =
-       "query HeroNameQuery {"
-       "  hero(episode: EMPIRE) {"
-       "    name"
-       "  }"
-       "}",
-    #{ data :=
-        #{ <<"hero">> := #{ <<"name">> := <<"Luke Skywalker">> } } } = th:x(Config, Q2),
-    ok.
-
-star_wars_friends(Config) ->
-    Q1 =
-      "query HeroNameAndFriendsQuery {"
-      "    hero {"
-      "      id"
-      "      name"
-      "      friends {"
-      "        name"
-      " }}}",
-    #{ data :=
-        #{ <<"hero">> := #{
-            <<"id">> := <<"2001">>,
-            <<"name">> := <<"R2-D2">>,
-            <<"friends">> := [
-                #{ <<"name">> := <<"Luke Skywalker">> },
-                #{ <<"name">> := <<"Han Solo">> },
-                #{ <<"name">> := <<"Leia Organa">> } ] } } } = th:x(Config, Q1),
-
-    Q2 =
-      "query NestedQuery {"
-      "  hero {"
-      "      name"
-      "      friends {"
-      "        name"
-      "        appearsIn"
-      "        friends {"
-      "          name"
-      "        }"
-      "      }"
-      "  }"
-      "}",
-    #{ data :=
-        #{ <<"hero">> := #{
-            <<"name">> := <<"R2-D2">>,
-            <<"friends">> := [
-                #{ <<"name">> := <<"Luke Skywalker">>,
-                     <<"appearsIn">> := [<<"NEWHOPE">>, <<"EMPIRE">>, <<"JEDI">> ],
-                     <<"friends">> := [
-                         #{ <<"name">> := <<"Han Solo">> },
-                         #{ <<"name">> := <<"Leia Organa">> },
-                         #{ <<"name">> := <<"C-3PO">> },
-                         #{ <<"name">> := <<"R2-D2">> } ] },
-                #{ <<"name">> := <<"Han Solo">>,
-                     <<"appearsIn">> := [<<"NEWHOPE">>, <<"EMPIRE">>, <<"JEDI">> ],
-                     <<"friends">> := [
-                         #{ <<"name">> := <<"Luke Skywalker">> },
-                         #{ <<"name">> := <<"Leia Organa">> },
-                         #{ <<"name">> := <<"R2-D2">> } ] },
-                #{ <<"name">> := <<"Leia Organa">>,
-                     <<"appearsIn">> := [<<"NEWHOPE">>, <<"EMPIRE">>, <<"JEDI">> ],
-                     <<"friends">> := [
-                         #{ <<"name">> := <<"Luke Skywalker">> },
-                         #{ <<"name">> := <<"Han Solo">> },
-                         #{ <<"name">> := <<"C-3PO">> },
-                         #{ <<"name">> := <<"R2-D2">> } ] }
-             ] } } } = th:x(Config, Q2),
-    ok.
-
-star_wars_query_id_params(Config) ->
-    Q1 =
-      "query FetchLukeQuery {"
-      "    human(id: \"1000\") {"
-      "      name"
-      " }}",
-    #{ data :=
-        #{ <<"human">> := #{ <<"name">> := <<"Luke Skywalker">> } } } = th:x(Config, Q1),
-    Q2 =
-      "query FetchSomeIDQuery($someID: string!) {"
-      "    human(id: $someID) {"
-      "        name"
-      "    }"
-      "}",
-    #{ data :=
-        #{ <<"human">> :=
-            #{ <<"name">> := <<"Luke Skywalker">> } } } =
-                th:x(Config, Q2, <<"FetchSomeIDQuery">>, #{ <<"someID">> => <<"1000">> }),
-    #{ data :=
-        #{ <<"human">> :=
-            #{ <<"name">> := <<"Han Solo">> } } } =
-                th:x(Config, Q2, <<"FetchSomeIDQuery">>, #{ <<"someID">> => <<"1002">> }),
-    #{ data :=
-        #{ <<"human">> := null } } =
-            th:x(Config, Q2, <<"FetchSomeIDQuery">>, #{ <<"someID">> => <<"Not a valid query">> }),
-    ok.
-
-star_wars_query_aliases(Config) ->
-    Q1 =
-      "query FetchLukeAliased {"
-      "     luke: human(id: \"1000\") {"
-      "          name"
-      "     }"
-      "}",
-    #{ data :=
-        #{ <<"luke">> :=
-            #{ <<"name">> := <<"Luke Skywalker">> } } } = th:x(Config, Q1),
-    Q2 =
-      "query FetchLukeAndLeiaAliased {"
-      "     luke: human(id: \"1000\") {"
-      "          name"
-      "     }"
-      "     leia: human(id: \"1003\") {"
-      "          name"
-      "     }"
-      "}",
-    #{ data := #{
-          <<"luke">> := #{ <<"name">> := <<"Luke Skywalker">> },
-          <<"leia">> := #{ <<"name">> := <<"Leia Organa">> } } } = th:x(Config, Q2),
-    ok.
-
-star_wars_fragments(Config) ->
-    Q1 =
-      "query DuplicateFields {"
-      "   luke: human(id: \"1000\") { name homePlanet }"
-      "   leia: human(id: \"1003\") { name homePlanet } }",
-    Expected = #{ data => #{
-          <<"luke">> => #{
-            <<"name">> => <<"Luke Skywalker">>,
-            <<"homePlanet">> => <<"Tatooine">> },
-          <<"leia">> => #{
-            <<"name">> => <<"Leia Organa">>,
-            <<"homePlanet">> => <<"Alderaan">> } } },
-    Expected = th:x(Config, Q1),
-    Q2 =
-      "query UseFragment {"
-      "    luke: human(id: \"1000\") { ...HumanFragment }"
-      "    leia: human(id: \"1003\") { ...HumanFragment }"
-      "}"
-      "fragment HumanFragment on Human {"
-      "    name"
-      "    homePlanet"
-      "}",
-    Expected = th:x(Config, Q2),
-
-    ok.
-
-star_wars_typename(Config) ->
-    Q1 =
-      "query CheckTypeOfR2 { hero { __typename name } }",
-    Expected = #{ data => #{
-        <<"hero">> => #{
-            <<"name">> => <<"R2-D2">>,
-            <<"__typename">> => <<"Droid">>
-        }
-    }},
-    Expected = th:x(Config, Q1),
-    ok.
-
-%% -- STAR WARS™ VALIDATION ------------------------------
-
-star_wars_complex(Config) ->
-    Q1 =
-      "query NestedQueryWithFragment {"
-      "  hero {"
-      "    ...NameAndAppearances"
-      "    friends {"
-      "       ...NameAndAppearances"
-      "       friends {"
-      "           ...NameAndAppearances"
-      " }}}} "
-      ""
-      "fragment NameAndAppearances on Character {"
-      "  name"
-      "  appearsIn"
-      "}",
-    th:no_errors(th:x(Config, Q1)),
-    ok.
-
-star_wars_non_existent_field(Config) ->
-    Q1 =
-      "query HeroSpaceshipQuery {"
-      "  hero {"
-      "    favoriteSpaceship"
-      "  }"
-      "}",
-    th:errors(th:x(Config, Q1)),
-    ok.
-
-star_wars_fields_on_objects(Config) ->
-    Q1 =
-      "query HeroSpaceshipQuery {"
-      "  hero"
-      "}",
-    th:errors(th:x(Config, Q1)),
-    ok.
-
-star_wars_no_fields_on_scalars(Config) ->
-    Q1 =
-      "query HeroSpaceshipQuery {"
-      "  hero { name { firstCharacterOfName } }"
-      "}",
-    th:errors(th:x(Config, Q1)),
-    ok.
-
-star_wars_no_fields_on_interfaces(Config) ->
-    Q1 =
-      "query DroidFieldOnCharacter {"
-      "  hero { name primaryFunction }"
-      "}",
-    th:errors(th:x(Config, Q1)),
-    ok.
-
-star_wars_object_field_in_fragments(Config) ->
-    Q1 =
-      "query DroidFieldInFragment { hero { name ...DroidFields } }"
-      "fragment DroidFields on Droid { primaryFunction }",
-    th:no_errors(th:x(Config, Q1)),
-    ok.
-
-star_wars_object_field_in_inline_fragments(Config) ->
-    Q1 =
-      "query DroidFieldInFragment { hero { name ... on Droid { primaryFunction } } }",
-    th:no_errors(th:x(Config, Q1)),
-    ok.
 
 %% -- SCHEMA TEST --------------------------------
 schema_test(Config) ->
