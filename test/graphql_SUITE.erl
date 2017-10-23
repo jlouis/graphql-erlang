@@ -14,10 +14,6 @@ init_per_group(schema_test, Config) ->
     ok = blog:inject(),
     ok = graphql:validate_schema(),
     Config;
-init_per_group(enum_type, Config) ->
-    ok = colors:inject(),
-    ok = graphql:validate_schema(),
-    Config;
 init_per_group(star_wars, Config) ->
     ok = star_wars:inject(),
     ok = graphql:validate_schema(),
@@ -47,8 +43,6 @@ end_per_suite(_Config) ->
 
 init_per_testcase(v_5_4_2_3_1, _Config) ->
     {skip, needs_more_validation};
-init_per_testcase(enum_no_incorrect_internal_value, _Config) ->
-    {skip, no_output_validation_yet};
 init_per_testcase(x, Config) ->
     {ok, _} = dbg:tracer(),
     dbg:p(all, c),
@@ -90,23 +84,6 @@ groups() ->
         star_wars_object_field_in_fragments
     ]},
 
-    EnumType = {enum_type, [shuffle, parallel], [
-        enum_input,
-        enum_output,
-        enum_input_output,
-        enum_no_string_literal,
-        enum_no_incorrect_internal_value,
-        enum_no_internal_enum,
-        enum_no_literal_int,
-        enum_accept_json,
-        enum_mutation_accept_json,
-        enum_no_accept_internal_query,
-        enum_no_accept_internal_query_2,
-        enum_no_accept_internal_query_3,
-        enum_internal_zero,
-        enum_input_nullable
-    ]},
-
     SchemaTest = {schema_test, [shuffle, parallel], [
         schema_test
     ]},
@@ -131,14 +108,13 @@ groups() ->
          , v_5_4_2_3_1
          ]},
 
-    [Basic, SW, EnumType, Schema, SchemaTest, Validation, Introspection].
+    [Basic, SW, Schema, SchemaTest, Validation, Introspection].
 
 all() -> [
     {group, schema},
     {group, validation},
     {group, basic},
     {group, star_wars},
-    {group, enum_type},
     {group, schema_test},
     {group, introspection} ].
 
@@ -422,88 +398,6 @@ star_wars_object_field_in_inline_fragments(Config) ->
     Q1 =
       "query DroidFieldInFragment { hero { name ... on Droid { primaryFunction } } }",
     th:no_errors(th:x(Config, Q1)),
-    ok.
-
-%% -- ENUMeration TYPE TESTS ----------------------------------
-
-enum_input(Config) ->
-    Q1 = "{ colorInt(fromEnum: GREEN) }",
-    #{ data := #{ <<"colorInt">> := 1 }} = th:x(Config, Q1),
-    ok.
-
-enum_output(Config) ->
-    Q1 = "{ colorEnum(fromInt: 1) }",
-    #{ data := #{ <<"colorEnum">> := <<"GREEN">> }} = th:x(Config, Q1),
-    ok.
-
-enum_input_output(Config) ->
-    Q1 = "{ colorEnum(fromEnum: GREEN) }",
-    #{ data := #{ <<"colorEnum">> := <<"GREEN">> }} = th:x(Config, Q1),
-    ok.
-
-enum_no_string_literal(Config) ->
-    Q1 = "{ colorEnum(fromEnum: \"GREEN\") }",
-    th:errors(th:x(Config, Q1)),
-    ok.
-
-enum_no_incorrect_internal_value(Config) ->
-    Q1 = "{ colorEnum(fromString: \"GREEN\") }",
-    #{ data := #{
-        <<"colorEnum">> := null }} = th:x(Config, Q1),
-    ok.
-
-enum_no_internal_enum(Config) ->
-    Q1 = "{ colorEnum(fromEnum: 1) }",
-    th:errors(th:x(Config, Q1)),
-    ok.
-
-enum_no_literal_int(Config) ->
-    Q1 = "{ colorEnum(fromInt: GREEN) }",
-    th:errors(th:x(Config, Q1)),
-    ok.
-
-enum_accept_json(Config) ->
-    Q1 = "query test($color: Color!) { colorEnum(fromEnum: $color) }",
-    #{ data :=
-       #{ <<"colorEnum">> := <<"BLUE">> }} =
-           th:x(Config, Q1, <<"test">>, #{ <<"color">> => <<"BLUE">> }),
-    ok.
-
-enum_mutation_accept_json(Config) ->
-    Q1 = "mutation x($color: Color!) { favoriteEnum(color: $color) }",
-    #{ data :=
-       #{ <<"favoriteEnum">> := <<"GREEN">> }} =
-           th:x(Config, Q1, <<"x">>, #{ <<"color">> => <<"GREEN">> }),
-    ok.
-
-enum_no_accept_internal_query(Config) ->
-    Q1 = "query test($color: Color!) { colorEnum(fromEnum: $color) }",
-    th:errors(th:x(Config, Q1, <<"test">>, #{ <<"color">> => 2 })),
-    ok.
-
-enum_no_accept_internal_query_2(Config) ->
-    Q1 = "query test($color: String!) { colorEnum(fromEnum: $color) }",
-    th:errors(th:x(Config, Q1, <<"test">>, #{ <<"color">> => <<"BLUE">> })),
-    ok.
-
-enum_no_accept_internal_query_3(Config) ->
-    Q1 = "query test($color: Int!) { colorEnum(fromEnum: $color) }",
-    th:errors(th:x(Config, Q1, <<"test">>, #{ <<"color">> => 2 })),
-    ok.
-
-enum_internal_zero(Config) ->
-    Q1 = "{ colorEnum(fromEnum: RED) colorInt(fromEnum: RED) }",
-    #{ data :=
-        #{ <<"colorEnum">> := <<"RED">>,
-            <<"colorInt">> := 0 }} = th:x(Config, Q1),
-    ok.
-
-enum_input_nullable(Config) ->
-    Q1 = "{ colorEnum colorInt }",
-    #{ data := #{
-        <<"colorEnum">> := null,
-        <<"colorInt">> := null
-    }} = th:x(Config, Q1),
     ok.
 
 %% -- SCHEMA TEST --------------------------------

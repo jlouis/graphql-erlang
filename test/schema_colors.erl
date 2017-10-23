@@ -1,4 +1,4 @@
--module(colors).
+-module(schema_colors).
 
 -export([inject/0]).
 
