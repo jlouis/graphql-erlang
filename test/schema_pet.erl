@@ -1,4 +1,4 @@
--module(pet).
+-module(schema_pet).
 
 -export([inject/0]).
 
