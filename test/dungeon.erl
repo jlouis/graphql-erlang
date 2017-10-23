@@ -74,13 +74,14 @@ reserve_number(Input) ->
 
 create(monster, Opts) ->
     Name = proplists:get_value(name, Opts, <<"goblin">>),
-    Mood = proplists:get_value(mood, Opts, "dodgy"),
+    Mood = proplists:get_value(mood, Opts, 'DODGY'),
+    true = is_atom(Mood),
     Color = proplists:get_value(color, Opts, #{ r => 65, g => 146, b => 75}),
     HitPoints = proplists:get_value(hitpoints, Opts, 10),
     #monster { name = Name
              , color = Color
              , hitpoints = HitPoints
-             , mood = {enum, #{ mood => Mood }}
+             , mood = Mood
              , stats = [#stats{}] };
 create(room, Opts) ->
     Desc = proplists:get_value(desc, Opts, <<"hallway">>),
@@ -151,17 +152,17 @@ populate() ->
           [ {create(monster, [ {name, <<"goblin">>}
                              , {color, #{ r => 65, g => 146, b => 75}}
                              , {hitpoints, 10}
-                             , {mood, {enum, #{ mood => "dodgy" }}}
+                             , {mood, 'DODGY'}
                              ]), insert}
           , {create(monster, [ {name, <<"orc">>}
                              , {color, #{ r => 65, g => 146, b => 75}}
                              , {hitpoints, 30}
-                             , {mood, {enum, #{ mood => "aggressive" }}}
+                             , {mood, 'AGGRESSIVE'}
                              ]), insert}
           , {create(monster, [ {name, <<"reserved goblin">>}
                              , {color, #{ r => 65, g => 146, b => 75}}
                              , {hitpoints, 5}
-                             , {mood, {enum, #{ mood => "dodgy" }}}
+                             , {mood, 'DODGY'}
                              ]), reserve}
           ]
      },
