@@ -79,9 +79,7 @@ type(N) when is_binary(N) ->
         %% Negative types
         #object_type{} = OT -> {'-', OT};
         #interface_type{} = IFace -> {'-', IFace};
-        #union_type{} = Union -> {'-', Union};
-        
-        _Unknown -> {error, {invalid_type, N}}
+        #union_type{} = Union -> {'-', Union}
     end.
 
 %% Assert a type is an input type
