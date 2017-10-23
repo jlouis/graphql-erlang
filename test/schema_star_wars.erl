@@ -1,4 +1,4 @@
--module(star_wars).
+-module(schema_star_wars).
 
 -export([execute/4]).
 -export([inject/0]).
