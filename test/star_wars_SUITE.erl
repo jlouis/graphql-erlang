@@ -23,7 +23,7 @@ end_per_group(_Group, _Config) ->
 
 init_per_suite(Config) ->
     application:ensure_all_started(graphql),
-    ok = star_wars:inject(),
+    ok = schema_star_wars:inject(),
     ok = graphql:validate_schema(),
     Config.
 
