@@ -44,7 +44,7 @@ end_per_suite(_Config) ->
     ok.
 
 init_per_testcase(no_incorrect_internal_value, _Config) ->
-    {skip, no_output_validation_yet};
+    {skip, no_enum_output_validation_yet};
 init_per_testcase(_Case, Config) ->
     Config.
 
@@ -96,7 +96,7 @@ no_string_literal(Config) ->
     ok.
 
 no_incorrect_internal_value(Config) ->
-    Q1 = "{ colorEnum(fromString: \"GREEN\") }",
+    Q1 = "{ colorEnum(fromString: \"YELLOW\") }",
     #{ data := #{
         <<"colorEnum">> := null }} = th:x(Config, Q1),
     ok.

@@ -75,10 +75,12 @@ resolve_input(enum, {enum, X}) when is_binary(X) -> resolve_input(string, X);
 resolve_input(int, 0) -> 'RED';
 resolve_input(int, 1) -> 'GREEN';
 resolve_input(int, 2) -> 'BLUE';
+resolve_input(string, <<"YELLOW">>) -> 'YELLOW';
 resolve_input(string, <<"RED">>) -> 'RED';
 resolve_input(string, <<"GREEN">>) -> 'GREEN';
 resolve_input(string, <<"BLUE">>) -> 'BLUE'.
 
+resolve_output(enum, 'YELLOW') -> {ok, <<"YELLOW">>}; %% This one is invalid
 resolve_output(enum, 'RED') -> {ok, <<"RED">>};
 resolve_output(enum, 'GREEN') -> {ok, <<"GREEN">>};
 resolve_output(enum, 'BLUE') -> {ok, <<"BLUE">>};
