@@ -18,7 +18,7 @@ execute(_Ctx, _, <<"monsters">>, #{ <<"ids">> := InputIDs }) ->
           end || ID <- InputIDs]};
 execute(_Ctx, _, <<"findMonsters">>, #{ <<"moods">> := Moods }) ->
     QH = qlc:q([M || M <- mnesia:table(monster),
-                     mood_member(Moods, M#monster.mood)]),
+                     lists:member(M#monster.mood, Moods)]),
     Monsters = dungeon:load_txn(QH),
     {ok, [{ok, M} || M <- Monsters]};
 execute(_Ctx, _, <<"thing">>, #{ <<"id">> := InputID }) ->
@@ -37,9 +37,3 @@ execute(_Ctx, _, <<"rooms">>, #{ <<"ids">> := InputIDs }) ->
               dungeon:dirty_load(OID)
           end || ID <- InputIDs]}.
 
-mood_member(Moods, {enum, #{ mood := Value }}) ->
-    error_logger:info_report([
-                              {moods, Moods},
-                              {value, Value}]),
-    M = iolist_to_binary(string:to_upper(Value)),
-    lists:member(M, Moods).
