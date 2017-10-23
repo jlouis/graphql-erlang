@@ -413,7 +413,7 @@ type_dec(_DTy, {non_null, _STy}) ->
 type_dec({list, DTy}, {list, STy}) ->
     %% Lists are decided by means of a congruence
     type_dec(DTy, STy);
-type_dec(DTy, STy) ->
+type_dec(_DTy, _STy) ->
     %% Any other type combination are invalid
     no.
 
