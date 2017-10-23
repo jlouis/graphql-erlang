@@ -414,7 +414,7 @@ type_dec({list, DTy}, {list, STy}) ->
     %% Lists are decided by means of a congruence
     type_dec(DTy, STy);
 type_dec(DTy, STy) ->
-    error_logger:error_report([{type_mismatch, DTy, STy}]),
+    %% Any other type combination are invalid
     no.
 
 %% Judge a list of values with the same type.
