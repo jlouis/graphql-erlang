@@ -19,7 +19,7 @@ execute(_Ctx, _, <<"monsters">>, #{ <<"ids">> := InputIDs }) ->
 execute(_Ctx, _, <<"findMonsters">>, #{ <<"moods">> := Moods }) ->
     QH = qlc:q([M || M <- mnesia:table(monster),
                      lists:member(M#monster.mood, Moods)]),
-    Monsters = dungeon:load_txn(QH),
+    {ok, Monsters} = dungeon:load_txn(QH),
     {ok, [{ok, M} || M <- Monsters]};
 execute(_Ctx, _, <<"thing">>, #{ <<"id">> := InputID }) ->
     case dungeon:unwrap(InputID) of

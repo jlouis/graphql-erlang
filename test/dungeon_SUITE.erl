@@ -38,8 +38,8 @@ init_per_group(_Group, Config) ->
 end_per_group(_Group, _Config) ->
     ok.
 
-init_per_testcase(find_monster, _Config) ->
-    {skip, fscked_enums_in_dungeon};
+init_per_testcase(find_monster_singleton, _Config) ->
+    {skip, cannot_handle_singleton_in_array_context_yet};
 init_per_testcase(x, Config) ->
     {ok, _} = dbg:tracer(),
     dbg:p(all, c),
@@ -81,6 +81,7 @@ groups() ->
          , replace_enum_representation
          , auxiliary_data
          , find_monster
+         , find_monster_singleton
          ]},
     Errors =
         {errors, [],
@@ -646,8 +647,37 @@ fragment_over_union_interface(Config) ->
     ok.
 
 find_monster(Config) ->
-    Expected = #{ data => #{ <<"findMonster">> => [] }},
-    Expected = run(Config, <<"FindQuery">>, #{}),
+    Expected1 =
+        #{ data =>
+               #{<<"findMonsters">> =>
+                     [#{<<"name">> => <<"goblin">>},
+                      #{<<"name">> => <<"Auxiliary Undead">>},
+                      #{<<"name">> => <<"goblin">>},
+                      #{<<"name">> => <<"goblin">>},
+                      #{<<"name">> => <<"hobgoblin">>},
+                      #{<<"name">> => <<"Yellow Slime">>},
+                      #{<<"name">> => <<"goblin">>},
+                      #{<<"name">> => <<"goblin">>}]}},  
+    Expected1 = run(Config, <<"FindQuery">>, #{}),
+    Expected1 = run(Config, <<"FindQueryParam">>,
+                    #{ <<"m">> => [<<"DODGY">>]}),
+    ok.
+
+find_monster_singleton(Config) ->
+    Expected1 =
+        #{ data =>
+               #{<<"findMonsters">> =>
+                     [#{<<"name">> => <<"goblin">>},
+                      #{<<"name">> => <<"Auxiliary Undead">>},
+                      #{<<"name">> => <<"goblin">>},
+                      #{<<"name">> => <<"goblin">>},
+                      #{<<"name">> => <<"hobgoblin">>},
+                      #{<<"name">> => <<"Yellow Slime">>},
+                      #{<<"name">> => <<"goblin">>},
+                      #{<<"name">> => <<"goblin">>}]}},  
+    Expected1 = run(Config, <<"FindQuerySingleton">>, #{}),
+    Expected1 = run(Config, <<"FindQueryParamSingleton">>,
+                    #{ <<"m">> => <<"DODGY">>}),
     ok.
 
 simple_field_merge(Config) ->
