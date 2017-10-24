@@ -54,7 +54,10 @@ groups() ->
                parse_schema
               ]},
 
-    Basic = {basic, [shuffle, parallel], [ hello_world, user_queries ] },
+    Basic = {basic, [shuffle, parallel],
+             [ hello_world,
+               hello_world_query,
+               user_queries ] },
 
     SchemaTest = {schema_test, [shuffle, parallel], [
         schema_test
@@ -77,6 +80,12 @@ hello_world(Config) ->
     Query = "{ hello }",
     #{ data :=
        #{ <<"hello">> := <<"world">> } } = th:x(Config, Query),
+    ok.
+
+hello_world_query(Config) ->
+    Query = "query { hello }",
+    #{ data :=
+           #{ <<"hello">> := <<"world">> } } = th:x(Config, Query),
     ok.
 
 user_queries(Config) ->
