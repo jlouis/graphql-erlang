@@ -262,7 +262,7 @@ scalar_output_coercion(Config) ->
 
 replace_enum_representation(Config) ->
     ct:log("Test replace enum representation"),
-    Monster = dungeon:create(monster, [{mood, "dodgy"}]),
+    Monster = dungeon:create(monster, [{mood, 'DODGY'}]),
     [{GoblinId, _Goblin}] = dungeon:batch_create([{Monster, insert}]),
     OpaqueId = dungeon:opaque_id(GoblinId),
     #{ data := #{

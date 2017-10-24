@@ -141,8 +141,9 @@ tc_params(Path, TyVarEnv, InitialParams) ->
 %% null values, which are handled here.
 tc_param(Path, K, #vardef { ty = {non_null, _}, default = null }, not_found) ->
     err([K | Path], missing_non_null_param);
-tc_param(_Path, _K, #vardef { default = Default }, not_found) ->
-    Default;
+tc_param(Path, K, #vardef { default = Default,
+                            ty = Ty }, not_found) ->
+    coerce_default_param([K | Path], Ty, Default);
 tc_param(Path, K, #vardef { ty = Ty }, Val) ->
     check_param([K | Path], Ty, Val).
 
@@ -152,7 +153,9 @@ tc_param(Path, K, #vardef { ty = Ty }, Val) ->
 %%
 %% This function case-splits on different types of positive polarity and
 %% calls out to the correct helper-function
+check_param(Path, {non_null, _}, null) -> err(Path, non_null);
 check_param(Path, {non_null, Ty}, V) -> check_param(Path, Ty, V);
+check_param(Path, _Ty, null) -> null;
 check_param(Path, #scalar_type{} = STy, V) -> non_polar_coerce(Path, STy, V);
 check_param(Path, #enum_type{} = ETy, {enum, V}) when is_binary(V) ->
     check_param(Path, ETy, V);
@@ -185,6 +188,19 @@ check_param(Path, Ty, V) when is_binary(Ty) ->
 check_param(Path, Ty, V) ->
     err(Path, {param_mismatch, Ty, V}).
 
+coerce_default_param(Path, Ty, Default) ->
+    try check_param(Path, Ty, Default) of
+        Result -> Result
+    catch
+        Class:Err ->
+            error_logger:error_report(
+              [{path, lists:reverse(Path)},
+               {default_value, Default},
+               {type, Ty},
+               {default_coercer_error, Class, Err}]),
+            err(Path, non_coercible_default)
+    end.
+
 %% Input objects are first coerced. Then they are checked.
 check_input_object(Path, #input_object_type{ fields = Fields }, Obj) ->
     Coerced = coerce_input_object(Obj),
@@ -210,7 +226,7 @@ check_input_object_fields(Path,
                              {non_null, _} when Default == null ->
                                  err([Name | Path], missing_non_null_param);
                              _ ->
-                                 Default
+                                 coerce_default_param(Path, Ty, Default)
                          end;
                      V ->
                          check_param([Name | Path], Ty, V)
@@ -523,6 +539,8 @@ err_msg({operation_not_found, Op}) ->
     ["Expected an operation ", Op, " but no such operation was found"];
 err_msg(missing_non_null_param) ->
     ["The parameter is non-null, but was undefined in parameter list"];
+err_msg(non_null) ->
+    ["The value is null in a non-null context"];
 err_msg({enum_not_found, Ty, Val}) ->
     X = io_lib:format("The value ~p is not a valid enum value for type ", [Val]),
     [X, graphql_err:format_ty(Ty)];
@@ -560,6 +578,8 @@ err_msg({unknown_enum, E}) ->
     ["The enum name ", E, " is not present in the schema"];
 err_msg({invalid_scalar_value, V}) ->
     io_lib:format("The value ~p is not a valid scalar value", [V]);
+err_msg(non_coercible_default) ->
+    ["The default value could not be correctly coerced"];
 err_msg({invalid_value_type_coercion, Ty, Val}) ->
     io_lib:format(
       "The value ~p cannot be coerced into the type ~p",
