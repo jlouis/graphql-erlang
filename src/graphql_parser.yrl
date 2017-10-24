@@ -52,6 +52,8 @@ OperationType -> 'subscription' : g_subscription('$1').
 
 OperationDefinition -> SelectionSet :
     #op { selection_set = '$1' }.
+OperationDefinition -> OperationType SelectionSet :
+    #op { ty = '$1', selection_set = '$2' }.
 OperationDefinition -> OperationType Name SelectionSet :
     #op { ty = '$1', id = '$2', selection_set = '$3' }.
 OperationDefinition -> OperationType Name VariableDefinitions SelectionSet :
