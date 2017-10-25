@@ -31,6 +31,10 @@ the compatibility issues you are likely to encounter.
   component is more precise for unknown variables and invalid enums.
 
   This is a buff.
+- Default values was not being input coerced at all. This error
+  specifically affects enumerated types.
+- A document of the form `query { ... }` is now accepted, as it should
+  be. The parser was missing a production.
 
 ### Refactored
 - Refactor all of the elaborator phase in the system. Improve and
