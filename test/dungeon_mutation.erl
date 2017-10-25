@@ -21,7 +21,11 @@ execute(_Ctx, _, <<"introduceMonster">>, #{ <<"input">> := Input }) ->
        <<"plushFactor">> := PF
     } = Input,
     Ss = input_stats(Stats),
-    {enum, _} = M,
+    case is_atom(M) of
+        true -> ok;
+        false ->
+            exit({bad_mood_value, M})
+    end,
     {atomic, Monster} = dungeon:insert(#monster {
     	properties = Props,
     	plush_factor = PF,
