@@ -8,7 +8,7 @@ Versioning generally follows semantic versioning, but breaks it for
 releases less than 1.0.0 in certain situations. The changelog mentions
 the compatibility issues you are likely to encounter.
 
-## [Unreleased]
+## [0.11.1]
 
 ### Changed
 - Coercion of enums have been changed. Now an enum is presented to the
