@@ -405,31 +405,33 @@ uniq([_]) -> ok;
 uniq([{X, _}, {X, _} | _]) -> {not_unique, X};
 uniq([_ | Next]) -> uniq(Next).
 
-%% Decide if two types are the same or not. We assume that the first
-%% parameter is the 'D' type and the second parameter is the 'S' type.
-%% These are the document and schema types respectively. In some
-%% situations, it is allowed to have a more strict type in the
-%% document then in the schema, but not vice versa.
+%% Decide if a type is an valid embedding in another type. We assume
+%% that the first parameter is the 'D' type and the second parameter
+%% is the 'S' type. These are the document and schema types
+%% respectively. In some situations, it is allowed to have a more
+%% strict type in the document then in the schema, but not vice versa.
+%% This is what leads to a type embedding.
 %%
 %% Some of the cases are reflexivity. Some of the cases are congruences.
 %% And some are special handling explicitly.
-type_dec(#scalar_type { id = ID }, #scalar_type { id = ID }) -> yes;
-type_dec(#enum_type { id = ID }, #enum_type { id = ID }) -> yes;
-type_dec(#input_object_type { id = ID }, #input_object_type { id = ID }) -> yes;
-type_dec({non_null, DTy}, {non_null, STy}) ->
-    type_dec(DTy, STy);
-type_dec({non_null, DTy}, STy) ->
+%%
+type_embed(#scalar_type { id = ID }, #scalar_type { id = ID }) -> yes;
+type_embed(#enum_type { id = ID }, #enum_type { id = ID }) -> yes;
+type_embed(#input_object_type { id = ID }, #input_object_type { id = ID }) -> yes;
+type_embed({non_null, DTy}, {non_null, STy}) ->
+    type_embed(DTy, STy);
+type_embed({non_null, DTy}, STy) ->
     %% A more strict document type of non-null is always allowed since
     %% it can't be null in the schema then
-    type_dec(DTy, STy);
-type_dec(_DTy, {non_null, _STy}) ->
+    type_embed(DTy, STy);
+type_embed(_DTy, {non_null, _STy}) ->
     %% If the schema requires a non-null type but the document doesn't
     %% supply that, it is an error
     no;
-type_dec({list, DTy}, {list, STy}) ->
+type_embed({list, DTy}, {list, STy}) ->
     %% Lists are decided by means of a congruence
-    type_dec(DTy, STy);
-type_dec(_DTy, _STy) ->
+    type_embed(DTy, STy);
+type_embed(_DTy, _STy) ->
     %% Any other type combination are invalid
     no.
 
@@ -463,7 +465,7 @@ judge(#{ varenv := VE }, Path, {var, ID}, SType) ->
     case maps:get(Var, VE, not_found) of
         not_found -> err(Path, {unbound_variable, Var});
         #vardef { ty = DType } ->
-            case type_dec(DType, SType) of
+            case type_embed(DType, SType) of
                 yes ->
                     {var, ID};
                 no ->
