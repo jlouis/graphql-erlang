@@ -155,7 +155,11 @@ tc_param(Path, K, #vardef { ty = Ty }, Val) ->
 %% calls out to the correct helper-function
 check_param(Path, {non_null, _}, null) -> err(Path, non_null);
 check_param(Path, {non_null, Ty}, V) -> check_param(Path, Ty, V);
-check_param(Path, _Ty, null) -> null;
+check_param(_Path, _Ty, null) -> null;
+check_param(Path, {list, T}, L) when is_list(L) ->
+    %% Build a dummy structure to match the recursor. Unwrap this
+    %% structure before replacing the list parameter.
+    [check_param(Path, T, X) || X <- L];
 check_param(Path, #scalar_type{} = STy, V) -> non_polar_coerce(Path, STy, V);
 check_param(Path, #enum_type{} = ETy, {enum, V}) when is_binary(V) ->
     check_param(Path, ETy, V);
@@ -169,10 +173,6 @@ check_param(Path, #enum_type { id = Ty }, V) when is_binary(V) ->
         OtherTy ->
             err(Path, {param_mismatch, {enum, Ty, OtherTy}})
     end;
-check_param(Path, {list, T}, L) when is_list(L) ->
-    %% Build a dummy structure to match the recursor. Unwrap this
-    %% structure before replacing the list parameter.
-    [check_param(Path, T, X) || X <- L];
 check_param(Path, #input_object_type{} = IOType, Obj) when is_map(Obj) ->
     check_input_object(Path, IOType, Obj);
 %% The following expands un-elaborated (nested) types
@@ -194,9 +194,9 @@ coerce_default_param(Path, Ty, Default) ->
     catch
         Class:Err ->
             error_logger:error_report(
-              [{path, lists:reverse(Path)},
+              [{path, graphql_err:path(lists:reverse(Path))},
                {default_value, Default},
-               {type, Ty},
+               {type, graphql_err:format_ty(Ty)},
                {default_coercer_error, Class, Err}]),
             err(Path, non_coercible_default)
     end.
@@ -431,6 +431,10 @@ type_embed(_DTy, {non_null, _STy}) ->
 type_embed({list, DTy}, {list, STy}) ->
     %% Lists are decided by means of a congruence
     type_embed(DTy, STy);
+type_embed(DTy, {list, STy}) ->
+    %% A singleton type is allowed to be embedded in a list according to the
+    %% specification (Oct 2016)
+    type_embed(DTy, STy);
 type_embed(_DTy, _STy) ->
     %% Any other type combination are invalid
     no.
@@ -467,13 +471,22 @@ judge(#{ varenv := VE }, Path, {var, ID}, SType) ->
         #vardef { ty = DType } ->
             case type_embed(DType, SType) of
                 yes ->
-                    {var, ID};
+                    {var, ID, DType};
                 no ->
                     err(Path, {type_mismatch,
                                #{ document => {var, Var, DType},
                                   schema => SType }})
             end
     end;
+judge(Ctx, Path, Values, SType) when is_list(Values) ->
+    case SType of
+        {list, InnerType} ->
+            judge_list(Ctx, Path, Values, InnerType, 0)
+    end;
+judge(Ctx, Path, Value, {list, _} = SType) ->
+    %% If the value is not of list-type, but we expect a list,
+    %% then hoist the value into a singleton list and recurse
+    judge(Ctx, Path, [Value], SType);
 judge(_Ctx, Path, {enum, N}, SType) ->
     case graphql_schema:lookup_enum_type(N) of
         not_found ->
@@ -493,19 +506,6 @@ judge(_Ctx, Path, InputObj, SType) when is_map(InputObj) ->
         _OtherType ->
             err(Path, {type_mismatch, #{ document => InputObj, schema => SType }})
     end;
-judge(Ctx, Path, Values, SType) when is_list(Values) ->
-    case SType of
-        {list, InnerType} ->
-            judge_list(Ctx, Path, Values, InnerType, 0)
-    end;
-%% ------------
-%% At this point, we are done looking at a the values
-%% and we start looking at the schema types
-%% ------------
-judge(Ctx, Path, Value, {list, _} = SType) ->
-    %% If the value is not of list-type, but we expect a list,
-    %% then hoist the value into a singleton list and recurse
-    judge(Ctx, Path, [Value], SType);
 judge(_Ctx, Path, Value, #scalar_type{} = SType) ->
     non_polar_coerce(Path, SType, Value);
 judge(_Ctx, Path, String, #enum_type{}) when is_binary(String) ->

@@ -38,8 +38,6 @@ init_per_group(_Group, Config) ->
 end_per_group(_Group, _Config) ->
     ok.
 
-init_per_testcase(find_monster_singleton, _Config) ->
-    {skip, cannot_handle_singleton_in_array_context_yet};
 init_per_testcase(x, Config) ->
     {ok, _} = dbg:tracer(),
     dbg:p(all, c),
