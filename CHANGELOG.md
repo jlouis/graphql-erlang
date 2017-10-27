@@ -8,6 +8,10 @@ Versioning generally follows semantic versioning, but breaks it for
 releases less than 1.0.0 in certain situations. The changelog mentions
 the compatibility issues you are likely to encounter.
 
+## [Unreleased]
+- Format type values as binary() in error's messages
+  (Minor fix)
+
 ## [0.11.1]
 
 ### Changed
@@ -102,7 +106,7 @@ the compatibility issues you are likely to encounter.
 ### Added
 - Build is now on Travis CI
 - Erlang/OTP 19.3 and 20.0 support
-  
+
 ### Changed
 - Lager is not a dependency anymore. The library is completely
   independent of anything but `kernel` and `stdlib` now.
