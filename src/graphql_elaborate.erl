@@ -262,9 +262,9 @@ err(Path, Reason) ->
     graphql_err:abort(Path, elaborate, Reason).
 
 err_msg({type_not_found, Ty}) ->
-    ["Type not found in schema: ", Ty];
+    ["Type not found in schema: ", graphql_err:format_ty(Ty)];
 err_msg({not_input_type, Ty}) ->
-    ["Type ", Ty, " is not an input type but is used in input-context"];
+    ["Type ", graphql_err:format_ty(Ty), " is not an input type but is used in input-context"];
 err_msg(directives_on_op) ->
     ["No support for directives on operation"];
 err_msg(no_root_schema) ->
