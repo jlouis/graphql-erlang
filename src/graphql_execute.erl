@@ -795,14 +795,28 @@ resolve_args_(Ctx, [{ID, Val} | As], Acc) ->
     V = value(Ctx, Val),
     resolve_args_(Ctx, As, Acc#{ K => V }).
 
+%% Coerce variables into its slot based on type. This is required
+%% because the specification allows you to use e.g, a variable of type
+%% Pet in a slot of type [Pet]. This requires a variable expansion
+%% here, which is why we need to coerce in the execution phase. It
+%% somewhat fails in the sense that we are now violating the obvious
+%% phase splitting in the system
+%%
+%% For a discussion about the Pet -> [Pet] coercion in the
+%% specification, see (Oct2016 Section 3.1.7)
+var_coerce(Tau, Tau, Value)             -> Value;
+var_coerce({non_null, Tau}, Tau, Value) -> Value;
+var_coerce(Tau, {list, SType}, Value)   -> [var_coerce(Tau, SType, Value)].
+
 %% Produce a valid value for an argument.
 value(Ctx, {Ty, Val})                     -> value(Ctx, Ty, Val);
 value(Ctx, #{ type := Ty, value := Val }) -> value(Ctx, Ty, Val).
 
-value(#{ params := Params } = _Ctx, _Ty, {var, ID}) ->
+value(#{ params := Params } = _Ctx, SType, {var, ID, DType}) ->
     %% Parameter expansion and type check is already completed
     %% at this stage
-    maps:get(name(ID), Params);
+    Value = maps:get(name(ID), Params),
+    var_coerce(DType, SType, Value);
 value(_Ctx, _Ty, null) ->
     null;
 value(Ctx, {non_null, Ty}, Val) ->

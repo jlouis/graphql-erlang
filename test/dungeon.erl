@@ -134,7 +134,8 @@ dirty_load(OID) ->
 load_txn(Q) ->
     F = fun() -> qlc:e(Q) end,
     case mnesia:transaction(F) of
-        {atomic, [X]} -> {ok, X}
+        {atomic, [X]} -> {ok, X};
+        {atomic, L} when is_list(L) -> {ok, L}
     end.
 
 populate() ->

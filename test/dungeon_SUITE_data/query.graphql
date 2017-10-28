@@ -1,5 +1,17 @@
 ## QUERIES
 
+query FindQueryParamSingleton($m : Mood) {
+  findMonsters(moods: $m) {
+    name
+  }
+}
+
+query FindQuerySingleton {
+  findMonsters(moods: DODGY) {
+    name
+  }
+}
+
 query FindQueryParam($m : [Mood]!) {
   findMonsters(moods: $m) {
     name
