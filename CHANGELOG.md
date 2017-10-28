@@ -9,6 +9,14 @@ releases less than 1.0.0 in certain situations. The changelog mentions
 the compatibility issues you are likely to encounter.
 
 ## [Unreleased]
+
+### Fixed
+- Heed Oct2016 spec section 3.1.7 w.r.t input coercion of scalar
+  values. Suppose we have a `DOG` of type `Pet`. Then, coercion of a
+  value `DOG` into a context `[Pet]` is now regarded as having
+  supplied `[DOG]`.
+
+### Changed
 - Format type values as binary() in error's messages
   (Minor fix)
 
