@@ -27,8 +27,8 @@ the compatibility issues you are likely to encounter.
   coercer as `input(Type, Str)` where `Str` is a `binary()` value.
   The function default to returning `{enum, Str}` for the enumerated
   value. The change is to handle the fact that enumerated values might
-  enter the coercer in many formats, so by this change we make sure
-  they enter in a valid way. The change also allows one to use
+  enter the graphql system in many formats, so by this change we make sure
+  they enter in a canonical way. The change also allows one to use
   something such as `binary_to_existing_atom` to handle enumerations
   in the system (in a safe way to boot!).
 - Major restructuring of the test suite. Split tests into their own
