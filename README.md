@@ -649,20 +649,6 @@ execute(_Ctx, Obj, Field, _Args) ->
     end.
 ```
 
-As this is very common, the GraphQL system currently supplies a
-shorthand for this:
-
-```erlang
-execute(_Ctx, _Obj, _Field, _Args) ->
-    default.
-```
-
-*NOTE:* This shorthand may be removed in a future major version as it
-turns out it can be handled quite easily by the programmer in a
-generic way. The assumption a `SrcObj` is of `map()` type is a
-limitation that doesn't necessarily hold true. If your database
-backend is Mnesia, it is likely to be a record for instance.
-
 Another trick is to use generic execution to handle "middlewares" -
 See the appropriate section on Middlewares.
 
@@ -716,7 +702,7 @@ checking and validation once and for all at load time. In addition it
 provides a security measure: clients in production can only call a
 pre-validated set of queries if such desired.
 
-# Tips & Tricks
+# User Interface
 
 GraphQL has some very neat Javascript tooling which plugs into the
 introspection of a GraphQL server and provides additional
@@ -739,17 +725,9 @@ Currently, the code implements all of the October 2016 GraphQL
 specification, except for a few areas:
 
 * Some validators are missing and pending implementation. The
-  important validators are present, however.
+  important validators are present, however. Missing stuff are all
+  tracked as issues in this repository.
 * Parametrization inside fragments are not yet implemented fully.
-* Parallelization is postponed until a refactoring phase has been
-  completed on the code base. There is a fairly good plan for its
-  implementation at present, but we've not had the need to implement
-  the parallel behavior yet.
-* The system still needs a specification for sending work to worker
-  processes through a system based on "promises". This allows you to
-  coalesce data loading, and database JOINS dynamically which speeds
-  up queries.
-* The code is somewhat rough in places and needs some refactoring.
 
 # Tests
 
@@ -760,6 +738,27 @@ work is definitely needed, but in general new functionality should be
 provided together with a test case that demonstrates the new
 functionality.
 
-We have the *dungeon* schema which loosely reflects a MUD schema for
-use in a game. It is used to test for regressions in the GraphQL
-specification, and to test for breakage of backwards compatibility.
+The general tests are:
+
+* `dungeon_SUITE` which implements a "MUD" style dungeon backend. It
+  is used as a way to handle most of the test cases we cook up
+  ourselves. It is driven by a schema and uses a query document for
+  its queries. If you don't know where to add a test, this is a good
+  place.
+* `enum_SUITE` Taken from the official Node.js de-facto
+  implementation, this suite uses the "colors" schema in order to
+  verify certain hard-to-get-right properties about enumerated data
+  types.
+* `graphql_SUITE` Main suite for things which doesn't fit elsewhere.
+  Checks lexing/parsing, "Hello World" style queries and also
+  introspection.
+* `star_wars_SUITE` An implementation from the specification of the
+  Star Wars universe. Allows us to verify queries from the
+  specification in our own code. Also part of the Node.js de-facto
+  implementation, so it is easy for us to transplant a test from there
+  to here.
+* `validation_SUITE` GraphQL contains a lot of different validation
+  checks. We handle some of these in the type checker and some in a
+  validation pass. The tests here are mostly verifying parts of the
+  specification. It uses the "Pet" schema as a base.
+
