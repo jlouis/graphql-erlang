@@ -5,19 +5,20 @@
          init_per_group/2, end_per_group/2,
          init_per_testcase/2, end_per_testcase/2]).
 
--export([  v_5_1_1_1/1
-         , v_5_1_2_1/1
-         , v_5_2_1/1
-         , v_5_2_3/1
-         , v_5_3_1/1
-         , v_5_3_2/1
-         , v_5_4_1_1/1
-         , v_5_4_1_2/1
-         , v_5_4_1_3/1
-         , v_5_4_2_1/1
-         , v_5_4_2_2/1
-         , v_5_4_2_3_1/1
-         ]).
+-export([v_5_1_1_1/1,
+         v_5_1_2_1/1,
+         v_5_2_1/1,
+         v_5_2_3/1,
+         v_5_3_1/1,
+         v_5_3_2/1,
+         v_5_4_1_1/1,
+         v_5_4_1_2/1,
+         v_5_4_1_3/1,
+         v_5_4_2_1/1,
+         v_5_4_2_2/1,
+         v_5_4_2_3_1/1,
+         v_5_7_3/1
+        ]).
 
 suite() ->
     [{timetrap, {seconds, 30}}].
@@ -50,18 +51,19 @@ end_per_testcase(_Case, _Config) ->
 groups() ->
     Validation =
         {validation, [shuffle, parallel],
-         [ v_5_1_1_1
-         , v_5_1_2_1
-         , v_5_2_1
-         , v_5_2_3
-         , v_5_3_1
-         , v_5_3_2
-         , v_5_4_1_1
-         , v_5_4_1_2
-         , v_5_4_1_3
-         , v_5_4_2_1
-         , v_5_4_2_2
-         , v_5_4_2_3_1
+         [ v_5_1_1_1,
+           v_5_1_2_1,
+           v_5_2_1,
+           v_5_2_3,
+           v_5_3_1,
+           v_5_3_2,
+           v_5_4_1_1,
+           v_5_4_1_2,
+           v_5_4_1_3,
+           v_5_4_2_1,
+           v_5_4_2_2,
+           v_5_4_2_3_1,
+           v_5_7_3
          ]},
     [Validation].
 
@@ -238,3 +240,11 @@ v_5_4_2_3_1(_Config) ->
      "{ dog { ...F } } fragment F on Dog { ... on Cat { meowVolume } }"),
 
    ok.
+
+v_5_7_3(_Confgi) ->
+    false = th:v("query Q($var : Pet) { dog { name } }"),
+    false = th:v("query Q($var : Dog) { dog { name } }"),
+    true  = th:v(
+        "query Q($command : DogCommand) {"
+        " dog { doesKnowCommand(dogCommand : $command) } }"),
+    ok.
