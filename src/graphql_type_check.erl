@@ -275,10 +275,22 @@ frag(Ctx, Path, #frag {selection_set = SSet} = Frag) ->
 
 %% -- OPERATIONS -------------------------------
 
+%% Check that the variable environment of an operation is unique
+op_unique_varenv(VDefs) ->
+    NamedVars = [{graphql_ast:name(K), V}
+                 || #vardef { id = K } = V <- VDefs],
+    uniq(lists:sort(NamedVars)).
+
 %% Type check an operation.
 op(Ctx, Path, #op { id = ID, vardefs = VDefs, selection_set = SSet} = Op) ->
-    VarEnv = graphql_elaborate:mk_varenv(VDefs),
-    Op#op { selection_set = sset(Ctx#{ varenv => VarEnv }, [ID | Path], SSet) }.
+    case op_unique_varenv(VDefs) of
+        ok ->
+            VarEnv = graphql_elaborate:mk_varenv(VDefs),
+            CheckedSSet = sset(Ctx#{ varenv => VarEnv }, [ID | Path], SSet),
+            Op#op { selection_set = CheckedSSet };
+        {not_unique, Var} ->
+            err([ID | Path], {param_not_unique, Var})
+    end.
 
 %% -- SELECTION SETS ------------------------------------
 
@@ -397,13 +409,6 @@ take_arg(Args, {Key, #schema_arg { ty = Ty, default = Default }}) ->
         {value, Arg, NextArgs} ->
             {ok, Arg, NextArgs}
     end.
-
-%% Determine if an association list has unique keys
--spec uniq([{term(), term()}]) -> ok | {not_unique, term()}.
-uniq([]) -> ok;
-uniq([_]) -> ok;
-uniq([{X, _}, {X, _} | _]) -> {not_unique, X};
-uniq([_ | Next]) -> uniq(Next).
 
 %% Decide if a type is an valid embedding in another type. We assume
 %% that the first parameter is the 'D' type and the second parameter
@@ -529,6 +534,16 @@ coerce_input_object(Obj) when is_map(Obj) ->
 coerce_input_object(Value) -> Value.
 
 
+%% -- Internal functions --------------------------------
+
+%% Determine if an association list has unique keys
+-spec uniq([{term(), term()}]) -> ok | {not_unique, term()}.
+uniq([]) -> ok;
+uniq([_]) -> ok;
+uniq([{X, _}, {X, _} | _]) -> {not_unique, X};
+uniq([_ | Next]) -> uniq(Next).
+
+
 %% -- Error handling -------------------------------------
 
 -spec err([term()], term()) -> no_return().
@@ -569,6 +584,8 @@ err_msg({input_coerce_abort, _}) ->
     ["Input coercer failed due to an internal server error"];
 err_msg(unknown_fragment) ->
     ["The referenced fragment name is not present in the query document"];
+err_msg({param_not_unique, Var}) ->
+    ["The variable ", Var, " occurs more than once in the operation header"];
 err_msg({not_unique, X}) ->
     ["The name ", X, " occurs more than once"];
 err_msg({unbound_variable, Var}) ->
