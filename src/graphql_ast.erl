@@ -32,7 +32,6 @@ typename(#input_object_type { id = ID }) -> ID;
 typename(#object_type { id = ID }) -> ID.
 
 %% Determine if an association list has unique keys
-%% Assumes an already sorted list (for now)
 -spec uniq([{term(), term()}]) -> ok | {not_unique, term()}.
 uniq(L) ->
     uniq_(lists:sort(L)).
