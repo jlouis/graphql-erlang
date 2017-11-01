@@ -204,7 +204,7 @@ directive(Path, Context, #directive{ id = ID, args = Args } = D) ->
             D#directive { args = field_args([D | Path], Args, SArgs),
                           schema = Schema };
         false ->
-            err(Path, {invalid_directive_location, ID, Context})
+            err(Path, {invalid_directive_location, graphql_ast:name(ID), Context})
     end.
 
 %% -- SELECTION SETS -------------------------------
