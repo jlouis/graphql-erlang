@@ -33,6 +33,7 @@ standard_types_inject() ->
 directive_schema(include) ->
     #directive_type {
        id = <<"include">>,
+       locations = [field, fragment_spread, inline_fragment],
        args = #{
          <<"if">> =>
              #schema_arg{
@@ -43,6 +44,7 @@ directive_schema(include) ->
 directive_schema(skip) ->
     #directive_type {
        id = <<"skip">>,
+       locations = [field, fragment_spread, inline_fragment],
        args = #{
          <<"if">> =>
              #schema_arg{

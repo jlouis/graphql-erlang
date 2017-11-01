@@ -3,7 +3,7 @@
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
--export([name/1, id/1, typename/1]).
+-export([name/1, id/1, typename/1, uniq/1]).
 
 -spec name('ROOT' | name()) -> binary().
 name('ROOT') -> <<"ROOT">>;
@@ -30,4 +30,15 @@ typename(#union_type { id = ID }) -> ID;
 typename(#scalar_type { id = ID }) -> ID;
 typename(#input_object_type { id = ID }) -> ID;
 typename(#object_type { id = ID }) -> ID.
+
+%% Determine if an association list has unique keys
+%% Assumes an already sorted list (for now)
+-spec uniq([{term(), term()}]) -> ok | {not_unique, term()}.
+uniq(L) ->
+    uniq_(lists:sort(L)).
+
+uniq_([]) -> ok;
+uniq_([_]) -> ok;
+uniq_([{X, _}, {X, _} | _]) -> {not_unique, X};
+uniq_([_ | Next]) -> uniq_(Next).
 

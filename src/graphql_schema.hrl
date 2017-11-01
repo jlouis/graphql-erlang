@@ -12,6 +12,9 @@
 
 -type resolver_args() :: #{ binary() => term() }.
 -type ctx() :: #{ atom() => term() }.
+-type location() :: query | mutation | field
+                  | fragment_definition | fragment_spread | inline_fragment.
+
 -type resolver() :: fun ((ctx, term(), resolver_args()) -> term()).
 
 -record(enum_value,
@@ -58,6 +61,7 @@
 
 -record(directive_type,
         { id :: binary(),
+          locations :: [location()],
           args = #{} :: #{ binary() => schema_arg() }
         }).
 -type directive_type() :: #directive_type{}.

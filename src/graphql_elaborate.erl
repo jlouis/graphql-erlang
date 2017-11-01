@@ -17,7 +17,7 @@ document({document, Ops}) ->
 operations(Path, Operations) ->
     [operation_(Path, Op) || Op <- Operations].
 
-operation_(Path, #frag{} = F) -> frag(Path, F);
+operation_(Path, #frag{} = F) -> frag(Path, fragment_definition, F);
 operation_(Path, #op{} = O) -> op(Path, O).
 
 %% -- VARIABLE ENVIRONMENTS -----------------------
@@ -116,14 +116,12 @@ root(Path, #op { ty = T } = Op) ->
 %% other case, we have a type, but no schema entry. For that variant,
 %% we lookup the schema type, elaborate the fragment with the type and
 %% recurse.
-frag(Path, #frag { id = {name, _, _}, directives = [_|_] } = F) ->
-    err([F | Path], directives_on_named_fragment);
-frag(Path, #frag { ty = undefined, directives = Dirs } = Frag) ->
+frag(Path, Context, #frag { ty = undefined, directives = Dirs } = Frag) ->
     frag_sset(Path,
           Frag#frag {
-            directives = directives([Frag | Path], Dirs)
+            directives = directives([Frag | Path], Context, Dirs)
            });
-frag(Path, #frag { ty = T, directives = Dirs } = Frag) ->
+frag(Path, Context, #frag { ty = T, directives = Dirs } = Frag) ->
     Ty = graphql_ast:name(T),
     case graphql_schema:lookup(Ty) of
         not_found ->
@@ -132,7 +130,7 @@ frag(Path, #frag { ty = T, directives = Dirs } = Frag) ->
             frag_sset(Path,
                   Frag#frag {
                     schema = TypeSchema,
-                    directives = directives([Frag|Path], Dirs) })
+                    directives = directives([Frag|Path], Context, Dirs) })
     end.
 
 %% Handle the fields in a fragment by looking at its object type
@@ -147,18 +145,26 @@ frag_sset(Path, #frag { schema = #union_type{}} = F) ->
 
 %% -- OPERATIONS -----------------------------------
 
+%% Determine the kind of operation context we have from a type
+operation_context(undefined) -> query;
+operation_context({query, _}) -> query;
+operation_context({mutation, _}) -> mutation;
+operation_context({subscription, _}) -> subscription.
+
 %% Operations are straightforward congruences: elaborate into the structure
-op(Path, #op { vardefs = VDefs, directives = [] } = Op) ->
+op(Path, #op { ty = Ty, vardefs = VDefs, directives = Dirs } = Op) ->
     RootSchema = root(Path, Op),
     case graphql_schema:lookup(RootSchema) of
         not_found ->
             err([Op | Path], {type_not_found, RootSchema});
         #object_type{ fields = Fields } = Obj ->
-            sset([Op | Path], Op#op{ schema = Obj, vardefs = var_defs([Op | Path], VDefs) }, Fields)
-    end;
-op(Path, #op { id = {name, _, _}, directives = [_|_] } = Op) ->
-    err([Op | Path], directives_on_op).
-
+            OperationType = operation_context(Ty),
+            sset([Op | Path],
+                 Op#op{ schema = Obj,
+                        directives = directives(
+                                       [Op | Path], OperationType, Dirs),
+                        vardefs = var_defs([Op | Path], VDefs) }, Fields)
+    end.
 
 %% Handle a list of vardefs by elaboration of their types
 var_defs(Path, VDefs) ->
@@ -169,16 +175,22 @@ var_defs(Path, VDefs) ->
      end || V <- VDefs].
 
 %% -- DIRECTIVES -----------------------------------
-directives(Path, Ds) ->
-    try
-        [directive(Path, D) || D <- Ds]
-    catch
-        throw:{unknown, Unknown} ->
-            err(Path, {unknown_directive, graphql_ast:id(Unknown)})
+directives(Path, Context, Ds) ->
+    NamedDirectives = [{graphql_ast:name(ID), D} 
+                       || #directive { id = ID } = D <- Ds],
+    case graphql_ast:uniq(NamedDirectives) of
+        ok ->
+            try [directive(Path, Context, D) || D <- Ds]
+            catch throw:{unknown, Unknown} ->
+                    err(Path, {unknown_directive, graphql_ast:id(Unknown)})
+            end;
+        {not_unique, X} ->
+            err(Path, {directives_not_unique, X})
     end.
 
-directive(Path, #directive{ id = ID, args = Args } = D) ->
-    Schema = #directive_type { args = SArgs } =
+directive(Path, Context, #directive{ id = ID, args = Args } = D) ->
+    Schema = #directive_type { args = SArgs,
+                               locations = Locations } =
         case graphql_ast:name(ID) of
             <<"include">> ->
                 graphql_builtins:directive_schema(include);
@@ -187,8 +199,13 @@ directive(Path, #directive{ id = ID, args = Args } = D) ->
             _Name ->
                 throw({unknown, D})
         end,
-    D#directive { args = field_args([D | Path], Args, SArgs),
-                  schema = Schema }.
+    case lists:member(Context, Locations) of
+        true ->
+            D#directive { args = field_args([D | Path], Args, SArgs),
+                          schema = Schema };
+        false ->
+            err(Path, {invalid_directive_location, ID, Context})
+    end.
 
 %% -- SELECTION SETS -------------------------------
 
@@ -202,14 +219,14 @@ sset(Path, #op{ schema = OType, selection_set = SSet} = O, Fields) ->
 %% Fields are either fragment spreads, inline fragments, or fields. Recurse and
 %% elaborate on the congruence in a straightforward way.
 field(Path, _OType, #frag_spread { directives = Dirs } = FragSpread, _Fields) ->
-    ElabDirs = directives([FragSpread | Path], Dirs),
+    ElabDirs = directives([FragSpread | Path], fragment_spread, Dirs),
     FragSpread#frag_spread { directives = ElabDirs };
 %% Inline fragments are elaborated the same way as fragments
 field(Path, OType, #frag { id = '...' } = Frag, _Fields) ->
-    frag(Path, Frag#frag { schema = OType });
+    frag(Path, inline_fragment, Frag#frag { schema = OType });
 field(Path, _OType, #field { id = ID, args = Args, selection_set = SSet, directives = Dirs } = F, Fields) ->
     Name = graphql_ast:name(ID),
-    ElabDirs = directives([F | Path], Dirs),
+    ElabDirs = directives([F | Path], field, Dirs),
     case maps:get(Name, Fields, not_found) of
         %% Elaborate for the introspection system. __typename is always a valid name
         %% since it refers to the type of the object
@@ -263,10 +280,13 @@ err(Path, Reason) ->
 
 err_msg({type_not_found, Ty}) ->
     ["Type not found in schema: ", graphql_err:format_ty(Ty)];
+err_msg({invalid_directive_location, ID, Context}) ->
+    ["The directive ", ID, " is not valid in the context ",
+     atom_to_binary(Context, utf8)];
 err_msg({not_input_type, Ty}) ->
     ["Type ", graphql_err:format_ty(Ty), " is not an input type but is used in input-context"];
-err_msg(directives_on_op) ->
-    ["No support for directives on operation"];
+err_msg({directives_not_unique, X}) ->
+    ["The directive with name ", X, " is not unique in this location"];
 err_msg(no_root_schema) ->
     ["No root schema found. One is required for correct operation"];
 err_msg({unknown_field, F}) ->
@@ -284,7 +304,5 @@ err_msg(selection_on_enum) ->
 err_msg(fieldless_object) ->
     ["The path refers to an Object type, but no fields were specified"];
 err_msg(fieldless_interface) ->
-    ["The path refers to an Interface type, but no fields were specified"];
-err_msg(directives_on_named_fragment) ->
-    ["No support for directives on named fragments"].
+    ["The path refers to an Interface type, but no fields were specified"].
 

@@ -286,7 +286,7 @@ frag(Ctx, Path, #frag {selection_set = SSet} = Frag) ->
 op_unique_varenv(VDefs) ->
     NamedVars = [{graphql_ast:name(K), V}
                  || #vardef { id = K } = V <- VDefs],
-    uniq(lists:sort(NamedVars)).
+    graphql_ast:uniq(NamedVars).
 
 %% Type check an operation.
 op(Ctx, Path, #op { id = ID, vardefs = VDefs, selection_set = SSet} = Op) ->
@@ -367,7 +367,7 @@ directive(Ctx, Path,
 %% to the schema arguments.
 args(Ctx, Path, Args, Schema) ->
     NamedArgs = [{graphql_ast:name(K), V} || {K, V} <- Args],
-    case uniq(lists:sort(NamedArgs)) of
+    case graphql_ast:uniq(NamedArgs) of
         ok ->
           SchemaArgs = maps:to_list(Schema),
           args(Ctx, Path, NamedArgs, SchemaArgs, []);
@@ -539,24 +539,13 @@ coerce_input_object(Path, {input_object, Elems}) ->
                      N = coerce_name(K),
                      {N, coerce_input_object([N | Path], V)}
                  end || {K, V} <- Elems],
-    case uniq(lists:sort(AssocList)) of
+    case graphql_ast:uniq(AssocList) of
         ok ->
             maps:from_list(AssocList);
         {not_unique, Key} ->
             err(Path, {input_object_not_unique, Key})
     end;
 coerce_input_object(_Path, Value) -> Value.
-
-
-%% -- Internal functions --------------------------------
-
-%% Determine if an association list has unique keys
--spec uniq([{term(), term()}]) -> ok | {not_unique, term()}.
-uniq([]) -> ok;
-uniq([_]) -> ok;
-uniq([{X, _}, {X, _} | _]) -> {not_unique, X};
-uniq([_ | Next]) -> uniq(Next).
-
 
 %% -- Error handling -------------------------------------
 

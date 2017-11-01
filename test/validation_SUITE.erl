@@ -19,6 +19,7 @@
          v_5_4_2_3_1/1,
          v_5_5_1/1,
          v_5_6_1/1,
+         v_5_6_2/1,
          v_5_7_1/1,
          v_5_7_3/1
         ]).
@@ -68,6 +69,7 @@ groups() ->
            v_5_4_2_3_1,
            v_5_5_1,
            v_5_6_1,
+           v_5_6_2,
            v_5_7_1,
            v_5_7_3
          ]},
@@ -254,6 +256,10 @@ v_5_5_1(_Config) ->
 v_5_6_1(_Config) ->
     false = th:v("query Q { dog { name @invalidDirective }}"),
     true  = th:v("query Q { dog { name @include(if: true) }}"),
+    ok.
+
+v_5_6_2(_Config) ->
+    false = th:v("query Q @skip(if: $foo) { dog { name }}"),
     ok.
 
 v_5_7_1(_Config) ->
