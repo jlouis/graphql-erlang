@@ -398,7 +398,7 @@ inject() ->
                              'MUTATION' => #{ value => 2, description => "Mutations" },
                              'FIELD' => #{ value => 3, description => "Fields" },
                              'FRAGMENT_DEFINITION' => #{ value => 4, description => "Fragment definitions" },
-                             'FRAGMENT_SPREADS' => #{ value => 5, description => "Fragment spreads" },
+                             'FRAGMENT_SPREAD' => #{ value => 5, description => "Fragment spread" },
                              'INLINE_FRAGMENT' => #{ value => 6, description => "Inline fragments" }
                             }}},
     ok = graphql:insert_schema_definition(DirectiveLocation),
@@ -411,6 +411,8 @@ inject() ->
     ok = graphql:insert_schema_definition(Schema),
     ok.
 
+%% @todo: Look up the directive in the schema and then use that lookup as a way to render the
+%% following part. Most notably, locations can be mapped from the directive type.
 directive(Kind) ->
     {Name, Desc} =
         case Kind of
@@ -427,7 +429,7 @@ directive(Kind) ->
        <<"name">> => Name,
        <<"description">> => Desc,
        <<"locations">> =>
-           [<<"FIELD">>, <<"FRAGMENT_SPREADS">>, <<"INLINE_FRAGMENT">>],
+           [<<"FIELD">>, <<"FRAGMENT_SPREAD">>, <<"INLINE_FRAGMENT">>],
        <<"args">> =>
            [#{ <<"name">> => <<"if">>,
                <<"description">> => <<"flag for the condition">>,
