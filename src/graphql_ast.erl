@@ -21,7 +21,8 @@ id_(#op { id = ID }) -> ID;
 id_(#field { id = ID }) -> ID;
 id_(#frag_spread { id = ID }) -> ID;
 id_(#frag { id = ID }) -> ID;
-id_(#vardef { id = ID }) -> ID.
+id_(#vardef { id = ID }) -> ID;
+id_(#directive { id = ID }) -> ID.
      
 typename(#enum_type { id = ID }) -> ID;
 typename(#interface_type { id = ID }) -> ID;

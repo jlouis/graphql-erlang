@@ -174,7 +174,7 @@ directives(Path, Ds) ->
         [directive(Path, D) || D <- Ds]
     catch
         throw:{unknown, Unknown} ->
-            err(Path, {unknown_directive, Unknown})
+            err(Path, {unknown_directive, graphql_ast:id(Unknown)})
     end.
 
 directive(Path, #directive{ id = ID, args = Args } = D) ->
