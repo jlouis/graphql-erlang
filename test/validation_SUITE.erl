@@ -17,6 +17,7 @@
          v_5_4_2_1/1,
          v_5_4_2_2/1,
          v_5_4_2_3_1/1,
+         v_5_5_1/1,
          v_5_7_1/1,
          v_5_7_3/1
         ]).
@@ -64,6 +65,7 @@ groups() ->
            v_5_4_2_1,
            v_5_4_2_2,
            v_5_4_2_3_1,
+           v_5_5_1,
            v_5_7_1,
            v_5_7_3
          ]},
@@ -243,15 +245,19 @@ v_5_4_2_3_1(_Config) ->
 
    ok.
 
+v_5_5_1(_Config) ->
+    false = th:v("{ field(arg: { field: true, field: false })}"),
+    ok.
+
 v_5_7_1(_Config) ->
     false = th:v("query houseTrainedQuery("
                  " $atOtherHomes: Boolean,"
                  " $atOtherHomes: Boolean) { "
-                 "dog { isHousetrained(atOtherHomes: $atOtherHomes) } }"),
+                 "dog { isHouseTrained(atOtherHomes: $atOtherHomes) } }"),
     Q = "query A($atOtherHomes: Boolean) {...HouseTrainedFragment } "
         "query B($atOtherHomes: Boolean) {...HouseTrainedFragment } "
         " fragment HouseTrainedFragment { "
-        "    dog {isHousetrained(atOtherHomes: $atOtherHomes)}}",
+        "    dog {isHouseTrained(atOtherHomes: $atOtherHomes)}}",
     
     %% Since we have not yet solved fragment expansion correctly, this
     %% query doesn't work. But once fragment expansion is solved, then

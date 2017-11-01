@@ -461,7 +461,8 @@ g_string({bstring, _, S}) -> S.
 g_bool({bool, _, B}) -> B.
 
 g_list(L) when is_list(L) -> L.
-g_input_object(KVPairs) -> maps:from_list(KVPairs).
+g_input_object(KVPairs) ->
+    {input_object, KVPairs}.
 
 %% Convert keywords into binaries if they don't occur in the KW-position
 keyword({A, Line}) when is_atom(A) ->

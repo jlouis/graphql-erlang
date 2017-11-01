@@ -3,6 +3,14 @@
 -export([inject/0]).
 
 inject() ->
+    TestField = {input_object, #{
+                   id => <<"InputTest">>,
+                   description => ["Input Object for testing uniqueness"],
+                   fields => #{
+                     field => #{
+                       type => 'Bool!',
+                       description => "A bool field" }}}},
+    ok = graphql:insert_schema_definition(TestField),
     DogCommand = {enum, #{
     	id => 'DogCommand',
     	description => "Things you can command your dog to do",
@@ -183,17 +191,26 @@ inject() ->
     }}},
     ok = graphql:insert_schema_definition(Arguments),
 
-    QueryRoot = {object, #{
-    	id => 'QueryRoot',
-    	description => "Root Query of the pet schema",
-    	fields => #{
-    		arguments => #{ type => 'Arguments', description => "More complicated Argument cases" },
-    		dog => #{ type => 'Dog', description => "Query of dogs" },
-    		human => #{ type => 'Human', description => "Query of humans" },
-    		pet => #{ type => 'Pet', description => "Query of pets" },
-    		catOrDog => #{ type => 'CatOrDog', description => "Query of cats or dogs" }
-    	}
-    }},
+    QueryRoot =
+        {object, #{
+           id => 'QueryRoot',
+           description => "Root Query of the pet schema",
+           fields => #{
+             arguments => #{ type => 'Arguments', description => "More complicated Argument cases" },
+             field =>
+                 #{ type => 'Bool',
+                    description => "Test for input object uniqueness",
+                    args => #{
+                      arg => #{
+                        type => 'InputTest',
+                        description => "An input object test field"
+                       }}},
+             dog => #{ type => 'Dog', description => "Query of dogs" },
+             human => #{ type => 'Human', description => "Query of humans" },
+             pet => #{ type => 'Pet', description => "Query of pets" },
+             catOrDog => #{ type => 'CatOrDog', description => "Query of cats or dogs" }
+            }
+          }},
     ok = graphql:insert_schema_definition(QueryRoot),
     
     Schema = {root, #{

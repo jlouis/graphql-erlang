@@ -174,7 +174,14 @@ check_param(Path, #enum_type { id = Ty }, V) when is_binary(V) ->
             err(Path, {param_mismatch, {enum, Ty, OtherTy}})
     end;
 check_param(Path, #input_object_type{} = IOType, Obj) when is_map(Obj) ->
-    check_input_object(Path, IOType, Obj);
+    %% When an object comes in through JSON for example, then the input object
+    %% will be a map which is already unique in its fields. To handle this, turn
+    %% the object into the same form as the one we use on query documents and pass
+    %% it on. Note that the code will create a map later on once the input has been
+    %% uniqueness-checked.
+    check_param(Path, IOType, {input_object, maps:to_list(Obj)});
+check_param(Path, #input_object_type{} = IOType, {input_object, KVPairs}) ->
+    check_input_object(Path, IOType, {input_object, KVPairs});
 %% The following expands un-elaborated (nested) types
 check_param(Path, Ty, V) when is_binary(Ty) ->
     case graphql_schema:lookup(Ty) of
@@ -203,7 +210,7 @@ coerce_default_param(Path, Ty, Default) ->
 
 %% Input objects are first coerced. Then they are checked.
 check_input_object(Path, #input_object_type{ fields = Fields }, Obj) ->
-    Coerced = coerce_input_object(Obj),
+    Coerced = coerce_input_object(Path, Obj),
     check_input_object_fields(Path, maps:to_list(Fields), Coerced, #{}).
 
 %% Input objects are in positive polarity, so the schema's fields are used
@@ -503,10 +510,10 @@ judge(_Ctx, Path, {enum, N}, SType) ->
                        #{ document => Other,
                           schema => SType }})
     end;
-judge(_Ctx, Path, InputObj, SType) when is_map(InputObj) ->
+judge(_Ctx, Path, {input_object, _} = InputObj, SType) ->
     case SType of
         #input_object_type{} = IOType ->
-            Coerced = coerce_input_object(InputObj),
+            Coerced = coerce_input_object(Path, InputObj),
             check_input_object(Path, IOType, Coerced);
         _OtherType ->
             err(Path, {type_mismatch, #{ document => InputObj, schema => SType }})
@@ -527,11 +534,18 @@ judge(_Ctx, Path, Value, Unknown) ->
 coerce_name(B) when is_binary(B) -> B;
 coerce_name(Name) -> graphql_ast:name(Name).
 
-coerce_input_object(Obj) when is_map(Obj) ->
-    Elems = maps:to_list(Obj),
-    AssocList = [{coerce_name(K), coerce_input_object(V)} || {K, V} <- Elems],
-    maps:from_list(AssocList);
-coerce_input_object(Value) -> Value.
+coerce_input_object(Path, {input_object, Elems}) ->
+    AssocList = [begin
+                     N = coerce_name(K),
+                     {N, coerce_input_object([N | Path], V)}
+                 end || {K, V} <- Elems],
+    case uniq(lists:sort(AssocList)) of
+        ok ->
+            maps:from_list(AssocList);
+        {not_unique, Key} ->
+            err(Path, {input_object_not_unique, Key})
+    end;
+coerce_input_object(_Path, Value) -> Value.
 
 
 %% -- Internal functions --------------------------------
@@ -586,6 +600,8 @@ err_msg(unknown_fragment) ->
     ["The referenced fragment name is not present in the query document"];
 err_msg({param_not_unique, Var}) ->
     ["The variable ", Var, " occurs more than once in the operation header"];
+err_msg({input_object_not_unique, Var}) ->
+    ["The input object has a key ", Var, " which occur more than once"];
 err_msg({not_unique, X}) ->
     ["The name ", X, " occurs more than once"];
 err_msg({unbound_variable, Var}) ->
