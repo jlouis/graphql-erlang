@@ -459,8 +459,8 @@ fragment_embed(Path, #object_type { id = SpreadTy },
     %% Object spread in Object scope requires a perfect match
     err(Path, {fragment_spread, SpreadTy, ScopeTy});
 fragment_embed(Path, #object_type { id = ID },
-                      #union_type { id = UID,
-                                    types = ScopeTypes }) ->
+                     #union_type { id = UID,
+                                   types = ScopeTypes }) ->
     case lists:member(ID, ScopeTypes) of
         true -> ok;
         false -> err(Path, {not_union_member, ID, UID})
@@ -527,10 +527,7 @@ fragment_embed(Path, #union_type { id = SpreadID, types = SpreadMembers },
             ok;
         [] ->
             err(Path, {no_common_object, SpreadID, ScopeID})
-    end;
-fragment_embed(_Path, SpreadType, ScopeType) ->
-    exit({wrong_invocation, SpreadType, ScopeType}).
-
+    end.
 
 %% Decide if a type is an valid embedding in another type. We assume
 %% that the first parameter is the 'D' type and the second parameter
