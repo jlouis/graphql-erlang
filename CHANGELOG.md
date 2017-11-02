@@ -19,6 +19,11 @@ the compatibility issues you are likely to encounter.
 ### Changed
 - Format type values as binary() in error's messages
   (Minor fix)
+- Introduce Validation 5.7.1
+- Introduce Validation 5.5.1
+- Introduce Validation 5.6.1
+- Introduce Validation 5.6.2
+- Introduce Validation 5.6.3
 
 ## [0.11.1] 2017-10-26
 
