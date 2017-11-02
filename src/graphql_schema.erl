@@ -1,17 +1,20 @@
 -module(graphql_schema).
 -behaviour(gen_server).
 
+-include_lib("stdlib/include/qlc.hrl").
 -include("graphql_schema.hrl").
 -include("graphql_internal.hrl").
 
 -export([start_link/0, reset/0]).
 -export([
-    all/0,
-    insert/1, insert/2,
-    load/1,
-    get/1,
-    lookup/1,
-    lookup_enum_type/1]).
+         all/0,
+         insert/1, insert/2,
+         load/1,
+         get/1,
+         lookup/1,
+         lookup_enum_type/1,
+         lookup_interface_implementors/1
+        ]).
 -export([resolve_root_type/2]).
 
 -export([id/1]).
@@ -102,6 +105,20 @@ lookup_enum_type(EnumValue) ->
         error:badarg ->
             not_found
     end.
+
+%% Find the implementors of a given interface. If this proves to be
+%% too slow in practice, one can build an index in the schema over these
+%% and use an index lookup instead. It should be fairly simple to do.
+%%
+%% However, in the spirit of getting something up and running, we start
+%% with QLC in order to make a working system.
+-spec lookup_interface_implementors(binary()) -> [binary()].
+lookup_interface_implementors(IFaceID) ->
+    QH = qlc:q([Obj#object_type.id
+                || Obj <- ets:table(?OBJECTS),
+                   element(1, Obj) == object_type,
+                   lists:member(IFaceID, Obj#object_type.interfaces)]),
+    qlc:e(QH).
 
 -spec lookup(binary() | 'ROOT') -> schema_object() | not_found.
 lookup(ID) ->
