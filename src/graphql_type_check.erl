@@ -277,8 +277,9 @@ mk_fragenv(Frags) ->
        || #frag { id = ID} = Frg <- Frags]).
 
 %% Type check a fragment
-frag(Ctx, Path, #frag {selection_set = SSet} = Frag) ->
-    Frag#frag { selection_set = sset(Ctx, Path, SSet) }.
+frag(Ctx, Path, #frag { schema = Scope,
+                        selection_set = SSet} = Frag) ->
+    Frag#frag { selection_set = sset(Ctx, Path, Scope, SSet) }.
 
 %% -- OPERATIONS -------------------------------
 
@@ -289,11 +290,14 @@ op_unique_varenv(VDefs) ->
     graphql_ast:uniq(NamedVars).
 
 %% Type check an operation.
-op(Ctx, Path, #op { id = ID, vardefs = VDefs, selection_set = SSet} = Op) ->
+op(Ctx, Path, #op { id = ID,
+                    schema = Scope,
+                    vardefs = VDefs,
+                    selection_set = SSet} = Op) ->
     case op_unique_varenv(VDefs) of
         ok ->
             VarEnv = graphql_elaborate:mk_varenv(VDefs),
-            CheckedSSet = sset(Ctx#{ varenv => VarEnv }, [ID | Path], SSet),
+            CheckedSSet = sset(Ctx#{ varenv => VarEnv }, [ID | Path], Scope, SSet),
             Op#op { selection_set = CheckedSSet };
         {not_unique, Var} ->
             err([ID | Path], {param_not_unique, Var})
@@ -302,8 +306,8 @@ op(Ctx, Path, #op { id = ID, vardefs = VDefs, selection_set = SSet} = Op) ->
 %% -- SELECTION SETS ------------------------------------
 
 %% Type check a selection set by recursing into each field in the selection
-sset(Ctx, Path, SSet) ->
-    [field(Ctx, Path, S) || S <- SSet].
+sset(Ctx, Path, Scope, SSet) ->
+    [field(Ctx, Path, Scope, S) || S <- SSet].
 
 %% Fields are either fragment spreads, inline fragments, introspection
 %% queries or true field entries. Split on the variant of field and
@@ -318,7 +322,7 @@ sset(Ctx, Path, SSet) ->
 %% Since fields have negative polarity, we only consider type checking
 %% of the fields which the client requested. Every other field is
 %% ignored.
-field(#{ fragenv := FE } = Ctx, Path, #frag_spread { id = ID, directives = Ds } = FSpread) ->
+field(#{ fragenv := FE } = Ctx, Path, Scope, #frag_spread { id = ID, directives = Ds } = FSpread) ->
     Name = graphql_ast:name(ID),
     case maps:get(Name, FE, not_found) of
         not_found ->
@@ -329,21 +333,25 @@ field(#{ fragenv := FE } = Ctx, Path, #frag_spread { id = ID, directives = Ds } 
             %% means the system will ignore the fragment on execution
             FSpread#frag_spread { directives = directives(Ctx, Path, Ds) }
     end;
-field(Ctx, Path, #frag { id = '...', selection_set = SSet, directives = Ds} = InlineFrag) ->
-
+field(Ctx, Path, Scope, #frag { id = '...',
+                                schema = RScope,
+                                selection_set = SSet,
+                                directives = Ds} = InlineFrag) ->
     InlineFrag#frag {
         directives = directives(Ctx, [InlineFrag | Path], Ds),
-        selection_set = sset(Ctx, [InlineFrag | Path], SSet)
+        selection_set = sset(Ctx, [InlineFrag | Path], RScope, SSet)
     };
-field(Ctx, Path, #field { schema = {introspection, typename}, directives = Ds } = F) ->
+field(Ctx, Path, Scope, #field { schema = {introspection, typename}, directives = Ds } = F) ->
     F#field { directives = directives(Ctx, [F | Path], Ds)};
-field(Ctx, Path, #field { args = Args,
-                          selection_set = SSet,
-                          directives = Ds,
-                          schema = #schema_field { args = SArgs }} = F) ->
+field(Ctx, Path, Scope,
+      #field {
+         args = Args,
+         selection_set = SSet,
+         directives = Ds,
+         schema = #schema_field { args = SArgs } = RScope} = F) ->
     F#field { args = args(Ctx, [F | Path], Args, SArgs),
               directives = directives(Ctx, [F | Path], Ds),
-              selection_set = sset(Ctx, [F | Path], SSet) }.
+              selection_set = sset(Ctx, [F | Path], RScope, SSet) }.
 
 %% -- DIRECTIVES --------------------------------
 
