@@ -18,6 +18,7 @@
          v_5_4_2_2/1,
          v_5_4_2_3_1/1,
          v_5_4_2_3_2/1,
+         v_5_4_2_3_3/1,
          v_5_5_1/1,
          v_5_6_1/1,
          v_5_6_2/1,
@@ -68,6 +69,7 @@ groups() ->
            v_5_4_2_2,
            v_5_4_2_3_1,
            v_5_4_2_3_2,
+           v_5_4_2_3_3,
            v_5_5_1,
            v_5_6_1,
            v_5_6_2,
@@ -261,6 +263,17 @@ v_5_4_2_3_2(_Config) ->
       "{ dog { ...unionWithObjectFragment } } "
       "fragment catOrDogNameFragment on CatOrDog { ... on Cat { meowVolume } } "
       "fragment unionWithObjectFragment on Dog { ...catOrDogNameFragment }"),
+    ok.
+
+v_5_4_2_3_3(_Config) ->
+    true = th:v(
+             "{ dog { ...catOrDogFragment } } "
+             "fragment petFragment on Pet { name ... on Dog { barkVolume}} "
+             "fragment catOrDogFragment on CatOrDog { ... on Cat { meowVolume }}"),
+    false = th:v(
+              "{ human { ...humanOrAlienFragment }} "
+              "fragment sentientFragment on Sentient {... on Dog {barkVolume}} "
+              "fragment humanOrAlienFragment on HumanOrAlien {... on Cat {meowVolume}}"),
     ok.
 
 v_5_5_1(_Config) ->
