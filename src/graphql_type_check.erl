@@ -274,7 +274,7 @@ resolve_input_coercion(Path, ID, ResolveModule, Value) ->
 mk_fragenv(Frags) ->
     maps:from_list(
       [{graphql_ast:name(ID), Frg}
-       || #frag { id = ID} = Frg <- Frags]).
+       || #frag { id = ID } = Frg <- Frags]).
 
 %% Type check a fragment
 frag(Ctx, Path, #frag { schema = ScopeTy,
@@ -432,9 +432,105 @@ take_arg(Args, {Key, #schema_arg { ty = Ty, default = Default }}) ->
 %% We proceed by computing the valid set of the Scope and also the
 %% Valid set of the fragment. The intersection type between these two,
 %% Scope and Spread, must not be the empty set. Otherwise it is a failure.
-fragment_embed(_Path, SpreadTy, ScopeTy) ->
-    error_logger:info_report([{spread, SpreadTy}, {scope, ScopeTy}]),
-    ok.
+%%
+%% The implementation here works by case splitting the different possible
+%% output types one at a time and then handling them systematically rather
+%% than running an intersection computation. This trades off computation
+%% for code size when you have a match that can be optimized in any way.
+%%
+
+%% First a series of congruence checks
+fragment_embed(Path, SpreadType, {list, ScopeType}) ->
+    %% Check congruences of lists
+    fragment_embed(Path, SpreadType, ScopeType);
+fragment_embed(Path, SpreadType, {non_null, ScopeType}) ->
+    %% Check congruences of non-null values
+    fragment_embed(Path, SpreadType, ScopeType);
+fragment_embed(Path, {non_null, SpreadType}, ScopeType) ->
+    %% Check congruences of non-null values
+    fragment_embed(Path, SpreadType, ScopeType);
+%% Real concrete output objects/negative polarity checks
+fragment_embed(_Path, #object_type { id = Ty },
+                      #object_type { id = Ty  }) ->
+    %% Object spread in Object scope requires a perfect match
+    ok;
+fragment_embed(Path, #object_type { id = SpreadTy },
+                     #object_type { id = ScopeTy  }) ->
+    %% Object spread in Object scope requires a perfect match
+    err(Path, {fragment_spread, SpreadTy, ScopeTy});
+fragment_embed(Path, #object_type { id = ID },
+                      #union_type { id = UID,
+                                    types = ScopeTypes }) ->
+    case lists:member(ID, ScopeTypes) of
+        true -> ok;
+        false -> err(Path, {not_union_member, ID, UID})
+    end;
+fragment_embed(Path, #object_type { id = ID,
+                                    interfaces = IFaces },
+                     #interface_type { id = IID }) ->
+    case lists:member(IID, IFaces) of
+        true -> ok;
+        false -> err(Path, {not_interface_member, ID, IID})
+    end;
+fragment_embed(Path, #interface_type { id = IID },
+                     #object_type { id = OID, interfaces = IFaces }) ->
+    case lists:member(IID, IFaces) of
+        true -> ok;
+        false -> err(Path, {not_interface_embedder, IID, OID})
+    end;
+fragment_embed(Path, #interface_type { id = SpreadID },
+                     #interface_type { id = ScopeID }) ->
+    SpreadTypes = graphql_schema:lookup_interface_implementors(SpreadID),
+    ScopeTypes = graphql_schema:lookup_interface_implementors(ScopeID),
+    case ordsets:intersection(
+           ordsets:from_list(SpreadTypes),
+           ordsets:from_list(ScopeTypes)) of
+        [_|_] ->
+            ok;
+        [] ->
+            err(Path, {no_common_object, SpreadID, ScopeID})
+    end;
+fragment_embed(Path, #interface_type { id = SpreadID },
+                     #union_type{ id = ScopeID, types = ScopeMembers }) ->
+    SpreadTypes = graphql_schema:lookup_interface_implementors(SpreadID),
+    case ordsets:intersection(
+           ordsets:from_list(SpreadTypes),
+           ordsets:from_list(ScopeMembers)) of
+        [_|_] ->
+            ok;
+        [] ->
+            err(Path, {no_common_object, SpreadID, ScopeID})
+    end;
+fragment_embed(Path, #union_type { id = UID, types = UMembers },
+                     #object_type { id = OID }) ->
+    case lists:member(OID, UMembers) of
+        true -> ok;
+        false -> err(Path, {not_union_embedder, UID, OID})
+    end;
+fragment_embed(Path, #union_type { id = SpreadID, types = SpreadMembers },
+                     #interface_type { id = ScopeID }) ->
+    ScopeTypes = graphql_schema:lookup_interface_implementors(ScopeID),
+    case ordsets:intersection(
+           ordsets:from_list(SpreadMembers),
+           ordsets:from_list(ScopeTypes)) of
+        [_|_] ->
+            ok;
+        [] ->
+            err(Path, {no_common_object, SpreadID, ScopeID})
+    end;
+fragment_embed(Path, #union_type { id = SpreadID, types = SpreadMembers },
+                     #union_type { id = ScopeID,  types = ScopeMembers }) ->
+    case ordsets:intersection(
+           ordsets:from_list(SpreadMembers),
+           ordsets:from_list(ScopeMembers)) of
+        [_|_] ->
+            ok;
+        [] ->
+            err(Path, {no_common_object, SpreadID, ScopeID})
+    end;
+fragment_embed(_Path, SpreadType, ScopeType) ->
+    exit({wrong_invocation, SpreadType, ScopeType}).
+
 
 %% Decide if a type is an valid embedding in another type. We assume
 %% that the first parameter is the 'D' type and the second parameter
@@ -626,7 +722,36 @@ err_msg(non_coercible_default) ->
 err_msg({invalid_value_type_coercion, Ty, Val}) ->
     io_lib:format(
       "The value ~p cannot be coerced into the type ~p",
-      [Val, Ty]).
+      [Val, Ty]);
+err_msg({not_union_member, SpreadTy, UnionTy}) ->
+    io_lib:format(
+      "The spread type ~ts is not a member of the union ~ts",
+      [SpreadTy, UnionTy]);
+err_msg({not_interface_embedder, SpreadTy, ScopeTy}) ->
+    io_lib:format(
+      "The spread type ~ts is an interface. "
+      "Yet the scope type ~ts does not impelement this interface.",
+      [SpreadTy, ScopeTy]);
+err_msg({not_union_embedder, SpreadTy, ScopeTy}) ->
+    io_lib:format(
+      "The spread type ~ts is an union. "
+      "Yet the scope type ~ts is not a member of this union.",
+      [SpreadTy, ScopeTy]);
+err_msg({not_interface_member, SpreadTy, InterfaceTy}) ->
+    io_lib:format(
+      "The spread type ~ts is not implementing the interface ~ts",
+      [SpreadTy, InterfaceTy]);
+err_msg({no_common_object, SpreadTy, ScopeTy}) ->
+    io_lib:format(
+      "The spread type ~ts and the scope type ~ts has no objects in common",
+      [SpreadTy, ScopeTy]);
+err_msg({fragment_spread, SpreadTy, ScopeTy}) ->
+    io_lib:format(
+      "The spread type ~ts does not match the scope type ~ts",
+      [SpreadTy, ScopeTy]).
+
+
+
 
 %% Tell the error logger that something is off
 error_report(Term, Cl, Err) ->
