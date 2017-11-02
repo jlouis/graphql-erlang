@@ -45,8 +45,6 @@ end_per_suite(_Config) ->
     application:stop(graphql),
     ok.
 
-init_per_testcase(v_5_4_2_3_1, _Config) ->
-    {skip, needs_more_validation};
 init_per_testcase(_Case, Config) ->
     Config.
 
