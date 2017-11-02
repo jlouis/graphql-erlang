@@ -329,7 +329,7 @@ field(#{ fragenv := FE } = Ctx, Path, ScopeTy, #frag_spread { id = ID, directive
         not_found ->
             err([Name | Path], unknown_fragment);
         #frag { schema = FragTy } ->
-            ok = fragment_embed(FragTy, ScopeTy),
+            ok = fragment_embed([Name | Path], FragTy, ScopeTy),
             %% You can always include a fragspread, as long as it exists
             %% It may be slightly illegal in a given context but this just
             %% means the system will ignore the fragment on execution
@@ -339,7 +339,7 @@ field(Ctx, Path, Scope, #frag { id = '...',
                                 schema = InnerScope,
                                 selection_set = SSet,
                                 directives = Ds} = InlineFrag) ->
-    ok = fragment_embed(InnerScope, Scope),
+    ok = fragment_embed(['...' | Path], InnerScope, Scope),
     InlineFrag#frag {
         directives = directives(Ctx, [InlineFrag | Path], Ds),
         selection_set = sset(Ctx, [InlineFrag | Path], InnerScope, SSet)
@@ -432,7 +432,7 @@ take_arg(Args, {Key, #schema_arg { ty = Ty, default = Default }}) ->
 %% We proceed by computing the valid set of the Scope and also the
 %% Valid set of the fragment. The intersection type between these two,
 %% Scope and Spread, must not be the empty set. Otherwise it is a failure.
-fragment_embed(SpreadTy, ScopeTy) ->
+fragment_embed(_Path, SpreadTy, ScopeTy) ->
     error_logger:info_report([{spread, SpreadTy}, {scope, ScopeTy}]),
     ok.
 
