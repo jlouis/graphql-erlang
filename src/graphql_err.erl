@@ -42,6 +42,7 @@ err_key(uncategorized, Key) -> Key.
 path(Path) ->
    F = fun
            F('ROOT') -> <<"ROOT">>;
+           F('...') -> <<"...">>;
            F(document) -> <<"document">>;
            F(#frag { id = ID }) -> name(ID);
            F(#op { id = ID }) -> name(ID);
