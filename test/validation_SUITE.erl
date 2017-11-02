@@ -280,11 +280,11 @@ v_5_4_2_3_3(_Config) ->
 
 v_5_4_2_3_4(_Config) ->
     true = th:v(
-       "{ dog { ...dogOrHumanFragment } } "
+       "{ dog { ...unionWithInterface } } "
        "fragment unionWithInterface on Pet {...dogOrHumanFragment} "
        "fragment dogOrHumanFragment on DogOrHuman {... on Dog {barkVolume}}"),
     false = th:v(
-       "{ human { ...sentientFragment } } "
+       "{ human { ...nonIntersectingInterfaces } } "
        "fragment nonIntersectingInterfaces on Pet {...sentientFragment} "
        "fragment sentientFragment on Sentient {name}"),
     ok.
