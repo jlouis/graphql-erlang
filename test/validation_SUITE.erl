@@ -153,14 +153,17 @@ v_5_3_1(_Config) ->
     true = th:v(
       "{ dog { ...F } } fragment F on Dog { doesKnowCommand(dogCommand: SIT) }"),
 
+    true = th:v(
+      "{ dog { ...F } } fragment F on Dog { isHouseTrained(atOtherHomes: true) @include(if: true) }"),
+
     false = th:v(
       "{ dog { ...F } } fragment F on Dog { doesKnowCommand(command: CLEAN_UP_HOUSE) }"),
 
     true = th:v(
-      "{ dog { ...F } } fragment F on Arguments { multipleReqs(x: 1, y: 2) }"),
+      "{ arguments { ...F } } fragment F on Arguments { multipleReqs(x: 1, y: 2) }"),
 
     true = th:v(
-      "{ dog { ...F } } fragment F on Arguments { multipleReqs(y:1, x: 2) }"),
+      "{ arguments { ...F } } fragment F on Arguments { multipleReqs(y:1, x: 2) }"),
 
     ok.
 
