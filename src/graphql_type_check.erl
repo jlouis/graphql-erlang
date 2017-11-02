@@ -351,7 +351,7 @@ field(Ctx, Path, _Scope,
          args = Args,
          selection_set = SSet,
          directives = Ds,
-         schema = #schema_field { args = SArgs } = InnerScope} = F) ->
+         schema = #schema_field { args = SArgs, ty = InnerScope }} = F) ->
     F#field { args = args(Ctx, [F | Path], Args, SArgs),
               directives = directives(Ctx, [F | Path], Ds),
               selection_set = sset(Ctx, [F | Path], InnerScope, SSet) }.
