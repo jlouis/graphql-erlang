@@ -277,9 +277,9 @@ mk_fragenv(Frags) ->
        || #frag { id = ID} = Frg <- Frags]).
 
 %% Type check a fragment
-frag(Ctx, Path, #frag { schema = Scope,
+frag(Ctx, Path, #frag { schema = ScopeTy,
                         selection_set = SSet} = Frag) ->
-    Frag#frag { selection_set = sset(Ctx, Path, Scope, SSet) }.
+    Frag#frag { selection_set = sset(Ctx, Path, ScopeTy, SSet) }.
 
 %% -- OPERATIONS -------------------------------
 
@@ -291,13 +291,14 @@ op_unique_varenv(VDefs) ->
 
 %% Type check an operation.
 op(Ctx, Path, #op { id = ID,
-                    schema = Scope,
+                    schema = ScopeTy,
                     vardefs = VDefs,
                     selection_set = SSet} = Op) ->
     case op_unique_varenv(VDefs) of
         ok ->
             VarEnv = graphql_elaborate:mk_varenv(VDefs),
-            CheckedSSet = sset(Ctx#{ varenv => VarEnv }, [ID | Path], Scope, SSet),
+            CheckedSSet = sset(Ctx#{ varenv => VarEnv },
+                               [ID | Path], ScopeTy, SSet),
             Op#op { selection_set = CheckedSSet };
         {not_unique, Var} ->
             err([ID | Path], {param_not_unique, Var})
@@ -322,36 +323,38 @@ sset(Ctx, Path, Scope, SSet) ->
 %% Since fields have negative polarity, we only consider type checking
 %% of the fields which the client requested. Every other field is
 %% ignored.
-field(#{ fragenv := FE } = Ctx, Path, Scope, #frag_spread { id = ID, directives = Ds } = FSpread) ->
+field(#{ fragenv := FE } = Ctx, Path, ScopeTy, #frag_spread { id = ID, directives = Ds } = FSpread) ->
     Name = graphql_ast:name(ID),
     case maps:get(Name, FE, not_found) of
         not_found ->
             err([Name | Path], unknown_fragment);
-        _FragTy ->
+        #frag { schema = FragTy } ->
+            ok = fragment_embed(FragTy, ScopeTy),
             %% You can always include a fragspread, as long as it exists
             %% It may be slightly illegal in a given context but this just
             %% means the system will ignore the fragment on execution
             FSpread#frag_spread { directives = directives(Ctx, Path, Ds) }
     end;
 field(Ctx, Path, Scope, #frag { id = '...',
-                                schema = RScope,
+                                schema = InnerScope,
                                 selection_set = SSet,
                                 directives = Ds} = InlineFrag) ->
+    ok = fragment_embed(InnerScope, Scope),
     InlineFrag#frag {
         directives = directives(Ctx, [InlineFrag | Path], Ds),
-        selection_set = sset(Ctx, [InlineFrag | Path], RScope, SSet)
+        selection_set = sset(Ctx, [InlineFrag | Path], InnerScope, SSet)
     };
-field(Ctx, Path, Scope, #field { schema = {introspection, typename}, directives = Ds } = F) ->
+field(Ctx, Path, _Scope, #field { schema = {introspection, typename}, directives = Ds } = F) ->
     F#field { directives = directives(Ctx, [F | Path], Ds)};
-field(Ctx, Path, Scope,
+field(Ctx, Path, _Scope,
       #field {
          args = Args,
          selection_set = SSet,
          directives = Ds,
-         schema = #schema_field { args = SArgs } = RScope} = F) ->
+         schema = #schema_field { args = SArgs } = InnerScope} = F) ->
     F#field { args = args(Ctx, [F | Path], Args, SArgs),
               directives = directives(Ctx, [F | Path], Ds),
-              selection_set = sset(Ctx, [F | Path], RScope, SSet) }.
+              selection_set = sset(Ctx, [F | Path], InnerScope, SSet) }.
 
 %% -- DIRECTIVES --------------------------------
 
@@ -424,6 +427,14 @@ take_arg(Args, {Key, #schema_arg { ty = Ty, default = Default }}) ->
         {value, Arg, NextArgs} ->
             {ok, Arg, NextArgs}
     end.
+
+%% Decide is a fragment can be embedded in a given scope
+%% We proceed by computing the valid set of the Scope and also the
+%% Valid set of the fragment. The intersection type between these two,
+%% Scope and Spread, must not be the empty set. Otherwise it is a failure.
+fragment_embed(SpreadTy, ScopeTy) ->
+    error_logger:info_report([{spread, SpreadTy}, {scope, ScopeTy}]),
+    ok.
 
 %% Decide if a type is an valid embedding in another type. We assume
 %% that the first parameter is the 'D' type and the second parameter
