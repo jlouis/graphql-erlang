@@ -17,6 +17,7 @@
          v_5_4_2_1/1,
          v_5_4_2_2/1,
          v_5_4_2_3_1/1,
+         v_5_4_2_3_2/1,
          v_5_5_1/1,
          v_5_6_1/1,
          v_5_6_2/1,
@@ -66,6 +67,7 @@ groups() ->
            v_5_4_2_1,
            v_5_4_2_2,
            v_5_4_2_3_1,
+           v_5_4_2_3_2,
            v_5_5_1,
            v_5_6_1,
            v_5_6_2,
@@ -251,6 +253,15 @@ v_5_4_2_3_1(_Config) ->
      "{ dog { ...F } } fragment F on Dog { ... on Cat { meowVolume } }"),
 
    ok.
+
+v_5_4_2_3_2(_Config) ->
+    true = th:v(
+             "{ dog { ...petFrag } } fragment petFrag on Pet { name }"),
+    true = th:v(
+      "{ dog { ...unionWithObjectFragment } } "
+      "fragment catOrDogNameFragment on CatOrDog { ... on Cat { meowVolume } } "
+      "fragment unionWithObjectFragment on Dog { ...catOrDogNameFragment }"),
+    ok.
 
 v_5_5_1(_Config) ->
     false = th:v("{ field(arg: { field: true, field: false })}"),
