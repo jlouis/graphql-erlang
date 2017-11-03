@@ -10,5 +10,7 @@ input(<<"Mood">>, X) ->
 
 output(<<"Mood">>, 'DODGY') -> {ok, <<"DODGY">>};
 output(<<"Mood">>, 'TRANQUIL') -> {ok, <<"TRANQUIL">>};
-output(<<"Mood">>, 'AGGRESSIVE') -> {ok, <<"AGGRESSIVE">>}.
+output(<<"Mood">>, 'AGGRESSIVE') -> {ok, <<"AGGRESSIVE">>};
+%% This is a deliberate error case
+output(<<"Mood">>, <<"INVALIDMOOD">>) -> {ok, <<"INVALIDMOOD">>}.
 

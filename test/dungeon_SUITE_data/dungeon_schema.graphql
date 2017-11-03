@@ -38,7 +38,7 @@ type Monster implements Node {
   hitpoints : Int!
   inventory : [Thing]
   hp : Int!
-  mood : Mood
+  mood(fail: Bool) : Mood
   plushFactor : Float!
   spikyness : Float
   stats(

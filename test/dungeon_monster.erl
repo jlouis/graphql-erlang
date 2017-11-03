@@ -37,7 +37,12 @@ execute(Ctx, #monster { id = ID,
             Data = [dungeon:load(OID) || OID <- Inventory],
             {ok, Data};
         <<"mood">> ->
-            {ok, Mood};
+            case Args of
+                #{ <<"fail">> := true } ->
+                    {ok, <<"INVALIDMOOD">>};
+                #{ <<"fail">> := _Otherwise } ->
+                    {ok, Mood}
+            end;
         <<"plushFactor">> -> {ok, PlushFactor};
         <<"spikyness">> -> {ok, 5};
         <<"stats">> ->

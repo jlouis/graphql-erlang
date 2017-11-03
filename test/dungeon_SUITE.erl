@@ -89,6 +89,7 @@ groups() ->
          , input_coerce_error_exception
          , input_coerce_error
          , invalid_enums
+         , invalid_enum_result
          , invalid_type_resolution
          , duplicate_validation
          , invalid_list_resolver
@@ -257,6 +258,15 @@ scalar_output_coercion(Config) ->
             <<"color">> := <<"#41924B">>,
             <<"hitpoints">> := 10 }}} =
         run(Config, <<"ScalarOutputCoercion">>, #{ <<"id">> => OpaqueId }),
+    ok.
+
+invalid_enum_result(Config) ->
+    ct:log("Test against an invalid enum representation"),
+    #{ data := #{
+         <<"goblin">> := #{
+           <<"id">> := <<"bW9uc3Rlcjox">>,
+           <<"mood">> := null }}} =
+        run(Config, <<"InvalidEnumOutput">>, #{}),
     ok.
 
 replace_enum_representation(Config) ->

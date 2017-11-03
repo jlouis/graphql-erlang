@@ -496,9 +496,13 @@ complete_value(Path, _Ctx, #enum_type { id = ID,
                 #enum_type { id = ID } ->
                     {ok, Result, Errors};
                 #enum_type {} ->
-                    err(Path, {invalid_enum_output, ID, Result}, Errors);
+                    {error, Err} = err(Path, {invalid_enum_output, ID, Result},
+                                       Errors),
+                    {ok, null, Err};
                 not_found ->
-                    err(Path, {invalid_enum_output, ID, Result}, Errors)
+                    {error, Err} = err(Path, {invalid_enum_output, ID, Result},
+                                       Errors),
+                    {ok, null, Err}
             end;
         {error, Reasons} ->
             {error, Reasons}

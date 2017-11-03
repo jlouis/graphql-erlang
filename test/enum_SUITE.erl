@@ -43,8 +43,6 @@ end_per_suite(_Config) ->
     application:stop(graphql),
     ok.
 
-init_per_testcase(no_incorrect_internal_value, _Config) ->
-    {skip, no_enum_output_validation_yet};
 init_per_testcase(_Case, Config) ->
     Config.
 

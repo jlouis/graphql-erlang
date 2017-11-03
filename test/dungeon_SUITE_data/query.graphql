@@ -24,6 +24,13 @@ query FindQuery {
   }
 }
 
+query InvalidEnumOutput($id : Id! =  "bW9uc3Rlcjox") {
+  goblin: monster(id: $id) {
+    id
+    mood(fail: true)
+  }
+}
+
 query GoblinQuery($id : Id! = "bW9uc3Rlcjox") {
   goblin: monster(id: $id) {
     id
