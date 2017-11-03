@@ -489,6 +489,8 @@ complete_value(Path, _Ctx, #enum_type { id = ID,
                                         resolve_module = RM},
                _Fields, {ok, Value}) ->
     case complete_value_scalar(Path, ID, RM, Value) of
+        {ok, null, Errors} ->
+            {ok, null, Errors};
         {ok, Result, Errors} ->
             case graphql_schema:lookup_enum_type(Result) of
                 #enum_type { id = ID } ->
