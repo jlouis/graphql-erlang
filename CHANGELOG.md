@@ -24,6 +24,11 @@ the compatibility issues you are likely to encounter.
 - Introduce Validation 5.6.1
 - Introduce Validation 5.6.2
 - Introduce Validation 5.6.3
+- Introduce a checker for fragment expansions. This disallows any
+  fragment expansion which can never match in a given context as an
+  error. Fragments which *may* be expanded are accepted.
+- Introduce validation checks for fragment expansions from the
+  specification.
 
 ## [0.11.1] 2017-10-26
 
