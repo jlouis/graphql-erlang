@@ -445,8 +445,6 @@ resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectTy
             {error, {resolver_crash, {graphql_schema:id(ObjectType), Name}}}
     end.
 
-complete_value(Path, Ctx, Ty, Fields, {ok, {enum, Value}}) ->
-    complete_value(Path, Ctx, Ty, Fields, {ok, Value});
 complete_value(Path, Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
     error_logger:warning_msg(
       "Canary: Type lookup during value completion for: ~p~n",
