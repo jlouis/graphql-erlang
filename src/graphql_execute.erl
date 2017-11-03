@@ -487,9 +487,21 @@ complete_value(Path, Ctx, {list, InnerTy}, Fields, {ok, Value}) ->
     complete_value_list(Path, Ctx, InnerTy, Fields, Value);
 complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
     complete_value_scalar(Path, ID, RM, Value);
-complete_value(_Path, _Ctx, #enum_type { id = ID, resolve_module = RM}, _Fields, {ok, Value}) ->
-    %% the enums are scalars too.
-    complete_value_scalar(_Path, ID, RM, Value);
+complete_value(Path, _Ctx, #enum_type { id = ID,
+                                        values = ValueMap,
+                                        resolve_module = RM},
+               _Fields, {ok, Value}) ->
+    case complete_value_scalar(Path, ID, RM, Value) of
+        {ok, Result, Errors} ->
+            case maps:is_key(Result, ValueMap) of
+                true ->
+                    {ok, Result, Errors};
+                false ->
+                    err(Path, {invalid_enum_output, ID, Result}, Errors)
+            end;
+        {error, Reasons} ->
+            {error, Reasons}
+    end;
 complete_value(Path, Ctx, #interface_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
     complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value});
 complete_value(Path, Ctx, #union_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
@@ -531,7 +543,6 @@ complete_value_scalar(Path, ID, RM, Value) ->
     try RM:output(ID, Value) of
         {ok, Result} ->
             {ok, Result, []};
-
         {error, Reason} ->
             err(Path, {output_coerce, ID, Value, Reason})
     catch
@@ -1015,6 +1026,9 @@ err_msg(null_value) ->
 err_msg(not_a_list) ->
     ["The schema specifies the field is a list, "
      "but a non-list value was returned by the backend"];
+err_msg({invalid_enum_output, ID, Result}) ->
+    io_lib:format("The result ~p is not a valid enum value for type ~ts",
+                  [Result, ID]);
 err_msg({output_coerce, ID, _Value, Reason}) ->
     io_lib:format("Output coercion failed for type ~s with reason ~p",
                   [ID, Reason]);
