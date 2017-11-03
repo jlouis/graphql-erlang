@@ -77,6 +77,7 @@ the compatibility issues you are likely to encounter.
   lazy-construction.
 
 ## [0.11.0] 2017-10-09
+
 ### Added
 - Feature: Support monitoring in the experimental concurrent /
   parallel query engine.
