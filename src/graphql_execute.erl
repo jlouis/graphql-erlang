@@ -488,15 +488,16 @@ complete_value(Path, Ctx, {list, InnerTy}, Fields, {ok, Value}) ->
 complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
     complete_value_scalar(Path, ID, RM, Value);
 complete_value(Path, _Ctx, #enum_type { id = ID,
-                                        values = ValueMap,
                                         resolve_module = RM},
                _Fields, {ok, Value}) ->
     case complete_value_scalar(Path, ID, RM, Value) of
         {ok, Result, Errors} ->
-            case maps:is_key(Result, ValueMap) of
-                true ->
+            case graphql_schema:lookup_enum_type(Result) of
+                #enum_type { id = ID } ->
                     {ok, Result, Errors};
-                false ->
+                #enum_type {} ->
+                    err(Path, {invalid_enum_output, ID, Result}, Errors);
+                not_found ->
                     err(Path, {invalid_enum_output, ID, Result}, Errors)
             end;
         {error, Reasons} ->
