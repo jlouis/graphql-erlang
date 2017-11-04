@@ -480,7 +480,7 @@ complete_value(Path, #{ defer_target := Upstream } = Ctx,
 complete_value(_Path, _Ctx, _Ty, _Fields, {ok, null}) ->
     {ok, null, []};
 complete_value(Path, _Ctx, {list, _}, _Fields, {ok, V}) when not is_list(V) ->
-    err(Path, not_a_list);
+    null(Path, not_a_list);
 complete_value(Path, Ctx, {list, InnerTy}, Fields, {ok, Value}) ->
     complete_value_list(Path, Ctx, InnerTy, Fields, Value);
 complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
@@ -496,13 +496,9 @@ complete_value(Path, _Ctx, #enum_type { id = ID,
                 #enum_type { id = ID } ->
                     {ok, Result, Errors};
                 #enum_type {} ->
-                    {error, Err} = err(Path, {invalid_enum_output, ID, Result},
-                                       Errors),
-                    {ok, null, Err};
+                    null(Path, {invalid_enum_output, ID, Result}, Errors);
                 not_found ->
-                    {error, Err} = err(Path, {invalid_enum_output, ID, Result},
-                                       Errors),
-                    {ok, null, Err}
+                    null(Path, {invalid_enum_output, ID, Result}, Errors)
             end;
         {error, Reasons} ->
             {error, Reasons}
@@ -515,8 +511,7 @@ complete_value(Path, Ctx, #object_type{} = Ty, Fields, {ok, Value}) ->
     SubSelectionSet = merge_selection_sets(Fields),
     execute_sset(Path, Ctx, SubSelectionSet, Ty, Value);
 complete_value(Path, _Ctx, _Ty, _Fields, {error, Reason}) ->
-    {error, ErrList} = err(Path, Reason),
-    {ok, null, ErrList}.
+    null(Path, Reason).
 
 %% Complete an abstract value
 complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value}) ->
@@ -524,7 +519,7 @@ complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value}) ->
         {ok, ResolvedType} ->
             complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
         {error, Reason} ->
-            err(Path, Reason)
+            null(Path, Reason)
     end.
 
 resolve_abstract_type(Module, Value) when is_atom(Module) ->
@@ -549,13 +544,13 @@ complete_value_scalar(Path, ID, RM, Value) ->
         {ok, Result} ->
             {ok, Result, []};
         {error, Reason} ->
-            err(Path, {output_coerce, ID, Value, Reason})
+            null(Path, {output_coerce, ID, Value, Reason})
     catch
         Cl:Err ->
             error_logger:error_msg(
               "Output coercer crash during value completion: ~p, stacktrace: ~p~n",
               [{Cl,Err,ID,Value}, erlang:get_stacktrace()]),
-            err(Path, {output_coerce_abort, ID, Value, {Cl, Err}})
+            null(Path, {output_coerce_abort, ID, Value, {Cl, Err}})
     end.
 
 assert_list_completion_structure(Ty, Fields, Results) ->
@@ -586,8 +581,7 @@ complete_value_list(Path, #{ defer_target := Upstream } = Ctx,
     IndexedResults = index(Results),
     case assert_list_completion_structure(Ty, Fields, IndexedResults) of
         {error, list_resolution} ->
-            {error, Errs} = err(Path, list_resolution),
-            {ok, null, Errs};
+            null(Path, list_resolution);
         ok ->
             Self = make_ref(),
             InnerCtx = Ctx#{ defer_target := Self },
@@ -1017,6 +1011,13 @@ defer_handle_cancel(#defer_state { work = WorkMap,
 error_wrap([]) -> [];
 error_wrap([#{ reason := Reason } = E | Next]) ->
     [E#{ reason => {resolver_error, Reason} } | error_wrap(Next)].
+
+null(Path, Reason) ->
+    null(Path, Reason, []).
+
+null(Path, Reason, More) ->
+    {error, Return} = err(Path, Reason, More),
+    {ok, null, Return}.
 
 err(Path, Reason) ->
     err(Path, Reason, []).
