@@ -10,6 +10,9 @@ the compatibility issues you are likely to encounter.
 
 ## [Unreleased]
 
+### Added
+- You can now annotate enum values with descriptions
+
 ### Fixed
 - Heed Oct2016 spec section 3.1.7 w.r.t input coercion of scalar
   values. Suppose we have a `DOG` of type `Pet`. Then, coercion of a
