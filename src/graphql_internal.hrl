@@ -126,10 +126,15 @@
           annotations = [] :: any()
         }).
 
+-record(p_enum_value,
+        { id :: name(),
+          annotations = [] :: any() }).
+-type p_enum_value() :: #p_enum_value{}.
+
 -record(p_enum,
         { id :: name(),
           annotations = [] :: any(),
-          variants = [] :: any()
+          variants = [] :: [p_enum_value()]
         }).
 
 -record(p_input_object,

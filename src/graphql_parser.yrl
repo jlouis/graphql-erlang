@@ -412,7 +412,11 @@ EnumTypeDefinition -> 'enum' Name '{' EnumValueDefinitionList '}' :
 EnumValueDefinitionList -> EnumValueDefinition : ['$1'].
 EnumValueDefinitionList -> EnumValueDefinition EnumValueDefinitionList : ['$1'|'$2'].
 
-EnumValueDefinition -> EnumValue : '$1'.
+EnumValueDefinition -> EnumValue :
+    #p_enum_value { id = '$1' }.
+EnumValueDefinition -> AnnotationList EnumValue :
+    #p_enum_value { id = '$2',
+                    annotations = '$1' }.
 
 InputObjectTypeDefinition -> AnnotationList 'input' Name '{' InputValueDefinitionList '}' :
                                  #p_input_object{

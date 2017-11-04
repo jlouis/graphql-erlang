@@ -2,8 +2,11 @@ scalar ColorType
 scalar Color
 
 enum Mood {
+     +description(text: "A very calm monster")
      TRANQUIL
+     +description(text: "A monster trying to avoid you")
      DODGY
+     +description(text: "This monster attacks every living being, including itself")
      AGGRESSIVE
 }
 

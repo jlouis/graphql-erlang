@@ -53,8 +53,8 @@ mk(#{ objects := OM }, #p_type {
        resolve_module => Mod,
        interfaces => Implements }};
 mk(#{ enums := En }, #p_enum { id = ID,
-			       annotations = Annots,
-			       variants = Vs }) ->
+                               annotations = Annots,
+                               variants = Vs }) ->
     Name = name(ID),
     Description = description(Annots),
     Variants = variants(Vs),
@@ -181,9 +181,13 @@ find(T, [#annotation { id = {name, _, T}} = A|_]) -> A;
 find(T, [#annotation{}|Next]) -> find(T, Next).
 
 variants(Vs) ->
-    F = fun(V, I) ->
+    F = fun(#p_enum_value { id = V,
+                            annotations = Annots }, I) ->
                 K = binary_to_atom(V, utf8),
-                {K, #{ value => I, description => "No descriptions supported yet" }}
+                Description = description(Annots),
+                {K, #{ value => I,
+                       annotations => annotations(Annots),
+                       description => Description }}
         end,
     maps:from_list(mapi(F, Vs)).
 
