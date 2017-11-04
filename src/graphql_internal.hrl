@@ -127,7 +127,7 @@
         }).
 
 -record(p_enum_value,
-        { id :: name(),
+        { id :: binary(),
           annotations = [] :: any() }).
 -type p_enum_value() :: #p_enum_value{}.
 
