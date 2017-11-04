@@ -499,9 +499,7 @@ complete_value(Path, _Ctx, #enum_type { id = ID,
                     null(Path, {invalid_enum_output, ID, Result}, Errors);
                 not_found ->
                     null(Path, {invalid_enum_output, ID, Result}, Errors)
-            end;
-        {error, Reasons} ->
-            {error, Reasons}
+            end
     end;
 complete_value(Path, Ctx, #interface_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
     complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value});
