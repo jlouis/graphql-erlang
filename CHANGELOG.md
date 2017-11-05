@@ -18,6 +18,10 @@ the compatibility issues you are likely to encounter.
   values. Suppose we have a `DOG` of type `Pet`. Then, coercion of a
   value `DOG` into a context `[Pet]` is now regarded as having
   supplied `[DOG]`.
+- Sometimes, errors were not leading to `null` values, but were
+  propagated to the parent objects. This has now been fixed such that
+  errors occurs on the innermost object that can be nullable as per
+  the specification.
 
 ### Changed
 - Format type values as binary() in error's messages

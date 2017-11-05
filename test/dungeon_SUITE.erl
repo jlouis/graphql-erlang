@@ -758,7 +758,7 @@ invalid_type_resolution(Config) ->
     Input = #{
       <<"id">> => base64:encode(<<"kraken:1">>)
      },
-    #{ data := null,
+    #{ data := #{ <<"thing">> := null },
        errors :=
            [#{ path := [<<"LookupThing">>, <<"thing">>],
                key := {type_resolver_error, kraken},
