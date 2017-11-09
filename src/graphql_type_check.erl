@@ -576,18 +576,6 @@ judge_list(Ctx, Path, [V|Vs], Type, K) ->
 %% from the document first and then make the inversion analysis on the schema-type.
 judge(Ctx, Path, {name, _, N}, SType) ->
     judge(Ctx, Path, N, SType);
-judge(Ctx, Path, Value, {non_null, InnerSType} = SType) ->
-    case Value of
-        null ->
-            err(Path, {type_mismatch,
-                       #{ document => Value, schema => SType }});
-        _Valid ->
-            judge(Ctx, Path, Value, InnerSType)
-    end;
-judge(_Ctx, _Path, null, _SType) ->
-    %% If a value is null, and we don't have a non-null case,
-    %% then the value is valid
-    null;
 judge(#{ varenv := VE }, Path, {var, ID}, SType) ->
     Var = graphql_ast:name(ID),
     case maps:get(Var, VE, not_found) of
@@ -602,6 +590,18 @@ judge(#{ varenv := VE }, Path, {var, ID}, SType) ->
                                   schema => SType }})
             end
     end;
+judge(Ctx, Path, Value, {non_null, InnerSType} = SType) ->
+    case Value of
+        null ->
+            err(Path, {type_mismatch,
+                       #{ document => Value, schema => SType }});
+        _Valid ->
+            judge(Ctx, Path, Value, InnerSType)
+    end;
+judge(_Ctx, _Path, null, _SType) ->
+    %% If a value is null, and we don't have a non-null case,
+    %% then the value is valid
+    null;
 judge(Ctx, Path, Values, SType) when is_list(Values) ->
     case SType of
         {list, InnerType} ->
