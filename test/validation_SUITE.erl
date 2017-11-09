@@ -328,4 +328,8 @@ v_5_7_3(_Config) ->
     true  = th:v(
         "query Q($command : DogCommand!) {"
         " dog { doesKnowCommand(dogCommand : $command) } }"),
+    false  = th:v(
+        "query Q($command : DogCommand) {"
+        " dog { doesKnowCommand(dogCommand : $command) } }"),
+
     ok.
