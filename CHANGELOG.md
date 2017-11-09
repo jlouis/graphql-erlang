@@ -27,7 +27,7 @@ the compatibility issues you are likely to encounter.
   this case, the query is illegal since `$v` is nullable but `arg` is
   not. The type checker incorrectly fails to reject this, so the error
   occurs deep in the execution phase, which isn't good UX.
-  
+
   The fix provides superior UX.
 
 ### Changed
