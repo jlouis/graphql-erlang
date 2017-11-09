@@ -22,6 +22,13 @@ the compatibility issues you are likely to encounter.
   propagated to the parent objects. This has now been fixed such that
   errors occurs on the innermost object that can be nullable as per
   the specification.
+- Fix evaluation order of non-null checks. Suppose we have a document
+  such as `query Q($v : T) { field(arg: $v) }` where `arg : T!`. In
+  this case, the query is illegal since `$v` is nullable but `arg` is
+  not. The type checker incorrectly fails to reject this, so the error
+  occurs deep in the execution phase, which isn't good UX.
+  
+  The fix provides superior UX.
 
 ### Changed
 - Format type values as binary() in error's messages
