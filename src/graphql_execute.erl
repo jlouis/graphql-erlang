@@ -27,11 +27,16 @@
         fun ((term()) -> #done{}
                        | #work{}).
 
+-define(TIMEOUT_DEFAULT, 750).
+
 -record(defer_state,
         { req_id :: source(),
           canceled = [] :: [reference()],
           monitored :: #{ reference() => reference() },
-          work = #{} :: #{ source() => defer_closure() } }).
+          work = #{} :: #{ source() => defer_closure() },
+          timeout = ?TIMEOUT_DEFAULT :: non_neg_integer() }).
+
+
 
 -spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
 x(X) -> x(#{ params => #{} }, X).
@@ -889,7 +894,7 @@ binarize(L) when is_list(L) -> list_to_binary(L).
 %% -- DEFERRED PROCESSING --
 
 %% Process deferred computations by grabbing them in the mailbox
-defer_loop(#defer_state { req_id = Id } = State) ->
+defer_loop(#defer_state { req_id = Id , timeout = TimeOut} = State) ->
     receive
         {'$graphql_reply', Id, Ref, Data} ->
             defer_handle_work(State, Ref, Data);
@@ -897,7 +902,7 @@ defer_loop(#defer_state { req_id = Id } = State) ->
             defer_loop(State);
         {'DOWN', MRef, process, Pid, Reason} ->
             defer_monitor_down(State, MRef, Pid, Reason)
-    after 750 ->
+    after TimeOut ->
             exit(defer_timeout)
     end.
 
