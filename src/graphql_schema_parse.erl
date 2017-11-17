@@ -199,6 +199,9 @@ mapi(F,  [X|Xs], K) -> [F(X, K) | mapi(F, Xs, K+1)].
 handle_type({non_null, T}) -> {non_null, handle_type(T)};
 handle_type({list, T}) -> {list, handle_type(T)};
 handle_type({name, _, T}) -> binary_to_atom(T, utf8);
+handle_type({scalar, Name}) ->
+    #scalar_type{} = Ty = graphql_schema:get(Name),
+    handle_type(Ty);
 handle_type(#scalar_type{ id = Id }) -> binary_to_atom(Id, utf8).
 
 mapping(Name, Map) ->

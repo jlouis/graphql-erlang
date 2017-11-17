@@ -62,6 +62,9 @@ type({list, Ty}) ->
         {error, Reason} -> {error, Reason};
         {Polarity, V} -> {Polarity, {list, V}}
     end;
+type({scalar, Name}) ->
+    #scalar_type{} = Ty = graphql_schema:get(Name),
+    {_polarity, Ty} = type(Ty);
 type(#scalar_type{} = Ty) -> {'*', Ty};
 type({enum, _} = E) -> {'*', E};
 type(#enum_type{} = Ty) -> {'*', Ty};
