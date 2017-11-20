@@ -8,18 +8,20 @@
 -export([builtin_input_coercer/1]).
 
 -type source() :: reference().
+-type demonitor() :: {reference(), pid()} .
 
 -record(done,
         { upstream :: source() | top_level,
           key :: reference(),
           cancel :: [reference()],
-          demonitor :: {reference(), pid()} | undefined,
+          demonitor :: demonitor() | undefined,
           result :: ok | {ok, term(), [term()]} | {error, [term()]} }).
 
 -record(work,
         { items :: [{reference(), defer_closure()}],
           monitor :: #{ reference() => reference() },
-          demonitor :: [{reference(), pid()}],
+          demonitors :: [demonitor()],
+          timeout = 0 :: non_neg_integer(),
           change_ref = undefined :: undefined
                                   | {reference(), reference(), reference()} }).
 
@@ -35,8 +37,6 @@
           monitored :: #{ reference() => reference() },
           work = #{} :: #{ source() => defer_closure() },
           timeout = ?TIMEOUT_DEFAULT :: non_neg_integer() }).
-
-
 
 -spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
 x(X) -> x(#{ params => #{} }, X).
@@ -97,9 +97,10 @@ execute_query(#{ defer_request_id := ReqId } = Ctx, #op { selection_set = SSet,
                       SSet, QType, none) of
         {ok, Res, Errs} ->
             complete_top_level(Res, Errs);
-        #work { items = WL, monitor = Ms, demonitor = [] } ->
+        #work { items = WL, monitor = Ms, demonitors = [] , timeout = TimeOut} ->
             DeferState = #defer_state{ req_id = ReqId,
                                        monitored = Ms,
+                                       timeout = TimeOut,
                                        work = maps:from_list(WL) },
             defer_loop(DeferState)
     end.
@@ -148,7 +149,7 @@ obj_closure(Upstream, Self, Missing, Map, Errors) ->
         ({change_ref, From, To}) ->
             {Val, Removed} =  maps:take(From, Missing),
             #work {
-               demonitor = [],
+               demonitors = [],
                monitor = #{},
                items = [{Self, obj_closure(Upstream, Self,
                                                 Removed#{ To => Val },
@@ -183,21 +184,23 @@ obj_closure(Upstream, Self, Missing, Map, Errors) ->
                                                           NewMap,
                                                           NewErrors)}],
                                     monitor = #{},
-                                    demonitor = []}
+                                    demonitors = []}
                     end
             end
     end.
 
-merge_work(#work { items = I1, monitor = M1, demonitor = D1 },
-           #work { items = I2, monitor = M2, demonitor = D2 }) ->
+merge_work(#work { items = I1, monitor = M1, demonitors = D1, timeout = T1},
+           #work { items = I2, monitor = M2, demonitors = D2, timeout = T2}) ->
+    MaxTimeOut = max(T1, T2),
     #work { items = I2 ++ I1,
             monitor = maps:merge(M1, M2),
-            demonitor = D2 ++ D1 }.
+            timeout = MaxTimeOut,
+            demonitors = D2 ++ D1 }.
 
 execute_sset_field(Path, Ctx, Fields, Type, Value) ->
     Map = [],
     Errs = [],
-    Work = #work { items = [], monitor = #{}, demonitor = [] },
+    Work = #work { items = [], monitor = #{}, demonitors = [] },
     Missing = #{},
     execute_sset_field(Path, Ctx, Fields, Type, Value, Map, Errs, Work, Missing).
 
@@ -340,7 +343,7 @@ execute_field_await(Path,
             complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue);
         {'$graphql_reply', _, _, _} ->
             execute_field_await(Path, Ctx, ElaboratedTy, Fields, Ref)
-    after 750 ->
+    after ?TIMEOUT_DEFAULT ->
             exit(defer_mutation_timeout)
     end.
 
@@ -357,9 +360,15 @@ execute_field(Path, #{ op_type := OpType } = Ctx,
             %% the data straight away
             Ref = graphql:token_ref(Token),
             execute_field_await(Path, Ctx, ElaboratedTy, Fields, Ref);
-        {defer, Token, W} when is_pid(W) ->
+        {defer, Token, #{worker := W, timeout := T}} when is_pid(W) ->
+            M = erlang:monitor(process, W),
+            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, {M, W, T});
+        {defer, Token, #{worker := W}} when is_pid(W) ->
             M = erlang:monitor(process, W),
             field_closure(Path, Ctx, ElaboratedTy, Fields, Token, {M, W});
+
+        {defer, Token, #{timeout := T}} ->
+            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, {undefined, undefined, T});
         {defer, Token, undefined} ->
             field_closure(Path, Ctx, ElaboratedTy, Fields, Token, undefined);
         ResolvedValue ->
@@ -367,11 +376,16 @@ execute_field(Path, #{ op_type := OpType } = Ctx,
     end.
 
 remove_monitor(undefined) -> ok;
-remove_monitor({M, _W}) -> demonitor(M, [flush]).
+remove_monitor({undefined, undefined, _T}) -> ok;
+remove_monitor({M, _W, _T}) -> demonitor(M, [flush]).
+
+get_timeout({_Monitor, _Worker, Timeout}) -> Timeout;
+get_timeout(_) -> ?TIMEOUT_DEFAULT.
 
 field_closure(Path, #{ defer_target := Upstream } = Ctx,
               ElaboratedTy, Fields, Token, Monitor) ->
     Ref = graphql:token_ref(Token),
+    TimeOut = get_timeout(Monitor),
     Closure =
         fun
             (cancel) ->
@@ -404,16 +418,19 @@ field_closure(Path, #{ defer_target := Upstream } = Ctx,
                                 cancel = [],
                                 demonitor = Monitor,
                                 result = {error, Errs} };
-                    #work { items = Items, demonitor = Ms } = Wrk ->
+                    #work { items = Items, demonitors = Ms } = Wrk ->
                         NewRef = upstream_ref(Items),
                         Wrk#work { change_ref = {Upstream, Ref, NewRef},
-                                   demonitor = [Monitor] ++ Ms}
+                                   demonitors = [Monitor] ++ Ms,
+                                   timeout = TimeOut}
                 end
         end,
     #work { items = [{Ref, Closure}],
-            demonitor = [],
+            demonitors = [],
+            timeout = TimeOut,
             monitor = case Monitor of
                           undefined -> #{};
+                          {undefined, undefined, _} -> #{};
                           {M, _} -> #{ M => Ref }
                       end }.
 
@@ -435,8 +452,8 @@ resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectTy
             {ok, Result};
         {defer, Token} ->
             {defer, Token, undefined};
-        {defer, Token, #{ worker := W }} ->
-            {defer, Token, W};
+        {defer, Token, DeferStateMap} ->
+            {defer, Token, DeferStateMap};
         Wrong ->
             error_logger:error_msg(
               "Resolver returned wrong value: ~p(..) -> ~p",
@@ -588,7 +605,7 @@ complete_value_list(Path, #{ defer_target := Upstream } = Ctx,
         ok ->
             Self = make_ref(),
             InnerCtx = Ctx#{ defer_target := Self },
-            InitWork = #work {items = [], monitor = #{}, demonitor = [] },
+            InitWork = #work {items = [], monitor = #{}, demonitors = [] },
             Completer =
                 fun
                     F([]) -> {[], InitWork, #{}};
@@ -626,7 +643,7 @@ complete_value_list(Path, #{ defer_target := Upstream } = Ctx,
                     Closure = list_closure(Upstream, Self, M, Completed, #{}),
                     merge_work(
                       Ws,
-                      #work { demonitor = [],
+                      #work { demonitors = [],
                               monitor = #{},
                               items = [{Self, Closure}] })
             end
@@ -655,7 +672,7 @@ list_closure(Upstream, Self, Missing, List, Done) ->
                                       List,
                                       Done)}],
                monitor = #{},
-               demonitor = [] };
+               demonitors = [] };
         ({Ref, Result}) ->
             case maps:take(Ref, Missing) of
                 {Index, NewMissing} ->
@@ -691,7 +708,7 @@ list_closure(Upstream, Self, Missing, List, Done) ->
                                                           List,
                                                           NewDone )}],
                                    monitor = #{},
-                                   demonitor = [] }
+                                   demonitors = [] }
                     end
             end
     end.
@@ -707,7 +724,7 @@ not_null_closure(Upstream, Self, Path, Ref) ->
                result = ok
               };
         ({change_ref, _Old, New}) ->
-            #work { demonitor = [],
+            #work { demonitors = [],
                     monitor = #{},
                     items = [{Self, not_null_closure(Upstream, Self, Path,
                                                      New)}] };
@@ -956,7 +973,8 @@ defer_handle_work(#defer_state { work = WorkMap,
                                   work = WorkMap2,
                                   monitored = case Demonitor of
                                                   undefined -> Monitored;
-                                                  {M, _W} -> maps:remove(M, Monitored)
+                                                  {M, _W} -> maps:remove(M, Monitored);
+                                                  {M, _W, _T} -> maps:remove(M, Monitored)
                                               end
                                  },
                     CancelState = defer_handle_cancel(NextState, CancelRefs),
@@ -967,7 +985,7 @@ defer_handle_work(#defer_state { work = WorkMap,
                 #work { items = New,
                         change_ref = Change,
                         monitor = ToMonitor,
-                        demonitor = ToDemonitor } ->
+                        demonitors = ToDemonitor } ->
                     NewWork = maps:from_list(New),
                     NextState = State#defer_state {
                                   work = maps:merge(WorkMap2, NewWork),
