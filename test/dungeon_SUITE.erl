@@ -56,6 +56,7 @@ groups() ->
     Dungeon =
         {dungeon, [],
          [ unions
+         , rollX1
          , union_errors
          , scalar_output_coercion
          , populate
@@ -665,10 +666,52 @@ find_monster(Config) ->
                       #{<<"name">> => <<"hobgoblin">>},
                       #{<<"name">> => <<"Yellow Slime">>},
                       #{<<"name">> => <<"goblin">>},
-                      #{<<"name">> => <<"goblin">>}]}},  
+                      #{<<"name">> => <<"goblin">>}]}},
     Expected1 = run(Config, <<"FindQuery">>, #{}),
     Expected1 = run(Config, <<"FindQueryParam">>,
                     #{ <<"m">> => [<<"DODGY">>]}),
+    ok.
+
+rollX1(Config) ->
+
+    Expected1 = #{ data =>
+                      #{<<"roll">> =>
+                           #{<<"rollDefer">> => 0}}},
+    TBegin = erlang:monotonic_time(),
+    Expected1 = run(Config, <<"RollX1">>, #{ <<"delay">> => 0}),
+    TEnd = erlang:monotonic_time(),
+    _MinimalDuration = erlang:convert_time_unit(TEnd - TBegin, native, millisecond)/2,
+
+    TimeOut = 100,
+    TBeginX2 = erlang:monotonic_time(),
+    try
+        run(Config, <<"RollX2">>, #{ <<"delay">> => TimeOut})
+    catch
+        exit:defer_timeout ->
+            TEndX2 = erlang:monotonic_time(),
+            DurationX2 = erlang:convert_time_unit(TEndX2 - TBeginX2, native, millisecond),
+            true = DurationX2 > (TimeOut * 2)  andalso (DurationX2 < 300)
+    end,
+
+    TBeginX3 = erlang:monotonic_time(),
+    try
+        run(Config, <<"RollX3">>, #{ <<"delay">> => TimeOut})
+    catch
+        exit:defer_timeout ->
+            TEndX3 = erlang:monotonic_time(),
+            DurationX3 = erlang:convert_time_unit(TEndX3 - TBeginX3, native, millisecond),
+            true = DurationX3 > (TimeOut * 3) andalso (DurationX3 < 400)
+    end,
+
+    TBeginX5 = erlang:monotonic_time(),
+    try
+        run(Config, <<"RollX5">>, #{ <<"delay">> => TimeOut})
+    catch
+        exit:defer_timeout ->
+            TEndX5 = erlang:monotonic_time(),
+            DurationX5 = erlang:convert_time_unit(TEndX5 - TBeginX5, native, millisecond),
+            true = DurationX5 > (TimeOut * 5) andalso (DurationX5 < 600)
+    end,
     ok.
 
 find_monster_singleton(Config) ->
@@ -682,7 +725,7 @@ find_monster_singleton(Config) ->
                       #{<<"name">> => <<"hobgoblin">>},
                       #{<<"name">> => <<"Yellow Slime">>},
                       #{<<"name">> => <<"goblin">>},
-                      #{<<"name">> => <<"goblin">>}]}},  
+                      #{<<"name">> => <<"goblin">>}]}},
     Expected1 = run(Config, <<"FindQuerySingleton">>, #{}),
     Expected1 = run(Config, <<"FindQueryParamSingleton">>,
                     #{ <<"m">> => <<"DODGY">>}),

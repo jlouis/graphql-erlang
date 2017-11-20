@@ -227,6 +227,28 @@ query TestAuxiliaryData($id: Id!) {
   }
 }
 
+query RollX1($delay: Int){
+  roll(delay: $delay) {
+    rollDefer
+  }
+}
+
+query RollX2 ($delay: Int){
+  roll(delay: $delay) {
+    rollDefer
+    rollDeferX2
+  }
+}
+
+query RollX5($delay: Int){
+  roll(delay: $delay) {
+    rollDefer
+    rollDeferX2
+    rollDeferX3
+    rollDeferX5
+  }
+}
+
 ## MUTATIONS
 mutation IntroduceMonster($input: IntroduceMonsterInput!) {
   introduceMonster(input: $input) {

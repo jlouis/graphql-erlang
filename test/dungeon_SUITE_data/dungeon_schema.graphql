@@ -71,6 +71,13 @@ type Item implements Node {
   contents : [Thing]
 }
 
+type Dice {
+  rollDefer: Int
+  rollDeferX2: Int
+  rollDeferX3: Int
+  rollDeferX5: Int
+}
+
 union Thing = Item | Monster
 
 # Inputs and Payloads
@@ -147,5 +154,6 @@ type QueryRoot {
   thing(id: ID!) : Thing
   room(id: ID!) : Room
   rooms(ids: [ID!]) : [Room!]
+  roll(delay: Int) : Dice
 }
 

@@ -4,6 +4,7 @@
 -export([execute/1]).
 
 execute(#monster{}) -> {ok, 'Monster'};
+execute(#dice{}) -> {ok, 'Dice'};
 execute(kraken) -> {error, kraken};
 execute(X) ->
     case dungeon:unwrap(X) of
@@ -11,6 +12,7 @@ execute(X) ->
     end.
 
 object_type(room) -> {ok, 'Room'};
+object_type(dice) -> {ok, 'Dice'};
 object_type(monster) -> {ok, 'Monster'};
 object_type(item) -> {ok, 'Item'};
 object_type(_) ->
