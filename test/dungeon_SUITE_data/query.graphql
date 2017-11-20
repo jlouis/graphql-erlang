@@ -240,6 +240,13 @@ query RollX2 ($delay: Int){
   }
 }
 
+query RollX3 ($delay: Int){
+  roll(delay: $delay) {
+    rollDefer
+    rollDeferX2
+    rollDeferX3
+  }
+}
 query RollX5($delay: Int){
   roll(delay: $delay) {
     rollDefer

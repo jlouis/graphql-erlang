@@ -362,13 +362,13 @@ execute_field(Path, #{ op_type := OpType } = Ctx,
             execute_field_await(Path, Ctx, ElaboratedTy, Fields, Ref);
         {defer, Token, #{worker := W, timeout := T}} when is_pid(W) ->
             M = erlang:monitor(process, W),
-            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, {M, W, T});
+            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, {M, W}, T);
         {defer, Token, #{worker := W}} when is_pid(W) ->
             M = erlang:monitor(process, W),
             field_closure(Path, Ctx, ElaboratedTy, Fields, Token, {M, W});
 
         {defer, Token, #{timeout := T}} ->
-            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, {undefined, undefined, T});
+            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, undefined, T);
         {defer, Token, undefined} ->
             field_closure(Path, Ctx, ElaboratedTy, Fields, Token, undefined);
         ResolvedValue ->
@@ -376,16 +376,15 @@ execute_field(Path, #{ op_type := OpType } = Ctx,
     end.
 
 remove_monitor(undefined) -> ok;
-remove_monitor({undefined, undefined, _T}) -> ok;
-remove_monitor({M, _W, _T}) -> demonitor(M, [flush]).
+remove_monitor({M, _W}) -> demonitor(M, [flush]).
 
-get_timeout({_Monitor, _Worker, Timeout}) -> Timeout;
-get_timeout(_) -> ?TIMEOUT_DEFAULT.
+field_closure(Path, #{ defer_target := _Upstream } = Ctx,
+              ElaboratedTy, Fields, Token, Monitor) ->
+field_closure(Path, Ctx, ElaboratedTy, Fields, Token, Monitor, ?TIMEOUT_DEFAULT).
 
 field_closure(Path, #{ defer_target := Upstream } = Ctx,
-              ElaboratedTy, Fields, Token, Monitor) ->
+              ElaboratedTy, Fields, Token, Monitor, TimeOut) ->
     Ref = graphql:token_ref(Token),
-    TimeOut = get_timeout(Monitor),
     Closure =
         fun
             (cancel) ->
@@ -430,7 +429,6 @@ field_closure(Path, #{ defer_target := Upstream } = Ctx,
             timeout = TimeOut,
             monitor = case Monitor of
                           undefined -> #{};
-                          {undefined, undefined, _} -> #{};
                           {M, _} -> #{ M => Ref }
                       end }.
 
@@ -973,8 +971,7 @@ defer_handle_work(#defer_state { work = WorkMap,
                                   work = WorkMap2,
                                   monitored = case Demonitor of
                                                   undefined -> Monitored;
-                                                  {M, _W} -> maps:remove(M, Monitored);
-                                                  {M, _W, _T} -> maps:remove(M, Monitored)
+                                                  {M, _W} -> maps:remove(M, Monitored)
                                               end
                                  },
                     CancelState = defer_handle_cancel(NextState, CancelRefs),

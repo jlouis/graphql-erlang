@@ -10,7 +10,7 @@ execute(Ctx, #dice { delay = TimeOut }, Field, _) ->
             spawn_link(fun() ->
                            graphql:reply_cast(Token, {ok, TimeOut})
                        end),
-            {defer, Token};
+            {defer, Token, #{timeout => TimeOut}};
 
         <<"rollDeferX2">> ->
             roll_defer(Ctx, TimeOut, 2);
@@ -26,7 +26,8 @@ roll_defer(Ctx, TimeOut, Multiplier) ->
     Token = graphql:token(Ctx),
     TimeOutMultiplied = TimeOut * Multiplier,
     spawn_link(fun() ->
-                   timer:sleep(TimeOutMultiplied + 5 * Multiplier),
+                   timer:sleep(TimeOutMultiplied),
+                   timer:sleep(1000),
                    graphql:reply_cast(Token, {ok, TimeOutMultiplied })
                end),
     {defer, Token, #{timeout => TimeOutMultiplied}}.
