@@ -441,19 +441,19 @@ g_query({query, _L} = Q) -> Q.
 g_mutation({mutation, _L} = Mut) -> Mut.
 g_subscription({subscription, _L} = Sub) -> Sub.
 
-g_ty({name, _, <<"String">>}) -> wrap_scalar(<<"String">>);
-g_ty({name, _, <<"string">>}) -> wrap_scalar(<<"String">>);
-g_ty({name, _, <<"Int">>}) -> wrap_scalar(<<"Int">>);
-g_ty({name, _, <<"int">>}) -> wrap_scalar(<<"Int">>);
-g_ty({name, _, <<"float">>}) -> wrap_scalar(<<"Float">>);
-g_ty({name, _, <<"Float">>}) -> wrap_scalar(<<"Float">>);
-g_ty({name, _, <<"bool">>}) -> wrap_scalar(<<"Bool">>);
-g_ty({name, _, <<"Bool">>}) -> wrap_scalar(<<"Bool">>);
-g_ty({name, _, <<"boolean">>}) -> wrap_scalar(<<"Bool">>);
-g_ty({name, _, <<"Boolean">>}) -> wrap_scalar(<<"Bool">>);
-g_ty({name, _, <<"id">>}) -> wrap_scalar(<<"ID">>);
-g_ty({name, _, <<"Id">>}) -> wrap_scalar(<<"ID">>);
-g_ty({name, _, <<"ID">>}) -> wrap_scalar(<<"ID">>);
+g_ty({name, _, <<"String">>}) -> {scalar, <<"String">>};
+g_ty({name, _, <<"string">>}) -> {scalar, <<"String">>};
+g_ty({name, _, <<"Int">>}) -> {scalar, <<"Int">>};
+g_ty({name, _, <<"int">>}) -> {scalar, <<"Int">>};
+g_ty({name, _, <<"float">>}) -> {scalar, <<"Float">>};
+g_ty({name, _, <<"Float">>}) -> {scalar, <<"Float">>};
+g_ty({name, _, <<"bool">>}) -> {scalar, <<"Bool">>};
+g_ty({name, _, <<"Bool">>}) -> {scalar, <<"Bool">>};
+g_ty({name, _, <<"boolean">>}) -> {scalar, <<"Bool">>};
+g_ty({name, _, <<"Boolean">>}) -> {scalar, <<"Bool">>};
+g_ty({name, _, <<"id">>}) -> {scalar, <<"ID">>};
+g_ty({name, _, <<"Id">>}) -> {scalar, <<"ID">>};
+g_ty({name, _, <<"ID">>}) -> {scalar, <<"ID">>};
 g_ty({name, _, _} = N) -> N.
 
 g_enum({name, _Line, N}) -> N.
@@ -471,6 +471,3 @@ g_input_object(KVPairs) ->
 %% Convert keywords into binaries if they don't occur in the KW-position
 keyword({A, Line}) when is_atom(A) ->
     {name, Line, atom_to_binary(A, utf8)}.
-
-wrap_scalar(Name) ->
-    {scalar, Name}.
