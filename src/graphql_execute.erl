@@ -360,27 +360,31 @@ execute_field(Path, #{ op_type := OpType } = Ctx,
             %% the data straight away
             Ref = graphql:token_ref(Token),
             execute_field_await(Path, Ctx, ElaboratedTy, Fields, Ref);
-        {defer, Token, #{worker := W, timeout := T}} when is_pid(W) ->
-            M = erlang:monitor(process, W),
-            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, {M, W}, T);
-        {defer, Token, #{worker := W}} when is_pid(W) ->
-            M = erlang:monitor(process, W),
-            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, {M, W});
-
-        {defer, Token, #{timeout := T}} ->
-            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, undefined, T);
         {defer, Token, undefined} ->
-            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, undefined);
+            Monitor = undefined,
+            TimeOut = ?TIMEOUT_DEFAULT,
+            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, Monitor, TimeOut);
+        {defer, Token, DeferStateMap} when is_map(DeferStateMap) ->
+            defer_field_closure(Path, Ctx, ElaboratedTy, Fields, Token, DeferStateMap);
         ResolvedValue ->
             complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue)
     end.
 
+build_monitor(W) when is_pid(W) ->
+    M = erlang:monitor(process, W),
+    {M, W};
+build_monitor(_W)->
+    undefined.
+
 remove_monitor(undefined) -> ok;
 remove_monitor({M, _W}) -> demonitor(M, [flush]).
 
-field_closure(Path, #{ defer_target := _Upstream } = Ctx,
-              ElaboratedTy, Fields, Token, Monitor) ->
-field_closure(Path, Ctx, ElaboratedTy, Fields, Token, Monitor, ?TIMEOUT_DEFAULT).
+defer_field_closure(Path, #{ defer_target := _Upstream } = Ctx,
+              ElaboratedTy, Fields, Token, DeferStateMap) ->
+    TimeOut = maps:get(timeout, DeferStateMap, ?TIMEOUT_DEFAULT),
+    Worker = maps:get(worker, DeferStateMap, undefined),
+    Monitor = build_monitor(Worker),
+    field_closure(Path, Ctx, ElaboratedTy, Fields, Token, Monitor, TimeOut).
 
 field_closure(Path, #{ defer_target := Upstream } = Ctx,
               ElaboratedTy, Fields, Token, Monitor, TimeOut) ->
@@ -420,8 +424,7 @@ field_closure(Path, #{ defer_target := Upstream } = Ctx,
                     #work { items = Items, demonitors = Ms } = Wrk ->
                         NewRef = upstream_ref(Items),
                         Wrk#work { change_ref = {Upstream, Ref, NewRef},
-                                   demonitors = [Monitor] ++ Ms,
-                                   timeout = TimeOut}
+                                   demonitors = [Monitor] ++ Ms}
                 end
         end,
     #work { items = [{Ref, Closure}],
