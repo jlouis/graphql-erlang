@@ -29,14 +29,12 @@
         fun ((term()) -> #done{}
                        | #work{}).
 
--define(TIMEOUT_DEFAULT, 750).
-
 -record(defer_state,
         { req_id :: source(),
           canceled = [] :: [reference()],
           monitored :: #{ reference() => reference() },
           work = #{} :: #{ source() => defer_closure() },
-          timeout = ?TIMEOUT_DEFAULT :: non_neg_integer() }).
+          timeout :: non_neg_integer() }).
 
 -spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
 x(X) -> x(#{ params => #{} }, X).
@@ -334,7 +332,7 @@ does_fragment_type_apply(
       end.
 
 execute_field_await(Path,
-                    #{ defer_request_id := ReqId } = Ctx,
+                    #{ defer_request_id := ReqId, default_timeout := TimeOut} = Ctx,
                     ElaboratedTy,
                     Fields,
                     Ref) ->
@@ -343,11 +341,11 @@ execute_field_await(Path,
             complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue);
         {'$graphql_reply', _, _, _} ->
             execute_field_await(Path, Ctx, ElaboratedTy, Fields, Ref)
-    after ?TIMEOUT_DEFAULT ->
+    after TimeOut ->
             exit(defer_mutation_timeout)
     end.
 
-execute_field(Path, #{ op_type := OpType } = Ctx,
+execute_field(Path, #{ op_type := OpType , default_timeout := DT} = Ctx,
               ObjType, Value, [F|_] = Fields,
               #schema_field { annotations = FAns, resolve = RF}) ->
     Name = name(F),
@@ -362,8 +360,7 @@ execute_field(Path, #{ op_type := OpType } = Ctx,
             execute_field_await(Path, Ctx, ElaboratedTy, Fields, Ref);
         {defer, Token, undefined} ->
             Monitor = undefined,
-            TimeOut = ?TIMEOUT_DEFAULT,
-            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, Monitor, TimeOut);
+            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, Monitor, DT);
         {defer, Token, DeferStateMap} when is_map(DeferStateMap) ->
             defer_field_closure(Path, Ctx, ElaboratedTy, Fields, Token, DeferStateMap);
         ResolvedValue ->
@@ -379,9 +376,9 @@ build_monitor(_W)->
 remove_monitor(undefined) -> ok;
 remove_monitor({M, _W}) -> demonitor(M, [flush]).
 
-defer_field_closure(Path, #{ defer_target := _Upstream } = Ctx,
+defer_field_closure(Path, #{ defer_target := _Upstream, default_timeout := DT} = Ctx,
               ElaboratedTy, Fields, Token, DeferStateMap) ->
-    TimeOut = maps:get(timeout, DeferStateMap, ?TIMEOUT_DEFAULT),
+    TimeOut = maps:get(timeout, DeferStateMap, DT),
     Worker = maps:get(worker, DeferStateMap, undefined),
     Monitor = build_monitor(Worker),
     field_closure(Path, Ctx, ElaboratedTy, Fields, Token, Monitor, TimeOut).

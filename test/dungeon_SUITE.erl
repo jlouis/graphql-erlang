@@ -56,7 +56,7 @@ groups() ->
     Dungeon =
         {dungeon, [],
          [ unions
-         , rollX1
+         , defer
          , union_errors
          , scalar_output_coercion
          , populate
@@ -672,8 +672,7 @@ find_monster(Config) ->
                     #{ <<"m">> => [<<"DODGY">>]}),
     ok.
 
-rollX1(Config) ->
-
+defer(Config) ->
     TimeOut = 100,
     Expected1 = #{ data =>
                       #{<<"roll">> =>
