@@ -185,7 +185,7 @@ mapping_rules() ->
          'Item' => dungeon_item,
          'Room' => dungeon_room,
          'Stats' => dungeon_stats,
-
+         'Dice' => dungeon_dice,
          'QueryRoot' => dungeon_query,
          'MutationRoot' => dungeon_mutation,
          default => dungeon_object }
