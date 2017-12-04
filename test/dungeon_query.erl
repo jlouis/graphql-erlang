@@ -35,5 +35,8 @@ execute(_Ctx, _, <<"rooms">>, #{ <<"ids">> := InputIDs }) ->
     {ok, [begin
               {room, _} = OID = dungeon:unwrap(ID),
               dungeon:dirty_load(OID)
-          end || ID <- InputIDs]}.
+          end || ID <- InputIDs]};
+execute(Ctx, _, <<"roll">>, Args) ->
+    TimeOut = maps:get(<<"delay">>,  Args, 0),
+    {ok, #dice{ delay = TimeOut } }.
 

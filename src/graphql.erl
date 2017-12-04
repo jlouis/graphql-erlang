@@ -39,6 +39,8 @@
 -type schema_field() :: #{ atom() => any() }.
 -export_type([schema_field/0]).
 
+-define(DEFAULT_TIMEOUT, 750).
+
 %% TOKENS
 %% -----------------------------------------------------------------------------------
 token(#{ defer_process := Proc, defer_request_id := ReqId }) ->
@@ -100,11 +102,15 @@ type_check_params(FunEnv, OpName, Vars) ->
     graphql_type_check:x_params(FunEnv, OpName, Vars).
 
 -spec execute(ast()) -> #{ atom() => json() }.
-execute(AST) -> execute(#{ params => #{} }, AST).
+execute(AST) ->
+    Ctx = #{ params => #{}, default_timeout => ?DEFAULT_TIMEOUT },
+    execute(Ctx, AST).
 
 -spec execute(context(), ast()) -> #{ atom() => json() }.
+execute(#{default_timeout := _DT } = Ctx, AST) ->
+    graphql_execute:x(Ctx, AST);
 execute(Ctx, AST) ->
-    graphql_execute:x(Ctx, AST).
+    graphql_execute:x(Ctx#{ default_timeout => ?DEFAULT_TIMEOUT}, AST).
 
 %% @doc insert_schema_definition/1 loads a schema definition into the Graph Schema
 %% @end

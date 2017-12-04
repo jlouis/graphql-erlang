@@ -35,3 +35,11 @@
           description :: binary(),
           contents = ordsets:new() :: ordsets:ordset(pos_integer())
          }).
+
+-record(dice, {
+          delay :: pos_integer(),
+          rollDefer :: pos_integer(),
+          rollDeferX2 :: pos_integer(),
+          rollDeferX3 :: pos_integer(),
+          rollDeferX5 :: pos_integer()
+         }).
