@@ -668,7 +668,7 @@ err(Path, Msg) ->
 err_msg(unnamed_operation_params) ->
     ["Cannot supply parameter lists to unnamed (anonymous) queries"];
 err_msg({operation_not_found, Op}) ->
-    ["Expected an operation ", Op, " but no such operation was found"];
+    io_lib:format("Expected an operation ~p but no such operation was found", [Op]);
 err_msg(missing_non_null_param) ->
     ["The parameter is non-null, but was undefined in parameter list"];
 err_msg(non_null) ->
