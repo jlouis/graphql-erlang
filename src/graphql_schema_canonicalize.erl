@@ -8,8 +8,9 @@
 x({root, Root}) ->
     Q = root_query(Root),
     M = root_mutation(Root),
+    S = root_subscription(Root),
     IFs = root_interfaces(Root),
-    #root_schema { query = Q, mutation = M, interfaces = IFs };
+    #root_schema { query = Q, mutation = M, subscription = S, interfaces = IFs };
 x({interface, #{ id := ID, description := Desc, fields := FieldDefs } = I}) ->
     Resolver = interface_resolver(I),
     #interface_type { id = c_id(ID), description = binarize(Desc),
@@ -68,6 +69,9 @@ root_query(_) -> undefined.
 
 root_mutation(#{ mutation := M}) -> binarize(M);
 root_mutation(_) -> undefined.
+
+root_subscription(#{ subscription := S}) -> binarize(S);
+root_subscription(_) -> undefined.
 
 root_interfaces(#{ interfaces := IFs }) -> [binarize(I) || I <- IFs];
 root_interfaces(_) -> [].
