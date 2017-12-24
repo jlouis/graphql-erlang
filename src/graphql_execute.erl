@@ -51,6 +51,8 @@ execute_request(InitialCtx, {document, Operations}) ->
     case get_operation(Ctx, Ops) of
         {ok, #op { ty = {query, _} } = Op } ->
             execute_query(Ctx#{ op_type => query }, Op);
+        {ok, #op { ty = {subscription, _} } = Op } ->
+            execute_query(Ctx#{ op_type => subscription }, Op);
         {ok, #op { ty = undefined } = Op } ->
             execute_query(Ctx#{ op_type => query }, Op);
         {ok, #op { ty = {mutation, _} } = Op } ->
