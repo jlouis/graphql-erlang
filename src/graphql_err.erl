@@ -44,6 +44,7 @@ path(Path) ->
            F('ROOT') -> <<"ROOT">>;
            F('...') -> <<"...">>;
            F(document) -> <<"document">>;
+           F(undefined) -> <<"..">>;
            F(#frag { id = ID }) -> name(ID);
            F(#op { id = ID }) -> name(ID);
            F(#field { id = ID }) -> name(ID);
