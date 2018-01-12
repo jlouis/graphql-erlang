@@ -24,6 +24,23 @@ query FindQuery {
   }
 }
 
+query ThingQ1 {
+  things(ids: ["bW9uc3Rlcjox"]) {
+    ... on Item {
+      __typename
+    }
+  }
+}
+
+query ThingQ2 {
+  things(ids: ["bW9uc3Rlcjox"]) {
+    ... on Monster {
+      __typename
+      name
+    }
+  }
+}
+  
 query InvalidEnumOutput($id : Id! =  "bW9uc3Rlcjox") {
   goblin: monster(id: $id) {
     id
