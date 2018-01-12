@@ -40,7 +40,13 @@ query ThingQ2 {
     }
   }
 }
-  
+
+query ThingQ3 {
+  things(ids: ["bW9uc3Rlcjox"]) {
+    __typename
+  }
+}
+
 query InvalidEnumOutput($id : Id! =  "bW9uc3Rlcjox") {
   goblin: monster(id: $id) {
     id

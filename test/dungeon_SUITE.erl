@@ -237,6 +237,10 @@ unions(Config) ->
 
     Expected4 = #{ data => #{ <<"things">> => [#{ <<"__typename">> => <<"Monster">>, <<"name">> => <<"goblin">> }]}},
     Expected4 = run(Config, <<"ThingQ2">>, #{ }),
+
+    Expected5 = #{ data => #{ <<"things">> => [#{ <<"__typename">> => <<"Monster">> }]}},
+    Expected5 = run(Config, <<"ThingQ3">>, #{ }),
+
     ok.
 
 union_errors(Config) ->
