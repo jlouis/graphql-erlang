@@ -1,0 +1,14 @@
+query IntrospectionQuery($includeDeprecated: Boolean!) {
+    __schema {
+          types {
+                  ...FullType
+                      }
+                        }
+}
+
+fragment FullType on __Type {
+    fields(includeDeprecated: $includeDeprecated) {
+          name
+            }
+}
+

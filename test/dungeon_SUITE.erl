@@ -75,6 +75,7 @@ groups() ->
          , multiple_monsters_and_rooms
          , include_directive
          , introspection
+         , introspection_with_variable
          , get_operation
          , coercion_int_float
          , replace_enum_representation
@@ -132,6 +133,19 @@ introspection(Config) ->
     case run(Config,
              <<"introspection.graphql">>,
              <<"IntrospectionQuery">>, #{}) of
+        #{ errors := [] } ->
+            ok;
+        #{ errors := Errs } ->
+            ct:log("Errors: ~p", [Errs]),
+            ct:fail(introspection_errors);
+        #{ } ->
+            ok %% No Errors present, so this is OK
+    end.
+
+introspection_with_variable(Config) ->
+    case run(Config,
+             <<"introspection_with_variable.graphql">>,
+             <<"IntrospectionQuery">>, #{<<"includeDeprecated">> => false}) of
         #{ errors := [] } ->
             ok;
         #{ errors := Errs } ->
