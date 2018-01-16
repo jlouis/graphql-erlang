@@ -231,6 +231,16 @@ unions(Config) ->
                          <<"name">> => <<"goblin">>,
                          <<"hitpoints">> => 10 }}},
     Expected2 = run(Config, <<"GoblinThingQuery">>, #{ <<"id">> => OpaqueId }),
+    ct:log("Union expansions"),
+    Expected3 = #{ data => #{ <<"things">> => [#{}]}},
+    Expected3 = run(Config, <<"ThingQ1">>, #{ }),
+
+    Expected4 = #{ data => #{ <<"things">> => [#{ <<"__typename">> => <<"Monster">>, <<"name">> => <<"goblin">> }]}},
+    Expected4 = run(Config, <<"ThingQ2">>, #{ }),
+
+    Expected5 = #{ data => #{ <<"things">> => [#{ <<"__typename">> => <<"Monster">> }]}},
+    Expected5 = run(Config, <<"ThingQ3">>, #{ }),
+
     ok.
 
 union_errors(Config) ->

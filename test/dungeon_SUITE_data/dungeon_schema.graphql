@@ -152,6 +152,7 @@ type QueryRoot {
   monsters(ids: [ID!]) : [Monster]
   findMonsters(moods: [Mood]) : [Monster]
   thing(id: ID!) : Thing
+  things(ids: [ID!]) : [Thing]
   room(id: ID!) : Room
   rooms(ids: [ID!]) : [Room!]
   roll(delay: Int) : Dice

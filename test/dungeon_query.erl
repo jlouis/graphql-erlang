@@ -27,6 +27,12 @@ execute(_Ctx, _, <<"thing">>, #{ <<"id">> := InputID }) ->
         {item, _ID} = OID -> dungeon:dirty_load(OID);
         {kraken, _ID} = _OID -> {ok, kraken}
     end;
+execute(_Ctx, _, <<"things">>, #{ <<"ids">> := Inputs }) ->
+    {ok, [case dungeon:unwrap(I) of
+              {monster, _ID} = OID -> dungeon:dirty_load(OID);
+              {item, _ID} = OID -> dungeon:dirty_load(OID);
+              {kraken, _ID} = _OID -> {ok, kraken}
+          end || I <- Inputs]};
 execute(_Ctx, _, <<"room">>, #{ <<"id">> := InputID }) ->
     case dungeon:unwrap(InputID) of
         {room, _ID} = OID -> dungeon:dirty_load(OID)
