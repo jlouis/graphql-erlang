@@ -14,7 +14,7 @@ dialyzer:
 	@$(REBAR) dialyzer
 
 test:
-	@$(REBAR) ct
+	@$(REBAR) ct --spec test/test.spec
 
 test-cover:
 	@$(REBAR) do ct -c, cover -v
