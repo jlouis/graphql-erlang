@@ -30,14 +30,14 @@ x(Config, Input, OpName, Params) ->
                Track3 = track(type_check, Track2),
                CoercedParams = graphql:type_check_params(FunEnv, OpName, Params),
                Track4 = track(type_check_params, Track3),
-               Ctx = #{ params => CoercedParams },
+               Ctx = #{ params => CoercedParams, null_value => owl },
                ok = graphql:validate(AST2),
                Track5 = track(validate, Track4),
                Res = case OpName of
                          undefined -> graphql:execute(Ctx, AST2);
                          Op -> graphql:execute(Ctx#{ operation_name => Op }, AST2)
                      end,
-               
+
                Track6 = track(execute, Track5),
                ct:log("Result: ~p", [Res]),
                track_report(Config, Track6),
@@ -88,7 +88,7 @@ v(Q) ->
 track_new() ->
     T = erlang:monotonic_time(),
     #{ '$last' => T }.
-    
+
 track(Event, #{ '$last' := Start } = M) ->
     End = erlang:monotonic_time(),
     Diff = erlang:convert_time_unit(End - Start, native, micro_seconds),
@@ -97,4 +97,3 @@ track(Event, #{ '$last' := Start } = M) ->
 track_report(Config, M) ->
     Name = proplists:get_value(name, ?config(tc_group_properties, Config)),
     ct:log("Timings ~p: ~p", [Name, maps:remove('$last', M)]).
-

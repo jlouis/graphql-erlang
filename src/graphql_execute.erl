@@ -434,7 +434,7 @@ field_closure(Path, #{ defer_target := Upstream } = Ctx,
                           {M, _} -> #{ M => Ref }
                       end }.
 
-resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectType, Value, Name, FAns, Fun, Args) ->
+resolve_field_value(#{null_value := NullValue} = Ctx, #object_type { id = OID, annotations = OAns} = ObjectType, Value, Name, FAns, Fun, Args) ->
     CtxAnnot = Ctx#{
         field => Name,
         field_annotations => FAns,
@@ -446,6 +446,7 @@ resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectTy
         is_function(Fun, 3) -> Fun(CtxAnnot, Value, Args)
     end) of
         {error, Reason} -> {error, {resolver_error, Reason}};
+        {ok, Result} when Result =:= NullValue -> {null, Result};
         {ok, Result} -> {ok, Result};
         {ok, Result, AuxiliaryDataList} when is_list(AuxiliaryDataList) ->
             self() ! {'$auxiliary_data', AuxiliaryDataList},
@@ -473,7 +474,7 @@ complete_value(Path, Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
       [Ty]),
     SchemaType = graphql_schema:get(Ty),
     complete_value(Path, Ctx, SchemaType, Fields, {ok, Value});
-complete_value(Path, #{ defer_target := Upstream } = Ctx,
+complete_value(Path, #{ null_value := NullValue, defer_target := Upstream } = Ctx,
                {non_null, InnerTy}, Fields, Result) ->
     %% Note we handle arbitrary results in this case. This makes sure errors
     %% factor through the non-null handler here and that handles
@@ -485,7 +486,9 @@ complete_value(Path, #{ defer_target := Upstream } = Ctx,
             %% object is at fault, don't care too much about this level, just pass
             %% on the error
             err(Path, Reason);
-        {ok, null, InnerErrs} ->
+        %% {null, NullValue} ->
+        %%     err(Path, null_value);
+        {ok, NullValue, InnerErrs} ->
             err(Path, null_value, InnerErrs);
         {ok, _C, _E} = V ->
             V;
@@ -496,9 +499,11 @@ complete_value(Path, #{ defer_target := Upstream } = Ctx,
             %%
             %% Note: The closure ignores the key
             Work#work { items =
-                            [{Self, not_null_closure(Upstream, Self, Path,
+                            [{Self, not_null_closure(Ctx, Upstream, Self, Path,
                                                      upstream_ref(WUs))}|WUs]}
     end;
+complete_value(_Path, #{null_value := NullValue} = _Ctx, _Ty, _Fields, {null, NullValue}) ->
+    {ok, NullValue, []};
 complete_value(_Path, _Ctx, _Ty, _Fields, {ok, null}) ->
     {ok, null, []};
 complete_value(Path, _Ctx, {list, _}, _Fields, {ok, V}) when not is_list(V) ->
@@ -640,7 +645,7 @@ complete_value_list(Path, #{ defer_target := Upstream } = Ctx,
                             {ok, null, Reasons}
                     end;
                 _ ->
-                    Closure = list_closure(Upstream, Self, M, Completed, #{}),
+                    Closure = list_closure(Ctx, Upstream, Self, M, Completed, #{}),
                     merge_work(
                       Ws,
                       #work { demonitors = [],
@@ -653,7 +658,7 @@ list_subst([], _Done)               -> [];
 list_subst([{defer, Idx}|Xs], Done) -> [maps:get(Idx, Done)|list_subst(Xs, Done)];
 list_subst([X|Xs], Done)            -> [X|list_subst(Xs, Done)].
 
-list_closure(Upstream, Self, Missing, List, Done) ->
+list_closure(#{null_value := NullValue} = Ctx, Upstream, Self, Missing, List, Done) ->
     fun
         (cancel) ->
             #done {
@@ -667,7 +672,7 @@ list_closure(Upstream, Self, Missing, List, Done) ->
             {Val, Removed} = maps:take(From, Missing),
             #work {
                items = [{Self,
-                         list_closure(Upstream, Self,
+                         list_closure(Ctx, Upstream, Self,
                                       Removed#{ To => Val },
                                       List,
                                       Done)}],
@@ -698,12 +703,12 @@ list_closure(Upstream, Self, Missing, List, Done) ->
                                        key = Self,
                                        cancel = [],
                                        demonitor = undefined,
-                                       result = {ok, null, Reasons}
+                                       result = {ok, NullValue, Reasons}
                                       }
                             end;
                         _ ->
                             #work{ items = [{Self,
-                                             list_closure(Upstream, Self,
+                                             list_closure(Ctx, Upstream, Self,
                                                           NewMissing,
                                                           List,
                                                           NewDone )}],
@@ -713,7 +718,8 @@ list_closure(Upstream, Self, Missing, List, Done) ->
             end
     end.
 
-not_null_closure(Upstream, Self, Path, Ref) ->
+not_null_closure(Ctx, Upstream, Self, Path, Ref) ->
+    #{null_value := NullValue} = Ctx,
     fun
         (cancel) ->
             #done {
@@ -726,9 +732,9 @@ not_null_closure(Upstream, Self, Path, Ref) ->
         ({change_ref, _Old, New}) ->
             #work { demonitors = [],
                     monitor = #{},
-                    items = [{Self, not_null_closure(Upstream, Self, Path,
+                    items = [{Self, not_null_closure(Ctx, Upstream, Self, Path,
                                                      New)}] };
-        ({_Ref, {ok, null, InnerErrs}}) ->
+        ({_Ref, {ok, Value, InnerErrs}}) when Value =:= NullValue ->
             #done {
                upstream = Upstream,
                key = Self,
@@ -799,7 +805,7 @@ fragments(Frags) ->
 
 %% -- FUNCTION RESOLVERS ---------------------------------
 
-resolver_function(_ObjType, R) when is_function(R, 3) -> R;
+resolver_function(_ObjType, R) when is_function(R, 3) -> R; % todo, get rid of f/3
 resolver_function(#object_type {
                      id = Id,
                      resolve_module = undefined }, undefined) ->
@@ -847,8 +853,8 @@ value(#{ params := Params } = _Ctx, SType, {var, ID, DType}) ->
     %% at this stage
     Value = maps:get(name(ID), Params),
     var_coerce(DType, SType, Value);
-value(_Ctx, _Ty, null) ->
-    null;
+value(#{null_value := NullValue} = _Ctx, _Ty, NullValue) -> % value(_Ctx, _Ty, null) ->
+    NullValue;
 value(Ctx, {non_null, Ty}, Val) ->
     value(Ctx, Ty, Val);
 value(Ctx, {list, Ty}, Val) ->
@@ -898,7 +904,9 @@ field_type(#field { schema = SF }) -> SF.
 
 %% -- CONTEXT CANONICALIZATION ------------
 canon_context(#{ params := Params } = Ctx) ->
-     Ctx#{ params := canon_params(Params) }.
+    Ctx#{ params := canon_params(Params)
+        , null_value => maps:get(null_value, Ctx, null)
+        }.
 
 canon_params(Ps) ->
      KVs = maps:to_list(Ps),
@@ -1037,7 +1045,7 @@ null(Path, Reason) ->
 
 null(Path, Reason, More) ->
     {error, Return} = err(Path, Reason, More),
-    {ok, null, Return}.
+    {ok, null, Return}. % here
 
 err(Path, Reason) ->
     err(Path, Reason, []).
@@ -1070,4 +1078,3 @@ err_msg(list_resolution) ->
     ["Internal Server error: A list is being incorrectly resolved"];
 err_msg(Otherwise) ->
     io_lib:format("Error in execution: ~p", [Otherwise]).
-
