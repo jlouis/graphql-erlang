@@ -43,8 +43,10 @@ init_per_testcase(x, Config) ->
     dbg:p(all, c),
     dbg:tpl(graphql_execute, does_fragment_type_apply, '_', cx),
     Config;
+init_per_testcase(direct_input, Config) ->
+    Config;
 init_per_testcase(_Case, Config) ->
-    Config.
+    {skip, remove_noise}.
 
 end_per_testcase(x, _Config) ->
     dbg:stop_clear(),
@@ -418,7 +420,7 @@ fixed_input(Config) ->
                 <<"plushFactor">> := 0.01,
                 <<"properties">> := [],
                 <<"mood">> := <<"DODGY">>,
-               <<"stats">> := owl}
+                <<"stats">> := owl}
         }}} = run(Config, <<"IntroduceMonsterFatFixedInput">>, #{ }),
     ok.
 

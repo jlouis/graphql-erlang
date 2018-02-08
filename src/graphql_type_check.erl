@@ -41,7 +41,7 @@
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
--export([x/1, x_params/3]).
+-export([x/1, x_params/3, x_params/4]).
 -export([err_msg/1]).
 
 %% -- TOP LEVEL TYPE CHECK CODE -------------------------------
@@ -57,8 +57,9 @@
 x(Doc) ->
     x(#{}, Doc).
 
-x(Ctx, {document, Clauses}) ->
-   type_check(Ctx, [document], Clauses).
+x(Ctx0, {document, Clauses}) ->
+    Ctx1 = Ctx0#{null_value => maps:get(null_value, Ctx0, owl)},
+    type_check(Ctx1, [document], Clauses).
 
 type_check(Ctx, Path, Clauses) ->
    {Fragments, _Rest} = lists:partition(
@@ -113,22 +114,26 @@ get_operation(FunEnv, OpName, _Params) ->
 %% operation and its parameters matches the types in the operation referenced
 -spec x_params(any(), any(), any()) -> graphql:param_context().
 x_params(FunEnv, OpName, Params) ->
+    x_params(#{}, FunEnv, OpName, Params).
+
+-spec x_params(any(), any(), any(), any()) -> graphql:param_context().
+x_params(Ctx, FunEnv, OpName, Params) ->
     case get_operation(FunEnv, OpName, Params) of
         undefined ->
             #{};
         not_found ->
             err([], {operation_not_found, OpName});
         TyVarEnv ->
-            tc_params([OpName], TyVarEnv, Params)
+            tc_params(Ctx, [OpName], TyVarEnv, Params)
     end.
 
 %% Parameter checking has positive polarity, so we fold over
 %% the type var environment from the schema and verify that each
 %% type is valid
-tc_params(Path, TyVarEnv, InitialParams) ->
+tc_params(Ctx, Path, TyVarEnv, InitialParams) ->
     F =
       fun(K, V0, PS) ->
-        case tc_param(Path, K, V0, maps:get(K, PS, not_found)) of
+        case tc_param(Ctx, Path, K, V0, maps:get(K, PS, not_found)) of
             V0 -> PS;
             V1 -> PS#{ K => V1 }
         end
@@ -139,13 +144,13 @@ tc_params(Path, TyVarEnv, InitialParams) ->
 %% If a given parameter is not given, and there is a default, we can supply
 %% the default value in some cases. The spec requires special handling of
 %% null values, which are handled here.
-tc_param(Path, K, #vardef { ty = {non_null, _}, default = null }, not_found) ->
+tc_param(_Ctx, Path, K, #vardef { ty = {non_null, _}, default = null }, not_found) ->
     err([K | Path], missing_non_null_param);
-tc_param(Path, K, #vardef { default = Default,
+tc_param(Ctx, Path, K, #vardef { default = Default,
                             ty = Ty }, not_found) ->
-    coerce_default_param([K | Path], Ty, Default);
-tc_param(Path, K, #vardef { ty = Ty }, Val) ->
-    check_param([K | Path], Ty, Val).
+    coerce_default_param(Ctx, [K | Path], Ty, Default);
+tc_param(Ctx, Path, K, #vardef { ty = Ty }, Val) ->
+    check_param(Ctx, [K | Path], Ty, Val).
 
 %% When checking params, the top level has been elaborated by the
 %% elaborator, but the levels under it has not. So we have a case where
@@ -153,17 +158,21 @@ tc_param(Path, K, #vardef { ty = Ty }, Val) ->
 %%
 %% This function case-splits on different types of positive polarity and
 %% calls out to the correct helper-function
-check_param(Path, {non_null, _}, null) -> err(Path, non_null);
-check_param(Path, {non_null, Ty}, V) -> check_param(Path, Ty, V);
-check_param(_Path, _Ty, null) -> null;
-check_param(Path, {list, T}, L) when is_list(L) ->
+%% check_param(Path, Ty, V) -> check_param(#{}, Path, Ty, V).
+
+check_param(#{null_value := NV} = _Ctx, Path, {non_null, _}, NV) -> err(Path, non_null); % ?
+check_param(_Ctx, Path, {non_null, _}, null) -> err(Path, non_null); % ?
+check_param(Ctx, Path, {non_null, Ty}, V) -> check_param(Ctx, Path, Ty, V);
+%% check_param(#{null_value := NV} = _Ctx, _Path, _Ty, NV) -> NV; % ? HERE!
+check_param(#{null_value := NV} = _Ctx, _Path, _Ty, null) -> NV; % HERE!
+check_param(Ctx, Path, {list, T}, L) when is_list(L) ->
     %% Build a dummy structure to match the recursor. Unwrap this
     %% structure before replacing the list parameter.
-    [check_param(Path, T, X) || X <- L];
-check_param(Path, #scalar_type{} = STy, V) -> non_polar_coerce(Path, STy, V);
-check_param(Path, #enum_type{} = ETy, {enum, V}) when is_binary(V) ->
-    check_param(Path, ETy, V);
-check_param(Path, #enum_type { id = Ty }, V) when is_binary(V) ->
+    [check_param(Ctx, Path, T, X) || X <- L];
+check_param(_Ctx, Path, #scalar_type{} = STy, V) -> non_polar_coerce(Path, STy, V);
+check_param(Ctx, Path, #enum_type{} = ETy, {enum, V}) when is_binary(V) ->
+    check_param(Ctx, Path, ETy, V);
+check_param(_Ctx, Path, #enum_type { id = Ty }, V) when is_binary(V) ->
     %% Determine the type of any enum term, and then coerce it
     case graphql_schema:lookup_enum_type(V) of
         #enum_type { id = Ty } = ETy ->
@@ -173,30 +182,30 @@ check_param(Path, #enum_type { id = Ty }, V) when is_binary(V) ->
         OtherTy ->
             err(Path, {param_mismatch, {enum, Ty, OtherTy}})
     end;
-check_param(Path, #input_object_type{} = IOType, Obj) when is_map(Obj) ->
+check_param(Ctx, Path, #input_object_type{} = IOType, Obj) when is_map(Obj) ->
     %% When an object comes in through JSON for example, then the input object
     %% will be a map which is already unique in its fields. To handle this, turn
     %% the object into the same form as the one we use on query documents and pass
     %% it on. Note that the code will create a map later on once the input has been
     %% uniqueness-checked.
-    check_param(Path, IOType, {input_object, maps:to_list(Obj)});
-check_param(Path, #input_object_type{} = IOType, {input_object, KVPairs}) ->
-    check_input_object(Path, IOType, {input_object, KVPairs});
+    check_param(Ctx, Path, IOType, {input_object, maps:to_list(Obj)});
+check_param(Ctx, Path, #input_object_type{} = IOType, {input_object, KVPairs}) ->
+    check_input_object(Ctx, Path, IOType, {input_object, KVPairs});
 %% The following expands un-elaborated (nested) types
-check_param(Path, Ty, V) when is_binary(Ty) ->
+check_param(Ctx, Path, Ty, V) when is_binary(Ty) ->
     case graphql_schema:lookup(Ty) of
         #scalar_type {} = ScalarTy -> non_polar_coerce(Path, ScalarTy, V);
-        #input_object_type {} = IOType -> check_input_object(Path, IOType, V);
-        #enum_type {} = Enum -> check_param(Path, Enum, V);
+        #input_object_type {} = IOType -> check_input_object(Ctx, Path, IOType, V);
+        #enum_type {} = Enum -> check_param(Ctx, Path, Enum, V);
         _ ->
             err(Path, {not_input_type, Ty, V})
     end;
 %% Everything else are errors
-check_param(Path, Ty, V) ->
+check_param(_Ctx, Path, Ty, V) ->
     err(Path, {param_mismatch, Ty, V}).
 
-coerce_default_param(Path, Ty, Default) ->
-    try check_param(Path, Ty, Default) of
+coerce_default_param(Ctx, Path, Ty, Default) ->
+    try check_param(Ctx, Path, Ty, Default) of
         Result -> Result
     catch
         Class:Err ->
@@ -209,20 +218,20 @@ coerce_default_param(Path, Ty, Default) ->
     end.
 
 %% Input objects are first coerced. Then they are checked.
-check_input_object(Path, #input_object_type{ fields = Fields }, Obj) ->
-    Coerced = coerce_input_object(Path, Obj),
-    check_input_object_fields(Path, maps:to_list(Fields), Coerced, #{}).
+check_input_object(Ctx, Path, #input_object_type{ fields = Fields }, Obj) ->
+    Coerced = coerce_input_object(Ctx, Path, Obj),
+    check_input_object_fields(Ctx, Path, maps:to_list(Fields), Coerced, #{}).
 
 %% Input objects are in positive polarity, so the schema's fields are used
 %% to verify that every field is present, and that there are no excess fields
 %% As we process fields in the object, we remove them so we can check that
 %% there are no more fields in the end.
-check_input_object_fields(Path, [], Obj, Result) ->
+check_input_object_fields(_Ctx, Path, [], Obj, Result) ->
     case maps:size(Obj) of
         0 -> Result;
         K when K > 0 -> err(Path, {excess_fields_in_object, Obj})
     end;
-check_input_object_fields(Path,
+check_input_object_fields(Ctx, Path,
                           [{Name, #schema_arg { ty = Ty,
                                                 default = Default }} | Next],
                           Obj,
@@ -233,12 +242,12 @@ check_input_object_fields(Path,
                              {non_null, _} when Default == null ->
                                  err([Name | Path], missing_non_null_param);
                              _ ->
-                                 coerce_default_param(Path, Ty, Default)
+                                 coerce_default_param(Ctx, Path, Ty, Default)
                          end;
                      V ->
-                         check_param([Name | Path], Ty, V)
+                         check_param(Ctx, [Name | Path], Ty, V)
                  end,
-    check_input_object_fields(Path,
+    check_input_object_fields(Ctx, Path,
                               Next,
                               maps:remove(Name, Obj),
                               Result#{ Name => CoercedVal }).
@@ -578,6 +587,7 @@ judge(Ctx, Path, {name, _, N}, SType) ->
     judge(Ctx, Path, N, SType);
 judge(#{ varenv := VE }, Path, {var, ID}, SType) ->
     Var = graphql_ast:name(ID),
+    ct:pal("Var: ~p", [VE]),
     case maps:get(Var, VE, not_found) of
         not_found -> err(Path, {unbound_variable, Var});
         #vardef { ty = DType } ->
@@ -622,11 +632,11 @@ judge(_Ctx, Path, {enum, N}, SType) ->
                        #{ document => Other,
                           schema => SType }})
     end;
-judge(_Ctx, Path, {input_object, _} = InputObj, SType) ->
+judge(Ctx, Path, {input_object, _} = InputObj, SType) ->
     case SType of
         #input_object_type{} = IOType ->
-            Coerced = coerce_input_object(Path, InputObj),
-            check_input_object(Path, IOType, Coerced);
+            Coerced = coerce_input_object(Ctx, Path, InputObj),
+            check_input_object(Ctx, Path, IOType, Coerced);
         _OtherType ->
             err(Path, {type_mismatch, #{ document => InputObj, schema => SType }})
     end;
@@ -646,10 +656,10 @@ judge(_Ctx, Path, Value, Unknown) ->
 coerce_name(B) when is_binary(B) -> B;
 coerce_name(Name) -> graphql_ast:name(Name).
 
-coerce_input_object(Path, {input_object, Elems}) ->
+coerce_input_object(Ctx, Path, {input_object, Elems}) ->
     AssocList = [begin
                      N = coerce_name(K),
-                     {N, coerce_input_object([N | Path], V)}
+                     {N, coerce_input_object(Ctx, [N | Path], V)}
                  end || {K, V} <- Elems],
     case graphql_ast:uniq(AssocList) of
         ok ->
@@ -657,7 +667,7 @@ coerce_input_object(Path, {input_object, Elems}) ->
         {not_unique, Key} ->
             err(Path, {input_object_not_unique, Key})
     end;
-coerce_input_object(_Path, Value) -> Value.
+coerce_input_object(_Ctx, _Path, Value) -> Value.
 
 %% -- Error handling -------------------------------------
 

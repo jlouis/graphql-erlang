@@ -72,13 +72,12 @@ gray(#{ r := R,
     V = 0.30*R + 0.59*G + 0.11*B,
     #{ r => V, g => V, b => V }.
 
-stats(null) ->
-    {ok, null};
-stats(SS) ->
-    {ok, [{ok, S} || S <- SS]}.
+stats(owl) -> {ok, owl};
+stats(null) -> {ok, owl};
+stats(SS) -> {ok, [{ok, S} || S <- SS]}.
 
-stats(null, _) ->
-    {ok, null};
+stats(owl, _) -> {ok, owl};
+stats(null, _) -> {ok, owl};
 stats(SS, #{ <<"minAttack">> := Min }) ->
     {ok, [{ok, S} || S <- SS,
                      S#stats.attack >= Min]}.

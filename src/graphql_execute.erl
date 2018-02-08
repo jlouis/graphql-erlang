@@ -118,7 +118,8 @@ execute_mutation(Ctx, #op { selection_set = SSet,
             complete_top_level(Res, Errs)
     end.
 
-execute_sset(Path, #{ defer_target := DeferTarget } = Ctx, SSet, Type, Value) ->
+execute_sset(Path, #{ null_value := NV
+                    , defer_target := DeferTarget } = Ctx, SSet, Type, Value) ->
     GroupedFields = collect_fields(Path, Ctx, Type, SSet),
     Self = make_ref(),
     try
@@ -127,16 +128,16 @@ execute_sset(Path, #{ defer_target := DeferTarget } = Ctx, SSet, Type, Value) ->
                 {ok, Map, Errs};
             {defer, Map, Errs, Work, Missing} ->
                 #work { items = Items } = Work,
-                Closure = obj_closure(DeferTarget, Self, Missing, Map, Errs),
+                Closure = obj_closure(Ctx, DeferTarget, Self, Missing, Map, Errs),
                 Work#work { items = [{Self, Closure}] ++ Items }
         end
     catch
-        throw:{null, Errors, _Ds} ->
+        throw:{NV, Errors, _Ds} ->
             %% @todo: Cancel defers, or at least consider a way of doing so!
-            {ok, null, Errors}
+            {ok, NV, Errors}
     end.
 
-obj_closure(Upstream, Self, Missing, Map, Errors) ->
+obj_closure(#{null_value := NullValue} = Ctx, Upstream, Self, Missing, Map, Errors) ->
     fun
         (cancel) ->
             #done {
@@ -151,7 +152,7 @@ obj_closure(Upstream, Self, Missing, Map, Errors) ->
             #work {
                demonitors = [],
                monitor = #{},
-               items = [{Self, obj_closure(Upstream, Self,
+               items = [{Self, obj_closure(Ctx, Upstream, Self,
                                                 Removed#{ To => Val },
                                                 Map,
                                                 Errors)}] };
@@ -159,7 +160,7 @@ obj_closure(Upstream, Self, Missing, Map, Errors) ->
             #done {
                upstream = Upstream,
                key = Self,
-               result = {ok, null, Errs ++ Errors},
+               result = {ok, NullValue, Errs ++ Errors},
                demonitor = undefined,
                cancel = maps:keys(Missing)
               };
@@ -179,7 +180,7 @@ obj_closure(Upstream, Self, Missing, Map, Errors) ->
                               };
                         _ ->
                             #work { items = [{Self,
-                                              obj_closure(Upstream, Self,
+                                              obj_closure(Ctx, Upstream, Self,
                                                           NewMissing,
                                                           NewMap,
                                                           NewErrors)}],
@@ -214,10 +215,12 @@ execute_sset_field(_Path, _Ctx, [], _Type, _Value, Map, Errs, Work, Missing) ->
             true = maps:size(Missing) > 0,
             {defer, Result, Errs, Work, Missing}
     end;
-execute_sset_field(Path, Ctx, [{Key, [F|_] = Fields} | Next],
+execute_sset_field(Path, #{null_value := NV} = Ctx, [{Key, [F|_] = Fields} | Next],
              Type, Value, Map, Errs, Work, Missing) ->
     case lookup_field(F, Type) of
-        null ->
+        null -> % ?
+            execute_sset_field(Path, Ctx, Next, Type, Value, Map, Errs, Work, Missing);
+        NV ->
             execute_sset_field(Path, Ctx, Next, Type, Value, Map, Errs, Work, Missing);
         not_found ->
             execute_sset_field(Path, Ctx, Next, Type, Value, Map, Errs, Work, Missing);
@@ -238,7 +241,7 @@ execute_sset_field(Path, Ctx, [{Key, [F|_] = Fields} | Next],
                                        merge_work(Work, Work2),
                                        Missing#{ Ref => Key });
                 {error, Errors} ->
-                    throw({null, Errors, Work})
+                    throw({NV, Errors, Work})
             end
     end.
 
@@ -340,6 +343,7 @@ execute_field_await(Path,
                     Ref) ->
     receive
         {'$graphql_reply', ReqId, Ref, ResolvedValue} ->
+            ct:pal("Resolved: ~p", [ResolvedValue]),
             complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue);
         {'$graphql_reply', _, _, _} ->
             execute_field_await(Path, Ctx, ElaboratedTy, Fields, Ref)
@@ -447,7 +451,8 @@ resolve_field_value(#{null_value := NullValue} = Ctx, #object_type { id = OID, a
     end) of
         {error, Reason} -> {error, {resolver_error, Reason}};
         {ok, Result} when Result =:= NullValue -> {null, Result};
-        {ok, Result} -> {ok, Result};
+        {ok, Result} ->
+            {ok, Result};
         {ok, Result, AuxiliaryDataList} when is_list(AuxiliaryDataList) ->
             self() ! {'$auxiliary_data', AuxiliaryDataList},
             {ok, Result};
@@ -486,8 +491,8 @@ complete_value(Path, #{ null_value := NullValue, defer_target := Upstream } = Ct
             %% object is at fault, don't care too much about this level, just pass
             %% on the error
             err(Path, Reason);
-        %% {null, NullValue} ->
-        %%     err(Path, null_value);
+        {null, NullValue} ->
+            err(Path, null_value);
         {ok, NullValue, InnerErrs} ->
             err(Path, null_value, InnerErrs);
         {ok, _C, _E} = V ->
@@ -505,17 +510,17 @@ complete_value(Path, #{ null_value := NullValue, defer_target := Upstream } = Ct
 complete_value(_Path, #{null_value := NullValue} = _Ctx, _Ty, _Fields, {null, NullValue}) ->
     {ok, NullValue, []};
 complete_value(_Path, _Ctx, _Ty, _Fields, {ok, null}) ->
-    {ok, null, []};
-complete_value(Path, _Ctx, {list, _}, _Fields, {ok, V}) when not is_list(V) ->
-    null(Path, not_a_list);
+    {ok, null, []}; % here
+complete_value(Path, Ctx, {list, _}, _Fields, {ok, V}) when not is_list(V) ->
+    null(Ctx, Path, not_a_list);
 complete_value(Path, Ctx, {list, InnerTy}, Fields, {ok, Value}) ->
     complete_value_list(Path, Ctx, InnerTy, Fields, Value);
-complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
-    complete_value_scalar(Path, ID, RM, Value);
-complete_value(Path, _Ctx, #enum_type { id = ID,
-                                        resolve_module = RM},
+complete_value(Path, Ctx, #scalar_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
+    complete_value_scalar(Ctx, Path, ID, RM, Value);
+complete_value(Path, Ctx, #enum_type { id = ID,
+                                       resolve_module = RM},
                _Fields, {ok, Value}) ->
-    case complete_value_scalar(Path, ID, RM, Value) of
+    case complete_value_scalar(Ctx, Path, ID, RM, Value) of
         {ok, null, Errors} ->
             {ok, null, Errors};
         {ok, Result, Errors} ->
@@ -523,9 +528,9 @@ complete_value(Path, _Ctx, #enum_type { id = ID,
                 #enum_type { id = ID } ->
                     {ok, Result, Errors};
                 #enum_type {} ->
-                    null(Path, {invalid_enum_output, ID, Result}, Errors);
+                    null(Ctx, Path, {invalid_enum_output, ID, Result}, Errors);
                 not_found ->
-                    null(Path, {invalid_enum_output, ID, Result}, Errors)
+                    null(Ctx, Path, {invalid_enum_output, ID, Result}, Errors)
             end
     end;
 complete_value(Path, Ctx, #interface_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
@@ -535,8 +540,8 @@ complete_value(Path, Ctx, #union_type{ resolve_type = Resolver }, Fields, {ok, V
 complete_value(Path, Ctx, #object_type{} = Ty, Fields, {ok, Value}) ->
     SubSelectionSet = merge_selection_sets(Fields),
     execute_sset(Path, Ctx, SubSelectionSet, Ty, Value);
-complete_value(Path, _Ctx, _Ty, _Fields, {error, Reason}) ->
-    null(Path, Reason).
+complete_value(Path, Ctx, _Ty, _Fields, {error, Reason}) ->
+    null(Ctx, Path, Reason).
 
 %% Complete an abstract value
 complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value}) ->
@@ -544,7 +549,7 @@ complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value}) ->
         {ok, ResolvedType} ->
             complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
         {error, Reason} ->
-            null(Path, Reason)
+            null(Ctx, Path, Reason)
     end.
 
 resolve_abstract_type(Module, Value) when is_atom(Module) ->
@@ -564,18 +569,18 @@ resolve_abstract_type(Resolver, Value) when is_function(Resolver, 1) ->
            {error, {resolve_type_crash, {Cl,Err}}}
     end.
 
-complete_value_scalar(Path, ID, RM, Value) ->
+complete_value_scalar(Ctx, Path, ID, RM, Value) ->
     try RM:output(ID, Value) of
         {ok, Result} ->
             {ok, Result, []};
         {error, Reason} ->
-            null(Path, {output_coerce, ID, Value, Reason})
+            null(Ctx, Path, {output_coerce, ID, Value, Reason})
     catch
         Cl:Err ->
             error_logger:error_msg(
               "Output coercer crash during value completion: ~p, stacktrace: ~p~n",
               [{Cl,Err,ID,Value}, erlang:get_stacktrace()]),
-            null(Path, {output_coerce_abort, ID, Value, {Cl, Err}})
+            null(Ctx, Path, {output_coerce_abort, ID, Value, {Cl, Err}})
     end.
 
 assert_list_completion_structure(Ty, Fields, Results) ->
@@ -606,7 +611,7 @@ complete_value_list(Path, #{ defer_target := Upstream } = Ctx,
     IndexedResults = index(Results),
     case assert_list_completion_structure(Ty, Fields, IndexedResults) of
         {error, list_resolution} ->
-            null(Path, list_resolution);
+            null(Ctx, Path, list_resolution);
         ok ->
             Self = make_ref(),
             InnerCtx = Ctx#{ defer_target := Self },
@@ -845,7 +850,8 @@ var_coerce({non_null, Tau}, Tau, Value) -> Value;
 var_coerce(Tau, {list, SType}, Value)   -> [var_coerce(Tau, SType, Value)].
 
 %% Produce a valid value for an argument.
-value(Ctx, {Ty, Val})                     -> value(Ctx, Ty, Val);
+value(Ctx, {Ty, Val}) ->
+    value(Ctx, Ty, Val);
 value(Ctx, #{ type := Ty, value := Val }) -> value(Ctx, Ty, Val).
 
 value(#{ params := Params } = _Ctx, SType, {var, ID, DType}) ->
@@ -853,8 +859,12 @@ value(#{ params := Params } = _Ctx, SType, {var, ID, DType}) ->
     %% at this stage
     Value = maps:get(name(ID), Params),
     var_coerce(DType, SType, Value);
-value(#{null_value := NullValue} = _Ctx, _Ty, NullValue) -> % value(_Ctx, _Ty, null) ->
+% -------
+value(#{null_value := NullValue} = _Ctx, {list, _}, NullValue) ->
+    erlang:error("hello"); % I think this should be the path?
+value(#{null_value := NullValue} = _Ctx, _Ty, null) ->
     NullValue;
+% -------
 value(Ctx, {non_null, Ty}, Val) ->
     value(Ctx, Ty, Val);
 value(Ctx, {list, Ty}, Val) ->
@@ -1040,12 +1050,12 @@ error_wrap([]) -> [];
 error_wrap([#{ reason := Reason } = E | Next]) ->
     [E#{ reason => {resolver_error, Reason} } | error_wrap(Next)].
 
-null(Path, Reason) ->
-    null(Path, Reason, []).
+null(Ctx, Path, Reason) ->
+    null(Ctx, Path, Reason, []).
 
-null(Path, Reason, More) ->
+null(#{null_value := NullValue} = _Ctx, Path, Reason, More) ->
     {error, Return} = err(Path, Reason, More),
-    {ok, null, Return}. % here
+    {ok, NullValue, Return}.
 
 err(Path, Reason) ->
     err(Path, Reason, []).

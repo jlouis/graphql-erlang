@@ -30,10 +30,10 @@ x({union, #{ id := ID, description := Desc, types := Types } = U}) ->
 x({enum, #{ id := ID, description := Desc, values := VDefs} = Enum}) ->
     ModuleResolver = enum_resolve(Enum),
     #enum_type {
-    	id = c_id(ID),
-    	description = binarize(Desc),
-    	annotations = annotations(Enum),
-    	values = map_2(fun c_enum_val/2, VDefs),
+        id = c_id(ID),
+        description = binarize(Desc),
+        annotations = annotations(Enum),
+        values = map_2(fun c_enum_val/2, VDefs),
         resolve_module = ModuleResolver
      };
 
@@ -111,12 +111,12 @@ c_field(K, V) ->
 
 c_field_val(M) ->
     #schema_field {
-    	ty = c_field_val_ty(M),
-    	resolve = c_field_val_resolve(M),
-    	args = c_field_val_args(M),
-    	deprecation = deprecation(M),
-    	annotations = annotations(M),
-    	description = c_field_val_description(M)
+        ty = c_field_val_ty(M),
+        resolve = c_field_val_resolve(M),
+        args = c_field_val_args(M),
+        deprecation = deprecation(M),
+        annotations = annotations(M),
+        description = c_field_val_description(M)
     }.
 
 c_field_val_ty(#{ type := Ty }) ->
