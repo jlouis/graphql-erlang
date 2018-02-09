@@ -169,7 +169,7 @@ query_id_params(Config) ->
             #{ <<"name">> := <<"Han Solo">> } } } =
                 th:x(Config, Q2, <<"FetchSomeIDQuery">>, #{ <<"someID">> => <<"1002">> }),
     #{ data :=
-        #{ <<"human">> := null } } =
+        #{ <<"human">> := owl } } =
             th:x(Config, Q2, <<"FetchSomeIDQuery">>, #{ <<"someID">> => <<"Not a valid query">> }),
     ok.
 

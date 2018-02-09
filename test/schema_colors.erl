@@ -4,43 +4,43 @@
 
 inject() ->
      Color = {enum, #{
-     	id => 'Color',
-     	description => "A test representation of color",
-     	values => #{
-     	    <<"RED">> => #{ value => 0, description => "The color red" },
-     	    <<"GREEN">> => #{ value => 1, description => "The color green" },
-     	    <<"BLUE">> => #{ value => 2, description => "The color blue" }
-     	}
+        id => 'Color',
+        description => "A test representation of color",
+        values => #{
+            <<"RED">> => #{ value => 0, description => "The color red" },
+            <<"GREEN">> => #{ value => 1, description => "The color green" },
+            <<"BLUE">> => #{ value => 2, description => "The color blue" }
+        }
      }},
      ok = graphql:insert_schema_definition(Color),
 
      Query = {object, #{
-     	id => 'Query',
-     	description => "Top level query object",
-     	fields => #{
-     		colorEnum => #{
-     			type => 'Color',
-     			description => "A color enumerated type",
-     			args => #{
-     				'fromEnum' =>
-     				    #{ type => 'Color', description => "" },
-				'fromInt' =>
-				    #{ type => 'Int', description => "" },
-				'fromString' =>
-				    #{ type => 'String', description => "" }
-			},
-			resolve => fun color_enum/3
-		},
-		colorInt => #{
-			type => 'Int',
-			description => "Colors as integers",
-			args => #{
-				fromEnum => #{ type => 'Color', description => "" },
-				fromInt => #{ type => 'Int', description => "" }
-			},
-			resolve => fun color_int/3
-		}
-	}
+        id => 'Query',
+        description => "Top level query object",
+        fields => #{
+            colorEnum => #{
+                type => 'Color',
+                description => "A color enumerated type",
+                args => #{
+                    'fromEnum' =>
+                        #{ type => 'Color', description => "" },
+                'fromInt' =>
+                    #{ type => 'Int', description => "" },
+                'fromString' =>
+                    #{ type => 'String', description => "" }
+            },
+            resolve => fun color_enum/3
+        },
+        colorInt => #{
+            type => 'Int',
+            description => "Colors as integers",
+            args => #{
+                fromEnum => #{ type => 'Color', description => "" },
+                fromInt => #{ type => 'Int', description => "" }
+            },
+            resolve => fun color_int/3
+        }
+    }
     }},
     ok = graphql:insert_schema_definition(Query),
 
@@ -48,20 +48,20 @@ inject() ->
         id => 'Mutation',
         description => "Top level mutation query",
         fields => #{
-        		favoriteEnum => #{
-        			type => 'Color',
-        			args => #{
-        				color => #{ type => 'Color', description => "" }
-        			},
-        			resolve => fun
-        			    (_, _V, #{ <<"color">> :=  C }) -> {ok, C};
-        			    (_, _V, #{}) -> {error, cannot_resolve_color}
-        			end
-        		}
-        	}
+                favoriteEnum => #{
+                    type => 'Color',
+                    args => #{
+                        color => #{ type => 'Color', description => "" }
+                    },
+                    resolve => fun
+                        (_, _V, #{ <<"color">> :=  C }) -> {ok, C};
+                        (_, _V, #{}) -> {error, cannot_resolve_color}
+                    end
+                }
+            }
     }},
     ok = graphql:insert_schema_definition(Mutation),
-    
+
     Root = {root, #{
        query => 'Query',
        mutation => 'Mutation',
@@ -87,37 +87,36 @@ resolve_output(enum, 'BLUE') -> {ok, <<"BLUE">>};
 resolve_output(int, 'RED') -> {ok, 0};
 resolve_output(int, 'GREEN') -> {ok, 1};
 resolve_output(int, 'BLUE') -> {ok, 2}.
-    
+
 color_enum(_Ctx, _, #{
-    <<"fromEnum">> := null,
-    <<"fromInt">> := null,
-    <<"fromString">> := null}) -> {ok, null};
+    <<"fromEnum">> := owl,
+    <<"fromInt">> := owl,
+    <<"fromString">> := owl}) -> {ok, owl};
 color_enum(_Ctx, _, #{
     <<"fromEnum">> := X,
-    <<"fromInt">> := null,
-    <<"fromString">> := null}) -> resolve_output(enum,
+    <<"fromInt">> := owl,
+    <<"fromString">> := owl}) -> resolve_output(enum,
                                     resolve_input(enum, X));
 color_enum(_Ctx, _, #{
-    <<"fromEnum">> := null,
+    <<"fromEnum">> := owl,
     <<"fromInt">> := X,
-    <<"fromString">> := null})
+    <<"fromString">> := owl})
   when X >= 0 andalso X < 3 -> resolve_output(enum,
                                  resolve_input(int, X));
 color_enum(_Ctx, _, #{
-    <<"fromEnum">> := null,
-    <<"fromInt">> := null,
+    <<"fromEnum">> := owl,
+    <<"fromInt">> := owl,
     <<"fromString">> := X}) -> resolve_output(enum,
                                  resolve_input(string, X)).
 
 color_int(_Ctx, _, #{
-    <<"fromEnum">> := null,
-    <<"fromInt">> := null }) -> {ok, null};
+    <<"fromEnum">> := owl,
+    <<"fromInt">> := owl }) -> {ok, owl};
 color_int(_Ctx, _, #{
-    <<"fromEnum">> := null,
-    <<"fromInt">> := X}) when X /= null -> resolve_output(int,
-                                             resolve_input(int, X));
+    <<"fromEnum">> := owl,
+    <<"fromInt">> := X}) when X /= owl -> resolve_output(int,
+                                                         resolve_input(int, X));
 color_int(_Ctx, _, #{
     <<"fromEnum">> := X,
-    <<"fromInt">> := null }) when X /= null -> resolve_output(int,
-                                                 resolve_input(enum, X)).
-
+    <<"fromInt">> := owl }) when X /= owl -> resolve_output(int,
+                                                            resolve_input(enum, X)).

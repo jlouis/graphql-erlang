@@ -27,13 +27,13 @@ execute(_Ctx, _, <<"introduceMonster">>, #{ <<"input">> := Input }) ->
             exit({bad_mood_value, M})
     end,
     {atomic, Monster} = dungeon:insert(#monster {
-    	properties = Props,
-    	plush_factor = PF,
-    	stats = Ss,
-    	name = N,
-    	color = C,
-    	hitpoints = HP,
-    	mood = M }),
+        properties = Props,
+        plush_factor = PF,
+        stats = Ss,
+        name = N,
+        color = C,
+        hitpoints = HP,
+        mood = M }),
     {ok, #{
         <<"clientMutationId">> => MID,
         <<"monster">> => Monster } };
@@ -68,10 +68,10 @@ execute(_Ctx, _, <<"spawnMinion">>, #{ <<"input">> := Input }) ->
           end,
     {atomic, Result} = mnesia:transaction(Txn),
     {ok, Result#{ <<"clientMutationId">> => MID }}.
-    
+
 
 %% -- INTERNAL FUNCTIONS ----------------------------
-input_stats(null) -> null;
+input_stats(owl) -> owl;
 input_stats([]) -> [];
 input_stats([#{ <<"attack">> := Attack,
                 <<"shellScripting">> := SHScript,

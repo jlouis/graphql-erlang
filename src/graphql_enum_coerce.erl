@@ -7,4 +7,3 @@ input(_, _) -> {error, not_valid_enum_input}.
 
 output(_, {enum, X}) -> {ok, X};
 output(_, Str) when is_binary(Str) -> {ok, Str}.
-

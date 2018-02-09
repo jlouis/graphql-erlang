@@ -12,7 +12,7 @@ execute(Ctx, #stats { attack = Attack,
             AttackToken = graphql:token(Ctx),
             spawn_link(fun() ->
                                Reply = case Attack of
-                                           13 -> {ok, null};
+                                           13 -> {ok, owl};
                                            A -> {ok, A}
                                        end,
                                graphql:reply_cast(AttackToken, Reply)
@@ -23,4 +23,3 @@ execute(Ctx, #stats { attack = Attack,
         <<"shellScripting">> ->
             {ok, ShellScripting}
     end.
-

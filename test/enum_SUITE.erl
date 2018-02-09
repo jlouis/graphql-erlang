@@ -96,7 +96,7 @@ no_string_literal(Config) ->
 no_incorrect_internal_value(Config) ->
     Q1 = "{ colorEnum(fromString: \"YELLOW\") }",
     #{ data := #{
-        <<"colorEnum">> := null }} = th:x(Config, Q1),
+        <<"colorEnum">> := owl }} = th:x(Config, Q1),
     ok.
 
 no_internal_enum(Config) ->
@@ -148,8 +148,7 @@ internal_zero(Config) ->
 input_nullable(Config) ->
     Q1 = "{ colorEnum colorInt }",
     #{ data := #{
-        <<"colorEnum">> := null,
-        <<"colorInt">> := null
+        <<"colorEnum">> := owl,
+        <<"colorInt">> := owl
     }} = th:x(Config, Q1),
     ok.
-

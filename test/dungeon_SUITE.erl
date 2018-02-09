@@ -43,8 +43,7 @@ init_per_testcase(x, Config) ->
     dbg:p(all, c),
     dbg:tpl(graphql_execute, does_fragment_type_apply, '_', cx),
     Config;
-init_per_testcase(_Case, Config) ->
-    Config.
+init_per_testcase(_Case, Config) -> Config.
 
 end_per_testcase(x, _Config) ->
     dbg:stop_clear(),
@@ -159,7 +158,7 @@ invalid_list_resolver(Config) ->
     GoblinId = ?config(known_goblin_id_1, Config),
     Q1 = "query Q { monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { errorListResolution }} ",
     Expected =
-        #{data => #{<<"monster">> => #{<<"errorListResolution">> => null}},
+        #{data => #{<<"monster">> => #{<<"errorListResolution">> => owl}},
           errors =>
               [#{key => list_resolution,
                  message =>
@@ -280,7 +279,7 @@ invalid_enum_result(Config) ->
     #{ data := #{
          <<"goblin">> := #{
            <<"id">> := <<"bW9uc3Rlcjox">>,
-           <<"mood">> := null }}} =
+           <<"mood">> := owl }}} =
         run(Config, <<"InvalidEnumOutput">>, #{}),
     ok.
 
@@ -394,7 +393,7 @@ direct_input(Config) ->
     },
     #{ data := #{
         <<"introduceMonster">> := #{
-            <<"clientMutationId">> := null,
+            <<"clientMutationId">> := owl,
             <<"monster">> := #{
                 <<"id">> := _,
                 <<"name">> := <<"Albino Hobgoblin">>,
@@ -402,7 +401,7 @@ direct_input(Config) ->
                 <<"hitpoints">> := 5,
                 <<"properties">> := [<<"DRAGON">>, <<"MURLOC">>],
                 <<"mood">> := <<"AGGRESSIVE">>,
-                <<"stats">> := null}
+                <<"stats">> := owl}
         }}} = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input}),
     ok.
 
@@ -418,7 +417,7 @@ fixed_input(Config) ->
                 <<"plushFactor">> := 0.01,
                 <<"properties">> := [],
                 <<"mood">> := <<"DODGY">>,
-               <<"stats">> := null}
+                <<"stats">> := owl}
         }}} = run(Config, <<"IntroduceMonsterFatFixedInput">>, #{ }),
     ok.
 
@@ -500,27 +499,26 @@ complex_modifiers(Config) ->
           <<"shellScripting">> => 17,
           <<"yell">> => <<"I'M NOT READY!">> } ]},
     #{ data :=
-                      #{<<"introduceMonster">> := #{
-                          <<"monster">> := #{
-                            <<"id">> := MonsterID } } } } =
-             run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
+           #{<<"introduceMonster">> := #{
+                 <<"monster">> := #{
+                     <<"id">> := MonsterID } } }
+     } = run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
 
     %% Standard Query
     #{ data :=
         #{ <<"monster">> := #{
             <<"stats">> := [
-                null,
-                #{
-                  <<"attack">> := 7,
-                  <<"shellScripting">> := 17,
-                  <<"yell">> := <<"I'M NOT READY!">> } ]  }}} =
-            run(Config, <<"MonsterStatsZero">>, #{ <<"id">> => MonsterID }),
+                owl,
+                #{ <<"attack">> := 7,
+                   <<"shellScripting">> := 17,
+                   <<"yell">> := <<"I'M NOT READY!">> } ]  }}
+     } = run(Config, <<"MonsterStatsZero">>, #{ <<"id">> => MonsterID }),
     %% When the list is non-null, but there are the possibility of a null-value in the list
     %% and the list is correctly being rendered, then render the list as we expect.
     #{ data :=
           #{ <<"monster">> := #{
             <<"statsVariantOne">> := [
-                null,
+                owl,
                 #{
                   <<"attack">> := 7,
                   <<"shellScripting">> := 17,
@@ -530,12 +528,12 @@ complex_modifiers(Config) ->
     %% list becomes null, and this is a valid value. So return the list itself as the value 'null'
     #{ data :=
         #{ <<"monster">> := #{
-            <<"statsVariantTwo">> := null  }}} =
+            <<"statsVariantTwo">> := owl  }}} =
             run(Config, <<"MonsterStatsTwo">>, #{ <<"id">> => MonsterID }),
 
     %% If the list may not be null, make sure the error propagates to the wrapper object.
     #{ data :=
-        #{ <<"monster">> := null },
+        #{ <<"monster">> := owl },
         errors := [#{path :=
                          [<<"MonsterStatsThree">>, <<"monster">>, <<"statsVariantThree">>],
                      key := null_value,
@@ -565,16 +563,16 @@ non_null_field(Config) ->
         <<"shellScripting">> => 5,
         <<"yell">> => <<"...">> }]},
     #{ data :=
-                      #{<<"introduceMonster">> := #{<<"clientMutationId">> := <<"123">>,
-                                                    <<"monster">> :=
-                                                        #{ <<"color">> := <<"#B7411E">>,
-                                                           <<"hitpoints">> := 7001,
-                                                           <<"mood">> := <<"TRANQUIL">>,
-                                                           <<"name">> := <<"Brown Slime">>,
-                                                           <<"id">> := _,
-                                                           <<"plushFactor">> := PF,
-                                                           <<"stats">> := [null] }}}} =
-             run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
+           #{<<"introduceMonster">> := #{<<"clientMutationId">> := <<"123">>,
+                                         <<"monster">> :=
+                                             #{ <<"color">> := <<"#B7411E">>,
+                                                <<"hitpoints">> := 7001,
+                                                <<"mood">> := <<"TRANQUIL">>,
+                                                <<"name">> := <<"Brown Slime">>,
+                                                <<"id">> := _,
+                                                <<"plushFactor">> := PF,
+                                                <<"stats">> := [owl] }}}
+     } = run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
     true = (PF - 1.0) < 0.00001,
     ok.
 
@@ -615,7 +613,7 @@ multiple_monsters_and_rooms(Config) ->
 
     #{ data := #{
         <<"monsters">> := [
-            #{ <<"id">> := ID1 }, #{ <<"id">> := ID2 } , null ]},
+            #{ <<"id">> := ID1 }, #{ <<"id">> := ID2 } , owl ]},
        errors := [
            #{path := [<<"MultipleMonsters">>, <<"monsters">>, 2],
              message := <<"not_found">> }]
@@ -623,7 +621,7 @@ multiple_monsters_and_rooms(Config) ->
 
     #{ data := #{
         <<"monsters">> := [
-            #{ <<"id">> := ID1 }, null, #{ <<"id">> := ID2 }, null ]},
+            #{ <<"id">> := ID1 }, owl, #{ <<"id">> := ID2 }, owl ]},
        errors := [
                   #{path := [<<"MultipleMonstersExprMissing">>, <<"monsters">>, 1],
                     message := <<"not_found">>},
@@ -637,14 +635,14 @@ multiple_monsters_and_rooms(Config) ->
          <<"rooms">> := [#{<<"id">> := Room1}]}
      } = run(Config, <<"MultipleRooms">>, #{ <<"ids">> => [Room1]}),
     % look for an existing room and a non existing room
-    #{ data := #{ <<"rooms">> := null },
+    Result = run(Config, <<"MultipleRooms">>, #{ <<"ids">> => [Room1, NonExistentRoom]}),
+    #{ data := #{ <<"rooms">> := owl },
        errors :=
            [#{path := [<<"MultipleRooms">>, <<"rooms">>, 1],
               key := null_value },
             #{path := [<<"MultipleRooms">>, <<"rooms">>, 1],
               key := not_found } ]
-     } = run(Config, <<"MultipleRooms">>,
-             #{ <<"ids">> => [Room1, NonExistentRoom]}),
+     } = Result,
     ok.
 
 inline_fragment(Config) ->
@@ -817,7 +815,7 @@ invalid_type_resolution(Config) ->
     Input = #{
       <<"id">> => base64:encode(<<"kraken:1">>)
      },
-    #{ data := #{ <<"thing">> := null },
+    #{ data := #{ <<"thing">> := owl },
        errors :=
            [#{ path := [<<"LookupThing">>, <<"thing">>],
                key := {type_resolver_error, kraken},

@@ -6,7 +6,7 @@
 -export([
          parse/1,
          elaborate/1,
-         type_check/1, type_check_params/3,
+         type_check/1, type_check_params/3, type_check_params/4,
          validate/1,
          execute/1, execute/2
         ]).
@@ -99,7 +99,12 @@ elaborate(AST) ->
 
 -spec type_check_params(any(), any(), any()) -> param_context().
 type_check_params(FunEnv, OpName, Vars) ->
-    graphql_type_check:x_params(FunEnv, OpName, Vars).
+    graphql_type_check:x_params(#{null_value => owl}, FunEnv, OpName, Vars).
+
+-spec type_check_params(map(), any(), any(), any()) -> param_context().
+type_check_params(Ctx, FunEnv, OpName, Vars) ->
+    graphql_type_check:x_params(Ctx, FunEnv, OpName, Vars).
+
 
 -spec execute(ast()) -> #{ atom() => json() }.
 execute(AST) ->
@@ -123,4 +128,3 @@ insert_schema_definition(Defn) ->
 -spec validate_schema() -> ok | {error, any()}.
 validate_schema() ->
     graphql_schema_validate:x().
-
