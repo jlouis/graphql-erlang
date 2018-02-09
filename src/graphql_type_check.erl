@@ -149,7 +149,7 @@ tc_param(_Ctx, Path, K, #vardef { ty = {non_null, _}, default = null }, not_foun
 tc_param(Ctx, Path, K, #vardef { default = Default,
                             ty = Ty }, not_found) ->
     coerce_default_param(Ctx, [K | Path], Ty, Default);
-tc_param(Ctx, Path, K, #vardef { ty = Ty }, Val) ->
+tc_param(#{null_value := _} = Ctx, Path, K, #vardef { ty = Ty }, Val) ->
     check_param(Ctx, [K | Path], Ty, Val).
 
 %% When checking params, the top level has been elaborated by the
@@ -231,9 +231,8 @@ check_input_object_fields(_Ctx, Path, [], Obj, Result) ->
         0 -> Result;
         K when K > 0 -> err(Path, {excess_fields_in_object, Obj})
     end;
-check_input_object_fields(Ctx, Path,
-                          [{Name, #schema_arg { ty = Ty,
-                                                default = Default }} | Next],
+check_input_object_fields(#{null_value := _} = Ctx, Path,
+                          [{Name, #schema_arg { ty = Ty, default = Default }} | Next],
                           Obj,
                           Result) ->
     CoercedVal = case maps:get(Name, Obj, not_found) of
@@ -401,7 +400,7 @@ args(_Ctx, _Path, [], [], Acc) -> Acc;
 args(_Ctx, Path, [_|_] = Args, [], _Acc) ->
     err(Path, {excess_args, Args});
 args(Ctx, Path, Args, [{Name, #schema_arg { ty = STy }} = SArg | Next], Acc) ->
-    case take_arg(Args, SArg) of
+    case take_arg(Ctx, Args, SArg) of
         {error, Reason} ->
             err([Name | Path], Reason);
         {ok, {_, #{ type := Ty, value := Val}} = A, NextArgs} ->
@@ -422,14 +421,14 @@ args(Ctx, Path, Args, [{Name, #schema_arg { ty = STy }} = SArg | Next], Acc) ->
 %% values correctly as we are conducting the search. Return both the
 %% arg found and the remaining set of arguments so we can eventually
 %% check if we exhausted the full set.
-take_arg(Args, {Key, #schema_arg { ty = {non_null, _}, default = null}}) ->
+take_arg(_Ctx, Args, {Key, #schema_arg { ty = {non_null, _}, default = null}}) ->
     case lists:keytake(Key, 1, Args) of
         false ->
             {error, missing_non_null_param};
         {value, Arg, NextArgs} ->
             {ok, Arg, NextArgs}
     end;
-take_arg(Args, {Key, #schema_arg { ty = Ty, default = Default }}) ->
+take_arg(_Ctx, Args, {Key, #schema_arg { ty = Ty, default = Default }}) ->
     case lists:keytake(Key, 1, Args) of
         false ->
             {ok, {Key, #{ type => Ty, value => Default }}, Args};
@@ -587,7 +586,6 @@ judge(Ctx, Path, {name, _, N}, SType) ->
     judge(Ctx, Path, N, SType);
 judge(#{ varenv := VE }, Path, {var, ID}, SType) ->
     Var = graphql_ast:name(ID),
-    ct:pal("Var: ~p", [VE]),
     case maps:get(Var, VE, not_found) of
         not_found -> err(Path, {unbound_variable, Var});
         #vardef { ty = DType } ->

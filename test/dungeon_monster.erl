@@ -73,11 +73,9 @@ gray(#{ r := R,
     #{ r => V, g => V, b => V }.
 
 stats(owl) -> {ok, owl};
-stats(null) -> {ok, owl};
 stats(SS) -> {ok, [{ok, S} || S <- SS]}.
 
 stats(owl, _) -> {ok, owl};
-stats(null, _) -> {ok, owl};
 stats(SS, #{ <<"minAttack">> := Min }) ->
     {ok, [{ok, S} || S <- SS,
                      S#stats.attack >= Min]}.

@@ -5,4 +5,4 @@
 input(_, X) -> {ok, X}.
 
 output(_,B) when is_binary(B) -> {ok, B};
-output(_,_)                   -> {ok, null}.
+output(_,_) -> {ok, owl}.

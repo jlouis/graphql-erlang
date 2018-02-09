@@ -10,4 +10,4 @@ output(<<"Bool">>, true)        -> {ok, true};
 output(<<"Bool">>, <<"true">>)  -> {ok, true};
 output(<<"Bool">>, false)       -> {ok, false};
 output(<<"Bool">>, <<"false">>) -> {ok, false};
-output(_,_)                     -> {ok, null}.
+output(_,_)                     -> {ok, owl}.

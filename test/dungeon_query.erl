@@ -39,4 +39,3 @@ execute(_Ctx, _, <<"rooms">>, #{ <<"ids">> := InputIDs }) ->
 execute(Ctx, _, <<"roll">>, Args) ->
     TimeOut = maps:get(<<"delay">>,  Args, 0),
     {ok, #dice{ delay = TimeOut } }.
-

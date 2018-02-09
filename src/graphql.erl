@@ -99,7 +99,7 @@ elaborate(AST) ->
 
 -spec type_check_params(any(), any(), any()) -> param_context().
 type_check_params(FunEnv, OpName, Vars) ->
-    graphql_type_check:x_params(#{}, FunEnv, OpName, Vars).
+    graphql_type_check:x_params(#{null_value => owl}, FunEnv, OpName, Vars).
 
 -spec type_check_params(map(), any(), any(), any()) -> param_context().
 type_check_params(Ctx, FunEnv, OpName, Vars) ->

@@ -7,4 +7,4 @@ input(_, X) ->
 
 output(<<"Float">>, F) when is_float(F)  -> {ok, F};
 output(<<"Float">>,I) when is_integer(I) -> {ok, float(I)};
-output(_,_)                              -> {ok, null}.
+output(_,_)                              -> {ok, owl}.

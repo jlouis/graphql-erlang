@@ -43,10 +43,7 @@ init_per_testcase(x, Config) ->
     dbg:p(all, c),
     dbg:tpl(graphql_execute, does_fragment_type_apply, '_', cx),
     Config;
-init_per_testcase(direct_input, Config) ->
-    Config;
-init_per_testcase(_Case, Config) ->
-    {skip, remove_noise}.
+init_per_testcase(_Case, Config) -> Config.
 
 end_per_testcase(x, _Config) ->
     dbg:stop_clear(),
@@ -502,21 +499,20 @@ complex_modifiers(Config) ->
           <<"shellScripting">> => 17,
           <<"yell">> => <<"I'M NOT READY!">> } ]},
     #{ data :=
-                      #{<<"introduceMonster">> := #{
-                          <<"monster">> := #{
-                            <<"id">> := MonsterID } } } } =
-             run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
+           #{<<"introduceMonster">> := #{
+                 <<"monster">> := #{
+                     <<"id">> := MonsterID } } }
+     } = run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
 
     %% Standard Query
     #{ data :=
         #{ <<"monster">> := #{
             <<"stats">> := [
                 owl,
-                #{
-                  <<"attack">> := 7,
-                  <<"shellScripting">> := 17,
-                  <<"yell">> := <<"I'M NOT READY!">> } ]  }}} =
-            run(Config, <<"MonsterStatsZero">>, #{ <<"id">> => MonsterID }),
+                #{ <<"attack">> := 7,
+                   <<"shellScripting">> := 17,
+                   <<"yell">> := <<"I'M NOT READY!">> } ]  }}
+     } = run(Config, <<"MonsterStatsZero">>, #{ <<"id">> => MonsterID }),
     %% When the list is non-null, but there are the possibility of a null-value in the list
     %% and the list is correctly being rendered, then render the list as we expect.
     #{ data :=
@@ -567,16 +563,16 @@ non_null_field(Config) ->
         <<"shellScripting">> => 5,
         <<"yell">> => <<"...">> }]},
     #{ data :=
-                      #{<<"introduceMonster">> := #{<<"clientMutationId">> := <<"123">>,
-                                                    <<"monster">> :=
-                                                        #{ <<"color">> := <<"#B7411E">>,
-                                                           <<"hitpoints">> := 7001,
-                                                           <<"mood">> := <<"TRANQUIL">>,
-                                                           <<"name">> := <<"Brown Slime">>,
-                                                           <<"id">> := _,
-                                                           <<"plushFactor">> := PF,
-                                                           <<"stats">> := [owl] }}}} =
-             run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
+           #{<<"introduceMonster">> := #{<<"clientMutationId">> := <<"123">>,
+                                         <<"monster">> :=
+                                             #{ <<"color">> := <<"#B7411E">>,
+                                                <<"hitpoints">> := 7001,
+                                                <<"mood">> := <<"TRANQUIL">>,
+                                                <<"name">> := <<"Brown Slime">>,
+                                                <<"id">> := _,
+                                                <<"plushFactor">> := PF,
+                                                <<"stats">> := [owl] }}}
+     } = run(Config, <<"IntroduceMonsterFat">>, #{ <<"input">> => Input}),
     true = (PF - 1.0) < 0.00001,
     ok.
 
@@ -639,14 +635,14 @@ multiple_monsters_and_rooms(Config) ->
          <<"rooms">> := [#{<<"id">> := Room1}]}
      } = run(Config, <<"MultipleRooms">>, #{ <<"ids">> => [Room1]}),
     % look for an existing room and a non existing room
+    Result = run(Config, <<"MultipleRooms">>, #{ <<"ids">> => [Room1, NonExistentRoom]}),
     #{ data := #{ <<"rooms">> := owl },
        errors :=
            [#{path := [<<"MultipleRooms">>, <<"rooms">>, 1],
               key := null_value },
             #{path := [<<"MultipleRooms">>, <<"rooms">>, 1],
               key := not_found } ]
-     } = run(Config, <<"MultipleRooms">>,
-             #{ <<"ids">> => [Room1, NonExistentRoom]}),
+     } = Result,
     ok.
 
 inline_fragment(Config) ->

@@ -35,7 +35,7 @@ inject() ->
                    resolve => fun(Ctx, _Cur, Args) -> get_droid(Ctx, Args) end }
                 } } },
     ok = graphql:insert_schema_definition(Query),
-    
+
     Root = {root, #{
               query => 'Query',
               interaces => []
@@ -133,8 +133,8 @@ init_starwars() ->
     ok.
 
 %% Execution
-execute(_Ctx, null, _, _) ->
-    {ok, null};
+execute(Ctx, owl, _, _) ->
+    {ok, owl};
 execute(_Ctx, Obj, FieldName, _Args) ->
     case maps:get(FieldName, Obj, not_found) of
         {'$lazy', F} when is_function(F, 0) -> F();
@@ -142,7 +142,7 @@ execute(_Ctx, Obj, FieldName, _Args) ->
         Values when is_list(Values) -> {ok, [ {ok, R} || R <- Values ]};
         Value -> {ok, Value}
     end.
-    
+
 %% DATA
 is_human(ID) ->
     {Humans, _} = star_wars(),
@@ -151,7 +151,7 @@ is_human(ID) ->
 get_character(ID) ->
     {Humans, Droids} = star_wars(),
     case maps:get(ID, maps:merge(Humans, Droids), not_found) of
-        not_found -> {ok, null};
+        not_found -> {ok, owl};
         X -> {ok, X}
     end.
 
@@ -167,69 +167,69 @@ get_hero(_Ctx, _) ->
 
 get_human(_Ctx, #{ <<"id">> := ID }) ->
     {Humans, _} = star_wars(),
-    {ok, maps:get(ID, Humans, null)}.
+    {ok, maps:get(ID, Humans, owl)}.
 
 get_droid(_Ctx, #{ <<"id">> := ID }) ->
     {_, Droids} = star_wars(),
-    {ok, maps:get(ID, Droids, null)}.
+    {ok, maps:get(ID, Droids, owl)}.
 
 star_wars() ->
     Luke = #{
-    	id => <<"1000">>,
-    	name => <<"Luke Skywalker">>,
-    	friends => [<<"1002">>,<< "1003">>, <<"2000">>, <<"2001">> ],
-    	appearsIn => resolve_module([ 4, 5, 6 ]),
-    	homePlanet => <<"Tatooine">> },
+        id => <<"1000">>,
+        name => <<"Luke Skywalker">>,
+        friends => [<<"1002">>,<< "1003">>, <<"2000">>, <<"2001">> ],
+        appearsIn => resolve_module([ 4, 5, 6 ]),
+        homePlanet => <<"Tatooine">> },
     Vader = #{
-    	id => <<"1001">>,
-    	name => <<"Darth Vader">>,
-    	friends => [<<"1004">>],
-    	appearsIn => resolve_module([ 4, 5, 6 ]),
-    	homePlanet => <<"Tatooine">> },
+        id => <<"1001">>,
+        name => <<"Darth Vader">>,
+        friends => [<<"1004">>],
+        appearsIn => resolve_module([ 4, 5, 6 ]),
+        homePlanet => <<"Tatooine">> },
     Han = #{
-    	id => <<"1002">>,
-    	name => <<"Han Solo">>,
-    	friends => [<<"1000">>, <<"1003">>, <<"2001">>],
-    	appearsIn => resolve_module([ 4, 5, 6])},
+        id => <<"1002">>,
+        name => <<"Han Solo">>,
+        friends => [<<"1000">>, <<"1003">>, <<"2001">>],
+        appearsIn => resolve_module([ 4, 5, 6])},
     Leia = #{
-    	id => <<"1003">>,
-    	name => <<"Leia Organa">>,
-    	friends => [<<"1000">>, <<"1002">>, <<"2000">>, <<"2001">> ],
-    	appearsIn => resolve_module([ 4, 5, 6]),
-    	homePlanet => <<"Alderaan">> },
+        id => <<"1003">>,
+        name => <<"Leia Organa">>,
+        friends => [<<"1000">>, <<"1002">>, <<"2000">>, <<"2001">> ],
+        appearsIn => resolve_module([ 4, 5, 6]),
+        homePlanet => <<"Alderaan">> },
     Tarkin = #{
-    	id => <<"1004">>,
-    	name => <<"Wilhuff Tarkin">>,
-    	friends => [ <<"1001">> ],
-    	appearsIn => resolve_module([ 4 ]) },
+        id => <<"1004">>,
+        name => <<"Wilhuff Tarkin">>,
+        friends => [ <<"1001">> ],
+        appearsIn => resolve_module([ 4 ]) },
 
     HumanData = #{
-    	<<"1000">> => c(Luke),
-    	<<"1001">> => c(Vader),
-    	<<"1002">> => c(Han),
-    	<<"1003">> => c(Leia),
-    	<<"1004">> => c(Tarkin)
+        <<"1000">> => c(Luke),
+        <<"1001">> => c(Vader),
+        <<"1002">> => c(Han),
+        <<"1003">> => c(Leia),
+        <<"1004">> => c(Tarkin)
     },
 
     Threepio = #{
-    	id => <<"2000">>,
-    	name => <<"C-3PO">>,
-    	friends => [ <<"1000">>, <<"1002">>, <<"1003">>, <<"2001">> ],
-    	appearsIn => resolve_module([ 4, 5, 6 ]),
-    	primaryFunction => <<"Protocol">>
+        id => <<"2000">>,
+        name => <<"C-3PO">>,
+        friends => [ <<"1000">>, <<"1002">>, <<"1003">>, <<"2001">> ],
+        appearsIn => resolve_module([ 4, 5, 6 ]),
+        primaryFunction => <<"Protocol">>
     },
 
     Artoo = #{
-    	id => <<"2001">>,
-    	name => <<"R2-D2">>,
-    	friends => [ <<"1000">>, <<"1002">>, <<"1003">> ],
-    	appearsIn => resolve_module([ 4, 5, 6 ]),
-    	primaryFunction => <<"AstroMech">>
+        id => <<"2001">>,
+        name => <<"R2-D2">>,
+        friends => [ <<"1000">>, <<"1002">>, <<"1003">> ],
+        appearsIn => resolve_module([ 4, 5, 6 ]),
+        primaryFunction => <<"AstroMech">>
     },
 
     DroidData = #{
-    	<<"2000">> => c(Threepio),
-    	<<"2001">> => c(Artoo)
+        <<"2000">> => c(Threepio),
+        <<"2001">> => c(Artoo)
     },
 
     {HumanData, DroidData}.
@@ -237,26 +237,26 @@ star_wars() ->
 c(M) ->
     Unpacked = maps:to_list(M),
     maps:from_list(
-    	[{atom_to_binary(K, utf8), V} || {K, V} <- Unpacked]).
+        [{atom_to_binary(K, utf8), V} || {K, V} <- Unpacked]).
 
 resolve_arg(X) ->
     case X of
-	<<"NEWHOPE">> ->
- 	    4;
- 	<<"EMPIRE">> ->
- 	    5;
- 	<<"JEDI">> ->
- 	    6;
- 	'_' ->
- 	    {error, {invalid_episode_string, X}};
-	4 ->
-  	    <<"NEWHOPE">>;
- 	5 ->
-  	    <<"EMPIRE">>;
-  	6 ->
-  	    <<"JEDI">>;
-  	_ ->
-  	    {error, {invalid_episode_int, X}}
+    <<"NEWHOPE">> ->
+        4;
+    <<"EMPIRE">> ->
+        5;
+    <<"JEDI">> ->
+        6;
+    '_' ->
+        {error, {invalid_episode_string, X}};
+    4 ->
+        <<"NEWHOPE">>;
+    5 ->
+        <<"EMPIRE">>;
+    6 ->
+        <<"JEDI">>;
+    _ ->
+        {error, {invalid_episode_int, X}}
      end.
 
 map(F, [H|T]) -> [F(H)|map(F, T)];
