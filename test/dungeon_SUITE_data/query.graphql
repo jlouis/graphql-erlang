@@ -353,6 +353,33 @@ mutation IntroduceMonsterFatExpr {
     }
 }
 
+mutation IntroduceMonsterNestedVar($mood : Mood!) {
+  introduceMonster(input:
+    { clientMutationId: "123",
+      name: "Giant Spider",
+      color: "#888888",
+      hitpoints: 100,
+      mood: $mood,
+      properties: [BEAST],
+      stats: [{
+        attack: 12,
+        shellScripting: 0,
+        yell: "I LOVE WEAVING!"
+      }]
+    }) {
+      clientMutationId,
+      monster {
+        ...FatMonsterFragment
+        plushFactor
+        stats {
+          attack
+          shellScripting
+          yell
+        }
+      }
+    }
+}
+
 mutation IntroduceRoom($input: IntroduceRoomInput!) {
   introduceRoom(input: $input) {
     clientMutationId
