@@ -392,6 +392,7 @@ populate(Config) ->
                          <<"name">> => <<"orc">> }
                       }}},
     ExpectedSM = run(Config, <<"SpawnMinion">>, #{ <<"input">> => SpawnInput }),
+
     ok.
 
 direct_input(Config) ->
