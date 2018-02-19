@@ -14,6 +14,10 @@ the compatibility issues you are likely to encounter.
 - You can now annotate enum values with descriptions
 
 ### Fixed
+- Fix a case where you have a nested variable expansion. These went
+  through to the execution and then they came out un-expanded. The fix
+  correctly traverses deep into parameter checking and properly
+  expands the variables as needed.
 - Heed Oct2016 spec section 3.1.7 w.r.t input coercion of scalar
   values. Suppose we have a `DOG` of type `Pet`. Then, coercion of a
   value `DOG` into a context `[Pet]` is now regarded as having
