@@ -173,7 +173,8 @@ check_param(Path, VarEnv, SType, {var, ID}) ->
         #vardef { ty = DType } ->
             case type_embed(DType, SType) of
                 yes ->
-                    {var, ID, DType};
+                    %% Use the schema type here
+                    {var, ID, SType};
                 no ->
                     err(Path, {type_mismatch,
                                #{ document => {var, Var, DType},

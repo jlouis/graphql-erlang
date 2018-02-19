@@ -393,6 +393,26 @@ populate(Config) ->
                       }}},
     ExpectedSM = run(Config, <<"SpawnMinion">>, #{ <<"input">> => SpawnInput }),
 
+    NestedInput = #{ <<"mood">> => <<"AGGRESSIVE">> },
+    ExpectedNestedInput =
+        #{data =>
+              #{<<"introduceMonster">> =>
+                    #{<<"clientMutationId">> => <<"123">>,
+                      <<"monster">> =>
+                          #{<<"color">> => <<"#888888">>,
+                            <<"hitpoints">> => 100,
+                            <<"id">> => <<"bW9uc3RlcjoxMDA3">>,
+                            <<"mood">> => <<"AGGRESSIVE">>,
+                            <<"name">> => <<"Giant Spider">>,
+                            <<"plushFactor">> => 0.01,
+                            <<"properties">> => [<<"BEAST">>],
+                            <<"stats">> =>
+                                [#{<<"attack">> => 12,
+                                   <<"shellScripting">> => 0,
+                                   <<"yell">> =>
+                                       <<"I LOVE WEAVING!">>}]}}}},
+
+    ExpectedNestedInput = run(Config, <<"IntroduceMonsterNestedVar">>, NestedInput),
     ok.
 
 direct_input(Config) ->
@@ -682,19 +702,18 @@ fragment_over_union_interface(Config) ->
 
 find_monster(Config) ->
     Expected1 =
-        #{ data =>
-               #{<<"findMonsters">> =>
-                     [#{<<"name">> => <<"goblin">>},
-                      #{<<"name">> => <<"Auxiliary Undead">>},
-                      #{<<"name">> => <<"goblin">>},
-                      #{<<"name">> => <<"goblin">>},
-                      #{<<"name">> => <<"hobgoblin">>},
-                      #{<<"name">> => <<"Yellow Slime">>},
-                      #{<<"name">> => <<"goblin">>},
-                      #{<<"name">> => <<"goblin">>}]}},
-    Expected1 = run(Config, <<"FindQuery">>, #{}),
-    Expected1 = run(Config, <<"FindQueryParam">>,
-                    #{ <<"m">> => [<<"DODGY">>]}),
+        lists:sort([#{<<"name">> => <<"goblin">>},
+                    #{<<"name">> => <<"Auxiliary Undead">>},
+                    #{<<"name">> => <<"goblin">>},
+                    #{<<"name">> => <<"goblin">>},
+                    #{<<"name">> => <<"hobgoblin">>},
+                    #{<<"name">> => <<"Yellow Slime">>},
+                    #{<<"name">> => <<"goblin">>},
+                    #{<<"name">> => <<"goblin">>}]),
+    #{ data := #{<<"findMonsters">> := Out1 }} = run(Config, <<"FindQuery">>, #{}),
+    Expected1 = lists:sort(Out1),
+    #{ data := #{<<"findMonsters">> := Out2 }} = run(Config, <<"FindQueryParam">>, #{ <<"m">> => [<<"DODGY">>]}),
+    Expected1 = lists:sort(Out2),
     ok.
 
 defer(Config) ->
@@ -743,19 +762,19 @@ defer(Config) ->
 
 find_monster_singleton(Config) ->
     Expected1 =
-        #{ data =>
-               #{<<"findMonsters">> =>
-                     [#{<<"name">> => <<"goblin">>},
-                      #{<<"name">> => <<"Auxiliary Undead">>},
-                      #{<<"name">> => <<"goblin">>},
-                      #{<<"name">> => <<"goblin">>},
-                      #{<<"name">> => <<"hobgoblin">>},
-                      #{<<"name">> => <<"Yellow Slime">>},
-                      #{<<"name">> => <<"goblin">>},
-                      #{<<"name">> => <<"goblin">>}]}},
-    Expected1 = run(Config, <<"FindQuerySingleton">>, #{}),
-    Expected1 = run(Config, <<"FindQueryParamSingleton">>,
-                    #{ <<"m">> => <<"DODGY">>}),
+        lists:sort(
+          [#{<<"name">> => <<"goblin">>},
+           #{<<"name">> => <<"Auxiliary Undead">>},
+           #{<<"name">> => <<"goblin">>},
+           #{<<"name">> => <<"goblin">>},
+           #{<<"name">> => <<"hobgoblin">>},
+           #{<<"name">> => <<"Yellow Slime">>},
+           #{<<"name">> => <<"goblin">>},
+           #{<<"name">> => <<"goblin">>}]),
+    #{ data := #{ <<"findMonsters">> := Out1 }} = run(Config, <<"FindQuerySingleton">>, #{}),
+    Expected1 = lists:sort(Out1),
+    #{ data := #{ <<"findMonsters">> := Out2 }} = run(Config, <<"FindQueryParamSingleton">>, #{ <<"m">> => <<"DODGY">>}),
+    Expected1 = lists:sort(Out2),
     ok.
 
 simple_field_merge(Config) ->
