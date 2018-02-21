@@ -445,27 +445,43 @@ resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectTy
         is_function(Fun, 4) -> Fun(CtxAnnot, Value, Name, Args);
         is_function(Fun, 3) -> Fun(CtxAnnot, Value, Args)
     end) of
-        {error, Reason} -> {error, {resolver_error, Reason}};
-        {ok, Result} -> {ok, Result};
-        {ok, Result, AuxiliaryDataList} when is_list(AuxiliaryDataList) ->
-            self() ! {'$auxiliary_data', AuxiliaryDataList},
-            {ok, Result};
-        {defer, Token} ->
-            {defer, Token, undefined};
-        {defer, Token, DeferStateMap} ->
-            {defer, Token, DeferStateMap};
-        Wrong ->
-            error_logger:error_msg(
-              "Resolver returned wrong value: ~p(..) -> ~p",
-              [Fun, Wrong]),
-            {error, {wrong_resolver_return, {graphql_schema:id(ObjectType), Name}}}
+        V -> 
+            case handle_resolver_result(V) of
+                wrong ->
+                    error_logger:error_msg("Resolver returned wrong value: ~p(..) -> ~p", [Fun, V]),
+                    {error, {wrong_resolver_return, {graphql_schema:id(ObjectType), Name}}};
+                Res -> Res
+            end
     catch
+        throw:{'$graphql_throw', Msg} ->
+            case handle_resolver_result(Msg) of
+                wrong ->
+                    error_logger:error_msg(
+                      "Resolver returned wrong value: ~p(..) -> ~p",
+                      [Fun, Msg]),
+                    {error, {wrong_resolver_return, {graphql_schema:id(ObjectType), Name}}};
+                Res -> Res
+            end;
         Cl:Err ->
             error_logger:error_msg(
               "Resolver function error: ~p stacktrace: ~p~n",
               [{Cl,Err}, erlang:get_stacktrace()]),
             {error, {resolver_crash, {graphql_schema:id(ObjectType), Name}}}
     end.
+
+
+handle_resolver_result({error, Reason}) ->
+    {error, {resolver_error, Reason}};
+handle_resolver_result({ok, Result}) ->
+    {ok, Result};
+handle_resolver_result({ok, Result, AuxiliaryDataList}) when is_list(AuxiliaryDataList) ->
+    self() ! {'$auxiliary_data', AuxiliaryDataList},
+    {ok, Result};
+handle_resolver_result({defer, Token}) ->
+    {defer, Token, undefined};
+handle_resolver_result({defer, Token, DeferStateMap}) ->
+    {defer, Token, DeferStateMap};
+handle_resolver_result(_Unknown) -> wrong.
 
 complete_value(Path, Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
     error_logger:warning_msg(
