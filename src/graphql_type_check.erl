@@ -364,22 +364,25 @@ field(Ctx, Path, Scope, #frag { id = '...',
                                 schema = InnerScope,
                                 selection_set = SSet,
                                 directives = Ds} = InlineFrag) ->
-    ok = fragment_embed(['...' | Path], InnerScope, Scope),
+    ok = fragment_embed([<<"...">> | Path], InnerScope, Scope),
     InlineFrag#frag {
-        directives = directives(Ctx, [InlineFrag | Path], Ds),
+        directives = directives(Ctx, [<<"...">> | Path], Ds),
         selection_set = sset(Ctx, [InlineFrag | Path], InnerScope, SSet)
     };
-field(Ctx, Path, _Scope, #field { schema = {introspection, typename}, directives = Ds } = F) ->
-    F#field { directives = directives(Ctx, [F | Path], Ds)};
+field(Ctx, Path, _Scope, #field { id = ID, schema = {introspection, typename}, directives = Ds } = F) ->
+    Component = graphql_ast:name(ID),
+    F#field { directives = directives(Ctx, [Component | Path], Ds)};
 field(Ctx, Path, _Scope,
       #field {
+         id = ID,
          args = Args,
          selection_set = SSet,
          directives = Ds,
          schema = #schema_field { args = SArgs, ty = InnerScope }} = F) ->
-    F#field { args = args(Ctx, [F | Path], Args, SArgs),
-              directives = directives(Ctx, [F | Path], Ds),
-              selection_set = sset(Ctx, [F | Path], InnerScope, SSet) }.
+    Component = graphql_ast:name(ID),
+    F#field { args = args(Ctx, [Component | Path], Args, SArgs),
+              directives = directives(Ctx, [Component | Path], Ds),
+              selection_set = sset(Ctx, [Component | Path], InnerScope, SSet) }.
 
 %% -- DIRECTIVES --------------------------------
 
@@ -389,9 +392,9 @@ directives(Ctx, Path, Ds) ->
     [directive(Ctx, Path, D) || D <- Ds].
 
 directive(Ctx, Path,
-          #directive { args = Args,
+          #directive { id = ID, args = Args,
                        schema = #directive_type { args = SArgs }} = D) ->
-    D#directive { args = args(Ctx, [D | Path], Args, SArgs) }.
+    D#directive { args = args(Ctx, [graphql_ast:name(ID) | Path], Args, SArgs) }.
 
 %% -- ARGS -------------------------------------
 
