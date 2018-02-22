@@ -11,6 +11,11 @@
          execute/1, execute/2
         ]).
 
+%% Early exit
+-export([
+         throw/1
+        ]).
+
 %% Deferred execution
 -export([
          token/1, reply_cast/2
@@ -40,6 +45,12 @@
 -export_type([schema_field/0]).
 
 -define(DEFAULT_TIMEOUT, 750).
+
+%% EARLY EXIT
+%% -----------------------------------------------------------------------------------
+throw(Msg) ->
+    erlang:throw({'$graphql_throw', Msg}).
+
 
 %% TOKENS
 %% -----------------------------------------------------------------------------------

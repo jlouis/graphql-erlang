@@ -8,6 +8,6 @@ execute(_Ctx, #room { id = ID,
                       contents = Contents }, F, _A) ->
     case F of
         <<"id">> -> dungeon:wrap({room, ID});
-        <<"description">> -> {ok, Desc};
+        <<"description">> -> graphql:throw({ok, Desc});
         <<"contents">> -> {ok, [dungeon:load(OID) || OID <- Contents]}
     end.

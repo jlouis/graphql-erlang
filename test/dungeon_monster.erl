@@ -18,7 +18,7 @@ execute(Ctx, #monster { id = ID,
                          properties = Properties,
                          color = Color}, Field, Args) ->
     case Field of
-        <<"id">> -> dungeon:wrap({monster, ID});
+        <<"id">> -> graphql:throw(dungeon:wrap({monster, ID}));
         <<"name">> ->
             NameToken = graphql:token(Ctx),
             spawn_link(fun() ->

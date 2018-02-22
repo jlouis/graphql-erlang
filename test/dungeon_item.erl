@@ -12,7 +12,7 @@ execute(_Ctx, #item { id = ID,
         <<"name">> -> {ok, Name};
         <<"description">> -> {ok, Description};
         <<"weight">> ->
-            {ok, weight(Item)};
+            graphql:throw({ok, weight(Item)});
         <<"weightSum">> -> {ok, weight_sum(Item)};
         <<"contents">> ->
             {ok, [dungeon:load(OID) || OID <- Contents]}

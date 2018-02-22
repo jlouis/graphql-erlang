@@ -12,6 +12,10 @@ the compatibility issues you are likely to encounter.
 
 ### Added
 - You can now annotate enum values with descriptions
+- You can now use `graphql:throw(Result)` to exit early inside
+  resolver functions. The intended use is to be able to provide better
+  error messages in the GraphQL engine when things doesn't work as
+  expected.
 
 ### Fixed
 - Fix a case where you have a nested variable expansion. These went
