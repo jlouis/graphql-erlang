@@ -3,7 +3,8 @@
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
--export([mk/3]).
+-export([format_errors/2]).
+-export([mk/3, mk/4]).
 -export([abort/2, abort/3]).
 -export([path/1]).
 -export([format_ty/1]).
@@ -16,16 +17,32 @@ abort(Path, Phase, Msg) ->
    Err = mk(Path, Phase, Msg),
    throw({error, Err}).
 
-mk(Path, Phase, Msg) ->
+mk(Path, Phase, Term) ->
     #{ path => path(lists:reverse(Path)),
-       key => err_key(Phase, Msg),
-       message => iolist_to_binary(err_msg({Phase, Msg}))
+       phase => Phase,
+       error_term => Term
      }.
+    
+mk(Path, Phase, Term, Stack) ->
+    X = mk(Path, Phase, Term),
+    X#{ stack_trace => Stack }.
+
+%% ERROR FORMATTING
+%% ----------------------------------------------------------------------------
+format_errors([], _Mod) -> [];
+format_errors([E|Es], Mod) ->
+    Res = case E of
+              #{ path := Path, phase := Phase, error_term := Term } ->
+                  #{ path => Path,
+                     key => err_key(Phase, Term),
+                     message => iolist_to_binary(err_msg({Phase, Term})) }
+          end,
+    [Res|format_errors(Es, Mod)].
 
 %% -- Error handling dispatch to the module responsible for the error
 err_msg({elaborate, Reason})     -> graphql_elaborate:err_msg(Reason);
-err_msg({execute, Reason})       -> graphql_execute:err_msg(Reason);
-err_msg({type_check, Reason})    -> graphql_type_check:err_msg(Reason);
+err_msg({execute, Reason})       -> execute_err_msg(Reason);
+err_msg({type_check, Reason})    -> type_check_err_msg(Reason);
 err_msg({validate, Reason})      -> graphql_validate:err_msg(Reason);
 err_msg({uncategorized, Reason}) ->
     io_lib:format("General uncategorized error: ~p", [Reason]).
@@ -118,3 +135,111 @@ join(Sep, [H|T]) -> [H|join_prepend(Sep, T)].
 
 join_prepend(_Sep, []) -> [];
 join_prepend(Sep, [H|T]) -> [Sep,H|join_prepend(Sep,T)].
+
+execute_err_msg(null_value) ->
+    ["The schema specifies the field is non-null, "
+     "but a null value was returned by the backend"];
+execute_err_msg(not_a_list) ->
+    ["The schema specifies the field is a list, "
+     "but a non-list value was returned by the backend"];
+execute_err_msg({invalid_enum_output, ID, Result}) ->
+    io_lib:format("The result ~p is not a valid enum value for type ~ts",
+                  [Result, ID]);
+execute_err_msg({output_coerce, ID, _Value, Reason}) ->
+    io_lib:format("Output coercion failed for type ~s with reason ~p",
+                  [ID, Reason]);
+execute_err_msg({operation_not_found, OpName}) ->
+    ["The operation ", OpName, " was not found in the query document"];
+execute_err_msg({type_resolver_error, Err}) ->
+    io_lib:format("Couldn't type-resolve: ~p", [Err]);
+execute_err_msg({resolver_error, Err}) ->
+    io_lib:format("Couldn't resolve: ~p", [Err]);
+execute_err_msg({output_coerce_abort, _ID, _Value, _}) ->
+    ["Internal Server error: output coercer function crashed"];
+execute_err_msg(list_resolution) ->
+    ["Internal Server error: A list is being incorrectly resolved"];
+execute_err_msg(Otherwise) ->
+    io_lib:format("Error in execution: ~p", [Otherwise]).
+
+type_check_err_msg(unnamed_operation_params) ->
+    ["Cannot supply parameter lists to unnamed (anonymous) queries"];
+type_check_err_msg({operation_not_found, Op}) ->
+    io_lib:format("Expected an operation ~p but no such operation was found", [Op]);
+type_check_err_msg(missing_non_null_param) ->
+    ["The parameter is non-null, but was undefined in parameter list"];
+type_check_err_msg(non_null) ->
+    ["The value is null in a non-null context"];
+type_check_err_msg({enum_not_found, Ty, Val}) ->
+    X = io_lib:format("The value ~p is not a valid enum value for type ", [Val]),
+    [X, graphql_err:format_ty(Ty)];
+type_check_err_msg({param_mismatch, {enum, Ty, OtherTy}}) ->
+    ["The enum value is of type ", graphql_err:format_ty(OtherTy),
+     " but used in a context where an enum value"
+     " of type ", graphql_err:format_ty(Ty), " was expected"];
+type_check_err_msg({param_mismatch, Ty, V}) ->
+    io_lib:format("The parameter value ~p is not of type ~p", [V, graphql_err:format_ty(Ty)]);
+type_check_err_msg({not_input_type, Ty, _}) ->
+    ["The type ", graphql_err:format_ty(Ty), " is a valid input type"];
+type_check_err_msg({excess_fields_in_object, Fields}) ->
+    io_lib:format("The object contains unknown fields and values: ~p", [Fields]);
+type_check_err_msg({excess_args, Args}) ->
+    io_lib:format("The argument list contains unknown arguments ~p", [Args]);
+type_check_err_msg({type_mismatch, #{ id := ID, document := Doc, schema := Sch }}) ->
+    ["Type mismatch on (", ID, "). The query document has a value/variable of type (",
+      graphql_err:format_ty(Doc), ") but the schema expects type (", graphql_err:format_ty(Sch), ")"];
+type_check_err_msg({type_mismatch, #{ schema := Sch }}) ->
+    ["Type mismatch, expected (", graphql_err:format_ty(Sch), ")"];
+type_check_err_msg({input_coercion, Type, Value, Reason}) ->
+    io_lib:format("Input coercion failed for type ~s with value ~p. The reason it failed is: ~p", [Type, Value, Reason]);
+type_check_err_msg({input_coerce_abort, _}) ->
+    ["Input coercer failed due to an internal server error"];
+type_check_err_msg(unknown_fragment) ->
+    ["The referenced fragment name is not present in the query document"];
+type_check_err_msg({param_not_unique, Var}) ->
+    ["The variable ", Var, " occurs more than once in the operation header"];
+type_check_err_msg({input_object_not_unique, Var}) ->
+    ["The input object has a key ", Var, " which occur more than once"];
+type_check_err_msg({not_unique, X}) ->
+    ["The name ", X, " occurs more than once"];
+type_check_err_msg({unbound_variable, Var}) ->
+    ["The document refers to a variable ", Var,
+     " but no such var exists. Perhaps the variable is a typo?"];
+type_check_err_msg(enum_string_literal) ->
+    ["Enums must not be given as string literals in query documents"];
+type_check_err_msg({unknown_enum, E}) ->
+    ["The enum name ", E, " is not present in the schema"];
+type_check_err_msg({invalid_scalar_value, V}) ->
+    io_lib:format("The value ~p is not a valid scalar value", [V]);
+type_check_err_msg(non_coercible_default) ->
+    ["The default value could not be correctly coerced"];
+type_check_err_msg({invalid_value_type_coercion, Ty, Val}) ->
+    io_lib:format(
+      "The value ~p cannot be coerced into the type ~p",
+      [Val, Ty]);
+type_check_err_msg({not_union_member, SpreadTy, UnionTy}) ->
+    io_lib:format(
+      "The spread type ~ts is not a member of the union ~ts",
+      [SpreadTy, UnionTy]);
+type_check_err_msg({not_interface_embedder, SpreadTy, ScopeTy}) ->
+    io_lib:format(
+      "The spread type ~ts is an interface. "
+      "Yet the scope type ~ts does not impelement this interface.",
+      [SpreadTy, ScopeTy]);
+type_check_err_msg({not_union_embedder, SpreadTy, ScopeTy}) ->
+    io_lib:format(
+      "The spread type ~ts is an union. "
+      "Yet the scope type ~ts is not a member of this union.",
+      [SpreadTy, ScopeTy]);
+type_check_err_msg({not_interface_member, SpreadTy, InterfaceTy}) ->
+    io_lib:format(
+      "The spread type ~ts is not implementing the interface ~ts",
+      [SpreadTy, InterfaceTy]);
+type_check_err_msg({no_common_object, SpreadTy, ScopeTy}) ->
+    io_lib:format(
+      "The spread type ~ts and the scope type ~ts has no objects in common",
+      [SpreadTy, ScopeTy]);
+type_check_err_msg({fragment_spread, SpreadTy, ScopeTy}) ->
+    io_lib:format(
+      "The spread type ~ts does not match the scope type ~ts",
+      [SpreadTy, ScopeTy]).
+

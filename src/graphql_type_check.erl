@@ -42,8 +42,6 @@
 -include("graphql_schema.hrl").
 
 -export([x/1, x_params/3]).
--export([err_msg/1]).
-
 %% -- TOP LEVEL TYPE CHECK CODE -------------------------------
 
 %% Type checking proceeds by the ordinary way of writing a type
@@ -692,91 +690,6 @@ coerce_input_object(_Path, Value) -> Value.
 -spec err([term()], term()) -> no_return().
 err(Path, Msg) ->
     graphql_err:abort(Path, type_check, Msg).
-
-err_msg(unnamed_operation_params) ->
-    ["Cannot supply parameter lists to unnamed (anonymous) queries"];
-err_msg({operation_not_found, Op}) ->
-    io_lib:format("Expected an operation ~p but no such operation was found", [Op]);
-err_msg(missing_non_null_param) ->
-    ["The parameter is non-null, but was undefined in parameter list"];
-err_msg(non_null) ->
-    ["The value is null in a non-null context"];
-err_msg({enum_not_found, Ty, Val}) ->
-    X = io_lib:format("The value ~p is not a valid enum value for type ", [Val]),
-    [X, graphql_err:format_ty(Ty)];
-err_msg({param_mismatch, {enum, Ty, OtherTy}}) ->
-    ["The enum value is of type ", graphql_err:format_ty(OtherTy),
-     " but used in a context where an enum value"
-     " of type ", graphql_err:format_ty(Ty), " was expected"];
-err_msg({param_mismatch, Ty, V}) ->
-    io_lib:format("The parameter value ~p is not of type ~p", [V, graphql_err:format_ty(Ty)]);
-err_msg({not_input_type, Ty, _}) ->
-    ["The type ", graphql_err:format_ty(Ty), " is a valid input type"];
-err_msg({excess_fields_in_object, Fields}) ->
-    io_lib:format("The object contains unknown fields and values: ~p", [Fields]);
-err_msg({excess_args, Args}) ->
-    io_lib:format("The argument list contains unknown arguments ~p", [Args]);
-err_msg({type_mismatch, #{ id := ID, document := Doc, schema := Sch }}) ->
-    ["Type mismatch on (", ID, "). The query document has a value/variable of type (",
-      graphql_err:format_ty(Doc), ") but the schema expects type (", graphql_err:format_ty(Sch), ")"];
-err_msg({type_mismatch, #{ schema := Sch }}) ->
-    ["Type mismatch, expected (", graphql_err:format_ty(Sch), ")"];
-err_msg({input_coercion, Type, Value, Reason}) ->
-    io_lib:format("Input coercion failed for type ~s with value ~p. The reason it failed is: ~p", [Type, Value, Reason]);
-err_msg({input_coerce_abort, _}) ->
-    ["Input coercer failed due to an internal server error"];
-err_msg(unknown_fragment) ->
-    ["The referenced fragment name is not present in the query document"];
-err_msg({param_not_unique, Var}) ->
-    ["The variable ", Var, " occurs more than once in the operation header"];
-err_msg({input_object_not_unique, Var}) ->
-    ["The input object has a key ", Var, " which occur more than once"];
-err_msg({not_unique, X}) ->
-    ["The name ", X, " occurs more than once"];
-err_msg({unbound_variable, Var}) ->
-    ["The document refers to a variable ", Var,
-     " but no such var exists. Perhaps the variable is a typo?"];
-err_msg(enum_string_literal) ->
-    ["Enums must not be given as string literals in query documents"];
-err_msg({unknown_enum, E}) ->
-    ["The enum name ", E, " is not present in the schema"];
-err_msg({invalid_scalar_value, V}) ->
-    io_lib:format("The value ~p is not a valid scalar value", [V]);
-err_msg(non_coercible_default) ->
-    ["The default value could not be correctly coerced"];
-err_msg({invalid_value_type_coercion, Ty, Val}) ->
-    io_lib:format(
-      "The value ~p cannot be coerced into the type ~p",
-      [Val, Ty]);
-err_msg({not_union_member, SpreadTy, UnionTy}) ->
-    io_lib:format(
-      "The spread type ~ts is not a member of the union ~ts",
-      [SpreadTy, UnionTy]);
-err_msg({not_interface_embedder, SpreadTy, ScopeTy}) ->
-    io_lib:format(
-      "The spread type ~ts is an interface. "
-      "Yet the scope type ~ts does not impelement this interface.",
-      [SpreadTy, ScopeTy]);
-err_msg({not_union_embedder, SpreadTy, ScopeTy}) ->
-    io_lib:format(
-      "The spread type ~ts is an union. "
-      "Yet the scope type ~ts is not a member of this union.",
-      [SpreadTy, ScopeTy]);
-err_msg({not_interface_member, SpreadTy, InterfaceTy}) ->
-    io_lib:format(
-      "The spread type ~ts is not implementing the interface ~ts",
-      [SpreadTy, InterfaceTy]);
-err_msg({no_common_object, SpreadTy, ScopeTy}) ->
-    io_lib:format(
-      "The spread type ~ts and the scope type ~ts has no objects in common",
-      [SpreadTy, ScopeTy]);
-err_msg({fragment_spread, SpreadTy, ScopeTy}) ->
-    io_lib:format(
-      "The spread type ~ts does not match the scope type ~ts",
-      [SpreadTy, ScopeTy]).
-
-
-
 
 %% Tell the error logger that something is off
 error_report(Term, Cl, Err) ->

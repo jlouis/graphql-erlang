@@ -839,11 +839,11 @@ auxiliary_data(Config) ->
 unknown_variable(Config) ->
     ID = ?config(known_goblin_id_1, Config),
     #{ errors :=
-          #{key := {unbound_variable,<<"i">>},
-            path := [<<"document">>,
-                     <<"GoblinQuery">>,
-                     <<"monster">>,
-                     <<"id">>]}} =
+          [#{key := {unbound_variable,<<"i">>},
+             path := [<<"document">>,
+                      <<"GoblinQuery">>,
+                      <<"monster">>,
+                      <<"id">>]}]} =
         run(Config,
             "unknown_variable.graphql",
             <<"TestFieldMerge">>,
@@ -853,11 +853,11 @@ unknown_variable(Config) ->
 missing_fragment(Config) ->
     ID = ?config(known_goblin_id_1, Config),
     #{ errors :=
-          #{key := unknown_fragment,
-            path := [<<"document">>,
-                     <<"GoblinQuery">>,
-                     <<"monster">>,
-                     <<"GoblinFragment">>] }} =
+           [#{key := unknown_fragment,
+              path := [<<"document">>,
+                       <<"GoblinQuery">>,
+                       <<"monster">>,
+                       <<"GoblinFragment">>] }]} =
         run(Config,
             "missing_fragment.graphql",
             <<"GoblinQuery">>,
@@ -888,36 +888,31 @@ invalid_enums(Config) ->
       <<"hitpoints">> => 3,
       <<"mood">> => <<"AGGRESSIF">>
      },
-    #{
-        errors := #{
-            key := {enum_not_found,<<"Mood">>,<<"AGGRESSIF">>},
-            message := <<"The value <<\"AGGRESSIF\">> is not a valid enum value for type Mood">>,
-            path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}} =
-                run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input }),
-    #{
-        errors := #{
-            key := {enum_not_found,<<"Mood">>,<<>>},
-            message := <<"The value <<>> is not a valid enum value for type Mood">>,
-            path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}} =
-                run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input#{ <<"mood">> => <<"">> }}),
-    #{
-        errors := #{
-            key := {enum_not_found,<<"Mood">>,<<>>},
-            message := <<"The value <<>> is not a valid enum value for type Mood">>,
-            path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}} =
-                run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input#{ <<"mood">> => <<>> }}),
-    #{
-        errors := #{
-            key := {enum_not_found,<<"Mood">>,<<"AGGRESSIF">>},
-            message := <<"The value <<\"AGGRESSIF\">> is not a valid enum value for type Mood">>,
-            path := [<<"document">>,<<"IMonster">>,<<"introduceMonster">>, <<"input">>, <<"mood">>]}} =
-                run(Config, "invalid_enum_1.graphql", <<"IMonster">>, #{}),
-    #{
-        errors := #{
-            key := {enum_not_found,<<"Mood">>,<<>>},
-            message := <<"The value <<>> is not a valid enum value for type Mood">>,
-            path := [<<"document">>,<<"IMonster">>,<<"introduceMonster">>, <<"input">>, <<"mood">>]}} =
-                run(Config, "invalid_enum_2.graphql", <<"IMonster">>, #{}),
+    #{errors :=
+          [#{ key := {enum_not_found,<<"Mood">>,<<"AGGRESSIF">>},
+              message := <<"The value <<\"AGGRESSIF\">> is not a valid enum value for type Mood">>,
+              path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}]} =
+        run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input }),
+    #{errors :=
+          [ #{ key := {enum_not_found,<<"Mood">>,<<>>},
+               message := <<"The value <<>> is not a valid enum value for type Mood">>,
+               path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}]} =
+        run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input#{ <<"mood">> => <<"">> }}),
+    #{errors :=
+          [#{key := {enum_not_found,<<"Mood">>,<<>>},
+             message := <<"The value <<>> is not a valid enum value for type Mood">>,
+             path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}]} =
+          run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input#{ <<"mood">> => <<>> }}),
+    #{ errors :=
+           [#{ key := {enum_not_found,<<"Mood">>,<<"AGGRESSIF">>},
+               message := <<"The value <<\"AGGRESSIF\">> is not a valid enum value for type Mood">>,
+               path := [<<"document">>,<<"IMonster">>,<<"introduceMonster">>, <<"input">>, <<"mood">>]}]} =
+        run(Config, "invalid_enum_1.graphql", <<"IMonster">>, #{}),
+    #{ errors :=
+           [#{ key := {enum_not_found,<<"Mood">>,<<>>},
+               message := <<"The value <<>> is not a valid enum value for type Mood">>,
+               path := [<<"document">>,<<"IMonster">>,<<"introduceMonster">>, <<"input">>, <<"mood">>]}]} =
+        run(Config, "invalid_enum_2.graphql", <<"IMonster">>, #{}),
     ok.
 
 input_coerce_error(Config) ->
@@ -928,10 +923,10 @@ input_coerce_error(Config) ->
       <<"hitpoints">> => 3,
       <<"mood">> => <<"AGGRESSIVE">>
      },
-    #{errors := #{key := {input_coercion,<<"Color">>,_,_},
-                  path := [<<"IntroduceMonster">>,
-                           <<"input">>,
-                           <<"color">>]}} =
+    #{errors := [#{key := {input_coercion,<<"Color">>,_,_},
+                   path := [<<"IntroduceMonster">>,
+                            <<"input">>,
+                            <<"color">>]}]} =
         run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input }),
     ok.
 
@@ -943,9 +938,9 @@ input_coerce_error_exception(Config) ->
       <<"hitpoints">> => 3,
       <<"mood">> => <<"AGGRESSIVE">>
      },
-    #{errors := #{key := {input_coerce_abort, _},
-                  path := [<<"IntroduceMonster">>,
-                           <<"input">>,
-                           <<"color">>]}} =
+    #{errors := [#{key := {input_coerce_abort, _},
+                   path := [<<"IntroduceMonster">>,
+                            <<"input">>,
+                            <<"color">>]}]} =
         run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input }),
     ok.

@@ -4,7 +4,6 @@
 -include("graphql_schema.hrl").
 
 -export([x/1, x/2]).
--export([err_msg/1]).
 -export([builtin_input_coercer/1]).
 
 -type source() :: reference().
@@ -63,19 +62,15 @@ execute_request(InitialCtx, {document, Operations}) ->
     end.
 
 complete_top_level(undefined, Errs) when is_list(Errs) ->
-    #{ errors => [complete_error(E) || E <- Errs ] };
+    #{ errors => Errs };
 complete_top_level(Res, []) ->
     Aux = collect_auxiliary_data(),
     Result = #{ data => Res },
     decorate_top_level(Result, aux, Aux);
 complete_top_level(Res, Errs) ->
-    Errors = [complete_error(E) || E <- Errs ],
     Aux = collect_auxiliary_data(),
-    Result = #{ data => Res, errors => Errors },
+    Result = #{ data => Res, errors => Errs },
     decorate_top_level(Result, aux, Aux).
-
-complete_error(#{ path := Path, reason := Reason }) ->
-    graphql_err:mk(Path, execute, Reason).
 
 decorate_top_level(Map, _, []) -> Map; % noop
 decorate_top_level(Map, aux, AuxiliaryDataList) ->
@@ -629,7 +624,15 @@ complete_value_list(Path, #{ defer_target := Upstream } = Ctx,
                         {Rest, Work1, Missing} = F(Next),
                         case complete_value([Index|Path], InnerCtx, Ty, Fields, Result) of
                             {ok, V, Errs} ->
-                                { [{ok, V, error_wrap(Errs)} | Rest],
+                                Wrapper =
+                                    fun
+                                        (#{ error_term := Term } = E) ->
+                                            E#{ error_term := {resolver_error, Term}};
+                                        (Otherwise) ->
+                                            error_logger:error_report([{wrong, Otherwise}]),
+                                            Otherwise
+                                    end,
+                                { [{ok, V, lists:map(Wrapper, Errs)} | Rest],
                                   Work1,
                                   Missing };
                             {error, Err} ->
@@ -1050,9 +1053,6 @@ defer_handle_cancel(#defer_state { work = WorkMap,
 
 %% -- ERROR HANDLING --
 
-error_wrap([]) -> [];
-error_wrap([#{ reason := Reason } = E | Next]) ->
-    [E#{ reason => {resolver_error, Reason} } | error_wrap(Next)].
 
 null(Path, Reason) ->
     null(Path, Reason, []).
@@ -1065,31 +1065,5 @@ err(Path, Reason) ->
     err(Path, Reason, []).
 
 err(Path, Reason, More) when is_list(More) ->
-    {error, [#{ path => Path,
-                reason => Reason} | More]}.
-
-err_msg(null_value) ->
-    ["The schema specifies the field is non-null, "
-     "but a null value was returned by the backend"];
-err_msg(not_a_list) ->
-    ["The schema specifies the field is a list, "
-     "but a non-list value was returned by the backend"];
-err_msg({invalid_enum_output, ID, Result}) ->
-    io_lib:format("The result ~p is not a valid enum value for type ~ts",
-                  [Result, ID]);
-err_msg({output_coerce, ID, _Value, Reason}) ->
-    io_lib:format("Output coercion failed for type ~s with reason ~p",
-                  [ID, Reason]);
-err_msg({operation_not_found, OpName}) ->
-    ["The operation ", OpName, " was not found in the query document"];
-err_msg({type_resolver_error, Err}) ->
-    io_lib:format("Couldn't type-resolve: ~p", [Err]);
-err_msg({resolver_error, Err}) ->
-    io_lib:format("Couldn't resolve: ~p", [Err]);
-err_msg({output_coerce_abort, _ID, _Value, _}) ->
-    ["Internal Server error: output coercer function crashed"];
-err_msg(list_resolution) ->
-    ["Internal Server error: A list is being incorrectly resolved"];
-err_msg(Otherwise) ->
-    io_lib:format("Error in execution: ~p", [Otherwise]).
+    {error, [graphql_err:mk(Path, execute, Reason)|More]}.
 

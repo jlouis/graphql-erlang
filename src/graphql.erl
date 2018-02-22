@@ -11,6 +11,10 @@
          execute/1, execute/2
         ]).
 
+-export([
+         format_errors/1
+        ]).
+
 %% Early exit
 -export([
          throw/1
@@ -47,13 +51,13 @@
 -define(DEFAULT_TIMEOUT, 750).
 
 %% EARLY EXIT
-%% -----------------------------------------------------------------------------------
+%% --------------------------------------------------------------------------
 throw(Msg) ->
     erlang:throw({'$graphql_throw', Msg}).
 
 
 %% TOKENS
-%% -----------------------------------------------------------------------------------
+%% --------------------------------------------------------------------------
 token(#{ defer_process := Proc, defer_request_id := ReqId }) ->
     {'$graphql_token', Proc, ReqId, make_ref()}.
 
@@ -64,7 +68,15 @@ reply_cast({'$graphql_token', Target, Id, Ref}, Data) ->
     Target ! {'$graphql_reply', Id, Ref, Data},
     ok.
 
-%% -----------------------------------------------------------------------------------
+%% ERRORS
+%% --------------------------------------------------------------------------
+format_errors(Errs) when is_list(Errs) ->
+    graphql_err:format_errors(Errs, none);
+format_errors(Err) ->
+    graphql_err:format_errors([Err], none).
+
+
+%% --------------------------------------------------------------------------
 -spec parse( binary() | string()) ->
                    {ok, ast()} | {error, {scanner_error | parser_error, term()}}.
 parse(Input) when is_binary(Input) -> parse(binary_to_list(Input));
@@ -121,7 +133,11 @@ execute(AST) ->
 execute(#{default_timeout := _DT } = Ctx, AST) ->
     graphql_execute:x(Ctx, AST);
 execute(Ctx, AST) ->
-    graphql_execute:x(Ctx#{ default_timeout => ?DEFAULT_TIMEOUT}, AST).
+    case graphql_execute:x(Ctx#{ default_timeout => ?DEFAULT_TIMEOUT}, AST) of
+        #{ errors := Errs } = Result ->
+            Result#{ errors := graphql_err:format_errors(Errs, none) };
+        Result -> Result
+    end.
 
 %% @doc insert_schema_definition/1 loads a schema definition into the Graph Schema
 %% @end

@@ -43,7 +43,8 @@ x(Config, Input, OpName, Params) ->
                 track_report(Config, Track6),
                 Res
             catch
-                throw:{error, Error} -> #{ errors => Error }
+                throw:{error, Error} ->
+                    #{ errors => graphql:format_errors(Error) }
             end;
         Err ->
             Err
