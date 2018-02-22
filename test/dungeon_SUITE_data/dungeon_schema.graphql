@@ -60,6 +60,8 @@ type Room implements Node {
   id : ID!
   description : String!
   contents : [Thing]
+  magic : Int
+  leyline : Int
 }
 
 type Item implements Node {

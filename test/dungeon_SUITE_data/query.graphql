@@ -1,5 +1,19 @@
 ## QUERIES
 
+query RoomErrors1($id : ID!) {
+  room(id: $id) {
+    id
+    magic
+  }
+}
+
+query RoomErrors2($id : ID!) {
+  room(id: $id) {
+    id
+    leyline
+  }
+}
+
 query FindQueryParamSingleton($m : Mood) {
   findMonsters(moods: $m) {
     name

@@ -1083,9 +1083,9 @@ err_msg({output_coerce, ID, _Value, Reason}) ->
 err_msg({operation_not_found, OpName}) ->
     ["The operation ", OpName, " was not found in the query document"];
 err_msg({type_resolver_error, Err}) ->
-    io_lib:format("~p", [Err]);
+    io_lib:format("Couldn't type-resolve: ~p", [Err]);
 err_msg({resolver_error, Err}) ->
-    io_lib:format("~p", [Err]);
+    io_lib:format("Couldn't resolve: ~p", [Err]);
 err_msg({output_coerce_abort, _ID, _Value, _}) ->
     ["Internal Server error: output coercer function crashed"];
 err_msg(list_resolution) ->

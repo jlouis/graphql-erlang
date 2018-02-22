@@ -58,6 +58,7 @@ groups() ->
          [ unions
          , defer
          , union_errors
+         , error_handling
          , scalar_output_coercion
          , populate
          , default_query
@@ -649,7 +650,7 @@ multiple_monsters_and_rooms(Config) ->
             #{ <<"id">> := ID1 }, #{ <<"id">> := ID2 } , null ]},
        errors := [
            #{path := [<<"MultipleMonsters">>, <<"monsters">>, 2],
-             message := <<"not_found">> }]
+             message := <<"Couldn't resolve: not_found">> }]
      } = run(Config, <<"MultipleMonsters">>, #{ <<"ids">> => [ID1, ID2, IDMissing] }),
 
     #{ data := #{
@@ -657,9 +658,9 @@ multiple_monsters_and_rooms(Config) ->
             #{ <<"id">> := ID1 }, null, #{ <<"id">> := ID2 }, null ]},
        errors := [
                   #{path := [<<"MultipleMonstersExprMissing">>, <<"monsters">>, 1],
-                    message := <<"not_found">>},
+                    message := <<"Couldn't resolve: not_found">>},
                   #{path := [<<"MultipleMonstersExprMissing">>, <<"monsters">>, 3],
-                    message := <<"not_found">>}]
+                    message := <<"Couldn't resolve: not_found">>}]
      } = run(Config, <<"MultipleMonstersExprMissing">>, #{}),
 
     Room1 = ?config(known_room_id, Config),
@@ -676,6 +677,30 @@ multiple_monsters_and_rooms(Config) ->
               key := not_found } ]
      } = run(Config, <<"MultipleRooms">>,
              #{ <<"ids">> => [Room1, NonExistentRoom]}),
+    ok.
+
+error_handling(Config) ->
+    Room1 = ?config(known_room_id, Config),
+    Expected1 =
+        #{data =>
+              #{<<"room">> =>
+                    #{<<"id">> => <<"cm9vbTox">>,<<"magic">> => null}},
+          errors =>
+              [#{key => resolver_error,
+                 message => <<"Couldn't resolve: unsupported">>,
+                 path => [<<"RoomErrors1">>,<<"room">>,<<"magic">>]}]},
+    Expected1 = run(Config, <<"RoomErrors1">>, #{ <<"id">> => Room1 }),
+
+    Expected2 =
+        #{data =>
+              #{<<"room">> =>
+                    #{<<"id">> => <<"cm9vbTox">>,<<"leyline">> => null}},
+          errors =>
+              [#{key => resolver_crash,
+                 message =>
+                     <<"Error in execution: {resolver_crash,{<<\"Room\">>,<<\"leyline\">>}}">>,
+                 path => [<<"RoomErrors2">>,<<"room">>,<<"leyline">>]}]},
+    Expected2 = run(Config, <<"RoomErrors2">>, #{ <<"id">> => Room1 }),
     ok.
 
 inline_fragment(Config) ->
@@ -850,8 +875,8 @@ invalid_type_resolution(Config) ->
     #{ data := #{ <<"thing">> := null },
        errors :=
            [#{ path := [<<"LookupThing">>, <<"thing">>],
-               key := {type_resolver_error, kraken},
-               message := <<"kraken">> }
+               key := type_resolver_error,
+               message := <<"Couldn't type-resolve: kraken">> }
              ]} = run(Config, <<"LookupThing">>, Input),
     ok.
 

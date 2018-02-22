@@ -9,5 +9,11 @@ execute(_Ctx, #room { id = ID,
     case F of
         <<"id">> -> dungeon:wrap({room, ID});
         <<"description">> -> graphql:throw({ok, Desc});
+        <<"magic">> -> graphql:throw({error, unsupported});
+        <<"leyline">> ->
+            %% Force a crash to test the crash path
+            X = true,
+            X = false,
+            {ok, 1};
         <<"contents">> -> {ok, [dungeon:load(OID) || OID <- Contents]}
     end.
