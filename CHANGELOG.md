@@ -10,6 +10,14 @@ the compatibility issues you are likely to encounter.
 
 ## [Unreleased]
 
+### Changed
+- *IMPORTANT:* We've altered the way errors are propagated in the
+  system and this is a backwards incompatible change. However, since
+  we haven't reached version 1.0 yet, no guarantees are given.
+  
+  To update your system, you have to do the following:
+  
+  TODO
 ### Added
 - You can now annotate enum values with descriptions
 - You can now use `graphql:throw(Result)` to exit early inside
