@@ -8,7 +8,7 @@ Versioning generally follows semantic versioning, but breaks it for
 releases less than 1.0.0 in certain situations. The changelog mentions
 the compatibility issues you are likely to encounter.
 
-## [Unreleased]
+## [0.12.0] 2018-02-23 Flag day release, broke compatibility backwards!
 
 ### Changed
 - *IMPORTANT:* We've altered the way errors are propagated in the
