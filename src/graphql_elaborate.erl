@@ -6,7 +6,6 @@
 -export([x/1]).
 -export([type/1]).
 -export([mk_varenv/1, mk_funenv/1]).
--export([err_msg/1]).
 
 -spec x(graphql:ast()) -> graphql:ast().
 x(Doc) -> document(Doc).
@@ -280,32 +279,4 @@ field_sset(Path, #enum_type{}, _SSet)                              -> err(Path, 
 -spec err(term(), term()) -> no_return().
 err(Path, Reason) ->
     graphql_err:abort(Path, elaborate, Reason).
-
-err_msg({type_not_found, Ty}) ->
-    ["Type not found in schema: ", graphql_err:format_ty(Ty)];
-err_msg({invalid_directive_location, ID, Context}) ->
-    ["The directive ", ID, " is not valid in the context ",
-     atom_to_binary(Context, utf8)];
-err_msg({not_input_type, Ty}) ->
-    ["Type ", graphql_err:format_ty(Ty), " is not an input type but is used in input-context"];
-err_msg({directives_not_unique, X}) ->
-    ["The directive with name ", X, " is not unique in this location"];
-err_msg(no_root_schema) ->
-    ["No root schema found. One is required for correct operation"];
-err_msg({unknown_field, F}) ->
-    ["The query refers to a field, ", F, ", which is not present in the schema"];
-err_msg(unknown_field) ->
-    ["The query refers to a field which is not known"];
-err_msg({unknown_argument, N}) ->
-    ["The query refers to an argument, ", N, ", which is not present in the schema"];
-err_msg({unknown_directive, Dir}) ->
-    ["The query uses a directive, ", Dir, ", which is unknown to this GraphQL server"];
-err_msg(selection_on_scalar) ->
-    ["Cannot apply a selection set to a scalar field"];
-err_msg(selection_on_enum) ->
-    ["Cannot apply a selection set to an enum type"];
-err_msg(fieldless_object) ->
-    ["The path refers to an Object type, but no fields were specified"];
-err_msg(fieldless_interface) ->
-    ["The path refers to an Interface type, but no fields were specified"].
 

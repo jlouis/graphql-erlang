@@ -40,7 +40,7 @@ format_errors([E|Es], Mod) ->
     [Res|format_errors(Es, Mod)].
 
 %% -- Error handling dispatch to the module responsible for the error
-err_msg({elaborate, Reason})     -> graphql_elaborate:err_msg(Reason);
+err_msg({elaborate, Reason})     -> elaborate_err_msg(Reason);
 err_msg({execute, Reason})       -> execute_err_msg(Reason);
 err_msg({type_check, Reason})    -> type_check_err_msg(Reason);
 err_msg({validate, Reason})      -> graphql_validate:err_msg(Reason);
@@ -242,4 +242,38 @@ type_check_err_msg({fragment_spread, SpreadTy, ScopeTy}) ->
     io_lib:format(
       "The spread type ~ts does not match the scope type ~ts",
       [SpreadTy, ScopeTy]).
+
+
+elaborate_err_msg({type_not_found, Ty}) ->
+    ["Type not found in schema: ", graphql_err:format_ty(Ty)];
+elaborate_err_msg({invalid_directive_location, ID, Context}) ->
+    ["The directive ", ID, " is not valid in the context ",
+     atom_to_binary(Context, utf8)];
+elaborate_err_msg({not_input_type, Ty}) ->
+    ["Type ", graphql_err:format_ty(Ty), " is not an input type but is used in input-context"];
+elaborate_err_msg({directives_not_unique, X}) ->
+    ["The directive with name ", X, " is not unique in this location"];
+elaborate_err_msg(no_root_schema) ->
+    ["No root schema found. One is required for correct operation"];
+elaborate_err_msg({unknown_field, F}) ->
+    ["The query refers to a field, ", F, ", which is not present in the schema"];
+elaborate_err_msg(unknown_field) ->
+    ["The query refers to a field which is not known"];
+elaborate_err_msg({unknown_argument, N}) ->
+    ["The query refers to an argument, ", N, ", which is not present in the schema"];
+elaborate_err_msg({unknown_directive, Dir}) ->
+    ["The query uses a directive, ", Dir, ", which is unknown to this GraphQL server"];
+elaborate_err_msg(selection_on_scalar) ->
+    ["Cannot apply a selection set to a scalar field"];
+elaborate_err_msg(selection_on_enum) ->
+    ["Cannot apply a selection set to an enum type"];
+elaborate_err_msg(fieldless_object) ->
+    ["The path refers to an Object type, but no fields were specified"];
+elaborate_err_msg(fieldless_interface) ->
+    ["The path refers to an Interface type, but no fields were specified"].
+
+validate_err_msg({not_unique, X}) ->
+    ["The name ", X, " is not a unique name"];
+validate_err_msg({cycles_in_fragments, Cycles}) ->
+    io_lib:format("The following fragments contains cycles: ~p", [Cycles]).
 
