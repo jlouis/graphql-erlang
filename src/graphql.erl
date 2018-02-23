@@ -135,7 +135,8 @@ execute(#{default_timeout := _DT } = Ctx, AST) ->
 execute(Ctx, AST) ->
     case graphql_execute:x(Ctx#{ default_timeout => ?DEFAULT_TIMEOUT}, AST) of
         #{ errors := Errs } = Result ->
-            Result#{ errors := graphql_err:format_errors(Errs, none) };
+            ErrMod = maps:get(error_mod, Ctx, graphql_err),
+            Result#{ errors := graphql_err:format_errors(Errs, ErrMod) };
         Result -> Result
     end.
 

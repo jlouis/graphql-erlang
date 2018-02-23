@@ -650,7 +650,7 @@ multiple_monsters_and_rooms(Config) ->
             #{ <<"id">> := ID1 }, #{ <<"id">> := ID2 } , null ]},
        errors := [
            #{path := [<<"MultipleMonsters">>, <<"monsters">>, 2],
-             message := <<"Couldn't resolve: not_found">> }]
+             message := <<"not_found">> }]
      } = run(Config, <<"MultipleMonsters">>, #{ <<"ids">> => [ID1, ID2, IDMissing] }),
 
     #{ data := #{
@@ -658,9 +658,9 @@ multiple_monsters_and_rooms(Config) ->
             #{ <<"id">> := ID1 }, null, #{ <<"id">> := ID2 }, null ]},
        errors := [
                   #{path := [<<"MultipleMonstersExprMissing">>, <<"monsters">>, 1],
-                    message := <<"Couldn't resolve: not_found">>},
+                    message := <<"not_found">>},
                   #{path := [<<"MultipleMonstersExprMissing">>, <<"monsters">>, 3],
-                    message := <<"Couldn't resolve: not_found">>}]
+                    message := <<"not_found">>}]
      } = run(Config, <<"MultipleMonstersExprMissing">>, #{}),
 
     Room1 = ?config(known_room_id, Config),
@@ -687,7 +687,7 @@ error_handling(Config) ->
                     #{<<"id">> => <<"cm9vbTox">>,<<"magic">> => null}},
           errors =>
               [#{key => resolver_error,
-                 message => <<"Couldn't resolve: unsupported">>,
+                 message => <<"unsupported">>,
                  path => [<<"RoomErrors1">>,<<"room">>,<<"magic">>]}]},
     Expected1 = run(Config, <<"RoomErrors1">>, #{ <<"id">> => Room1 }),
 
@@ -696,9 +696,8 @@ error_handling(Config) ->
               #{<<"room">> =>
                     #{<<"id">> => <<"cm9vbTox">>,<<"leyline">> => null}},
           errors =>
-              [#{key => resolver_crash,
-                 message =>
-                     <<"Error in execution: {resolver_crash,{<<\"Room\">>,<<\"leyline\">>}}">>,
+              [#{key => internal_server_error,
+                 message => "Internal Server Error",
                  path => [<<"RoomErrors2">>,<<"room">>,<<"leyline">>]}]},
     Expected2 = run(Config, <<"RoomErrors2">>, #{ <<"id">> => Room1 }),
     ok.

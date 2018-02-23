@@ -3,11 +3,13 @@
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
--export([format_errors/2]).
+-export([format_errors/2, format_errors/1]).
 -export([mk/3, mk/4]).
 -export([abort/2, abort/3]).
 -export([path/1]).
 -export([format_ty/1]).
+
+-export([crash/2, err/2]).
 
 abort(Path, Msg) ->
     abort(Path, uncategorized, Msg).
@@ -29,13 +31,31 @@ mk(Path, Phase, Term, Stack) ->
 
 %% ERROR FORMATTING
 %% ----------------------------------------------------------------------------
+crash(Path, _Err) ->
+    %% Deliberately quaff the error here for now
+    #{ path => Path,
+       key => internal_server_error,
+       message => "Internal Server Error" }.
+
+err(Path, Err) ->
+    Msg = io_lib:format("~p", [Err]),
+    #{ path => Path,
+       key => resolver_error,
+       message => iolist_to_binary(Msg)
+     }.
+
+format_errors(Errs) ->
+    format_errors(Errs, ?MODULE).
+
 format_errors([], _Mod) -> [];
-format_errors([E|Es], Mod) ->
-    Res = case E of
-              #{ path := Path, phase := Phase, error_term := Term } ->
+format_errors([#{ path := Path, phase := Phase, error_term := Term } | Es], Mod) ->
+    Res = case Term of
+              {resolver_crash, T} -> Mod:crash(Path, T);
+              {resolver_error, T} -> Mod:err(Path, T);
+              Other ->
                   #{ path => Path,
-                     key => err_key(Phase, Term),
-                     message => iolist_to_binary(err_msg({Phase, Term})) }
+                     key => err_key(Phase, Other),
+                     message => iolist_to_binary(err_msg({Phase, Other})) }
           end,
     [Res|format_errors(Es, Mod)].
 
@@ -43,7 +63,7 @@ format_errors([E|Es], Mod) ->
 err_msg({elaborate, Reason})     -> elaborate_err_msg(Reason);
 err_msg({execute, Reason})       -> execute_err_msg(Reason);
 err_msg({type_check, Reason})    -> type_check_err_msg(Reason);
-err_msg({validate, Reason})      -> graphql_validate:err_msg(Reason);
+err_msg({validate, Reason})      -> validate_err_msg(Reason);
 err_msg({uncategorized, Reason}) ->
     io_lib:format("General uncategorized error: ~p", [Reason]).
 
