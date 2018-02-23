@@ -429,6 +429,14 @@ field_closure(Path, #{ defer_target := Upstream } = Ctx,
                           {M, _} -> #{ M => Ref }
                       end }.
 
+report_wrong_return(Obj, Name, Fun, Val) ->
+    error_logger:error_msg(
+      "Resolver ~p.~p returned wrong value: ~p(..) -> ~p",
+      [Obj,
+       Name,
+       Fun,
+       Val]).
+
 resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectType, Value, Name, FAns, Fun, Args) ->
     CtxAnnot = Ctx#{
         field => Name,
@@ -443,25 +451,27 @@ resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectTy
         V -> 
             case handle_resolver_result(V) of
                 wrong ->
-                    error_logger:error_msg("Resolver returned wrong value: ~p(..) -> ~p", [Fun, V]),
-                    {error, {wrong_resolver_return, {graphql_schema:id(ObjectType), Name}}};
+                    Obj = graphql_schema:id(ObjectType),
+                    report_wrong_return(Obj, Name, Fun, V),
+                    {error, {wrong_resolver_return, {Obj, Name}}};
                 Res -> Res
             end
     catch
         throw:{'$graphql_throw', Msg} ->
             case handle_resolver_result(Msg) of
                 wrong ->
-                    error_logger:error_msg(
-                      "Resolver returned wrong value: ~p(..) -> ~p",
-                      [Fun, Msg]),
-                    {error, {wrong_resolver_return, {graphql_schema:id(ObjectType), Name}}};
+                    Obj = graphql_schema:id(ObjectType),
+                    report_wrong_return(Obj, Name, Fun, Msg),
+                    {error, {wrong_resolver_return, {Obj, Name}}};
                 Res -> Res
             end;
         Cl:Err ->
-            error_logger:error_msg(
-              "Resolver function error: ~p stacktrace: ~p~n",
-              [{Cl,Err}, erlang:get_stacktrace()]),
-            {error, {resolver_crash, {graphql_schema:id(ObjectType), Name}}}
+            M = #{ type => graphql_schema:id(ObjectType),
+                   field => Name,
+                   stack => erlang:get_stacktrace(),
+                   class => Cl,
+                   error => Err},
+            {error, {resolver_crash, M}}
     end.
 
 

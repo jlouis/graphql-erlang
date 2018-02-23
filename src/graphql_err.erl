@@ -3,13 +3,13 @@
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
--export([format_errors/2, format_errors/1]).
+-export([format_errors/3, format_errors/2]).
 -export([mk/3, mk/4]).
 -export([abort/2, abort/3]).
 -export([path/1]).
 -export([format_ty/1]).
 
--export([crash/2, err/2]).
+-export([crash/3, err/3]).
 
 abort(Path, Msg) ->
     abort(Path, uncategorized, Msg).
@@ -31,33 +31,38 @@ mk(Path, Phase, Term, Stack) ->
 
 %% ERROR FORMATTING
 %% ----------------------------------------------------------------------------
-crash(Path, _Err) ->
-    %% Deliberately quaff the error here for now
+crash(_Ctx, Path, Err) ->
+    %% We dump the error data internally, but we don't dump crashes
+    %% to the client.
+    %%
+    %% We recommend providing your own override of this function to include
+    %% some unique request id for the request as well.
+    error_logger:error_report([{crash, Err}]),
     #{ path => Path,
        key => internal_server_error,
        message => "Internal Server Error" }.
 
-err(Path, Err) ->
+err(_Ctx, Path, Err) ->
     Msg = io_lib:format("~p", [Err]),
     #{ path => Path,
        key => resolver_error,
        message => iolist_to_binary(Msg)
      }.
 
-format_errors(Errs) ->
-    format_errors(Errs, ?MODULE).
+format_errors(Ctx, Errs) ->
+    format_errors(Ctx, Errs, ?MODULE).
 
-format_errors([], _Mod) -> [];
-format_errors([#{ path := Path, phase := Phase, error_term := Term } | Es], Mod) ->
+format_errors(_Ctx, [], _Mod) -> [];
+format_errors(Ctx, [#{ path := Path, phase := Phase, error_term := Term } | Es], Mod) ->
     Res = case Term of
-              {resolver_crash, T} -> Mod:crash(Path, T);
-              {resolver_error, T} -> Mod:err(Path, T);
+              {resolver_crash, T} -> Mod:crash(Ctx, Path, T);
+              {resolver_error, T} -> Mod:err(Ctx, Path, T);
               Other ->
                   #{ path => Path,
                      key => err_key(Phase, Other),
                      message => iolist_to_binary(err_msg({Phase, Other})) }
           end,
-    [Res|format_errors(Es, Mod)].
+    [Res|format_errors(Ctx, Es, Mod)].
 
 %% -- Error handling dispatch to the module responsible for the error
 err_msg({elaborate, Reason})     -> elaborate_err_msg(Reason);

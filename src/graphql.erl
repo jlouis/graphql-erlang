@@ -12,7 +12,7 @@
         ]).
 
 -export([
-         format_errors/1
+         format_errors/2, format_errors/3
         ]).
 
 %% Early exit
@@ -70,11 +70,14 @@ reply_cast({'$graphql_token', Target, Id, Ref}, Data) ->
 
 %% ERRORS
 %% --------------------------------------------------------------------------
-format_errors(Errs) when is_list(Errs) ->
-    graphql_err:format_errors(Errs, none);
-format_errors(Err) ->
-    graphql_err:format_errors([Err], none).
+lift_list(L) when is_list(L) -> L;
+lift_list(X) -> [X].
 
+format_errors(Ctx, Errs) ->
+    graphql_err:format_errors(Ctx, lift_list(Errs), graphql_err).
+
+format_errors(Ctx, Errs, Mod) ->
+    graphql_err:format_errors(Ctx, lift_list(Errs), Mod).
 
 %% --------------------------------------------------------------------------
 -spec parse( binary() | string()) ->
@@ -136,7 +139,7 @@ execute(Ctx, AST) ->
     case graphql_execute:x(Ctx#{ default_timeout => ?DEFAULT_TIMEOUT}, AST) of
         #{ errors := Errs } = Result ->
             ErrMod = maps:get(error_mod, Ctx, graphql_err),
-            Result#{ errors := graphql_err:format_errors(Errs, ErrMod) };
+            Result#{ errors := graphql_err:format_errors(Ctx, Errs, ErrMod) };
         Result -> Result
     end.
 

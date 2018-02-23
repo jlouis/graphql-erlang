@@ -44,7 +44,7 @@ x(Config, Input, OpName, Params) ->
                 Res
             catch
                 throw:{error, Error} ->
-                    #{ errors => graphql:format_errors(Error) }
+                    #{ errors => graphql:format_errors(#{}, Error) }
             end;
         Err ->
             Err
