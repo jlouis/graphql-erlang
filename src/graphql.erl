@@ -12,7 +12,7 @@
         ]).
 
 -export([
-         format_errors/2, format_errors/3
+         format_errors/2
         ]).
 
 %% Early exit
@@ -74,10 +74,7 @@ lift_list(L) when is_list(L) -> L;
 lift_list(X) -> [X].
 
 format_errors(Ctx, Errs) ->
-    graphql_err:format_errors(Ctx, lift_list(Errs), graphql_err).
-
-format_errors(Ctx, Errs, Mod) ->
-    graphql_err:format_errors(Ctx, lift_list(Errs), Mod).
+    graphql_err:format_errors(Ctx, lift_list(Errs)).
 
 %% --------------------------------------------------------------------------
 -spec parse( binary() | string()) ->
@@ -138,8 +135,7 @@ execute(#{default_timeout := _DT } = Ctx, AST) ->
 execute(Ctx, AST) ->
     case graphql_execute:x(Ctx#{ default_timeout => ?DEFAULT_TIMEOUT}, AST) of
         #{ errors := Errs } = Result ->
-            ErrMod = maps:get(error_mod, Ctx, graphql_err),
-            Result#{ errors := graphql_err:format_errors(Ctx, Errs, ErrMod) };
+            Result#{ errors := graphql_err:format_errors(Ctx, Errs) };
         Result -> Result
     end.
 

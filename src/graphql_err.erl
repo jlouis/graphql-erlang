@@ -3,7 +3,7 @@
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
--export([format_errors/3, format_errors/2]).
+-export([format_errors/2]).
 -export([mk/3, mk/4]).
 -export([abort/2, abort/3]).
 -export([path/1]).
@@ -50,10 +50,15 @@ err(_Ctx, Path, Err) ->
      }.
 
 format_errors(Ctx, Errs) ->
-    format_errors(Ctx, Errs, ?MODULE).
+    case maps:get(error_module, Ctx, none) of
+        none ->
+            format_errors_(Ctx#{ error_module => ?MODULE }, Errs);
+        _ ->
+            format_errors_(Ctx, Errs)
+    end.
 
-format_errors(_Ctx, [], _Mod) -> [];
-format_errors(Ctx, [#{ path := Path, phase := Phase, error_term := Term } | Es], Mod) ->
+format_errors_(_Ctx, []) -> [];
+format_errors_(#{ error_module := Mod } = Ctx, [#{ path := Path, phase := Phase, error_term := Term } | Es]) ->
     Res = case Term of
               {resolver_crash, T} -> Mod:crash(Ctx, Path, T);
               {resolver_error, T} -> Mod:err(Ctx, Path, T);
@@ -62,7 +67,7 @@ format_errors(Ctx, [#{ path := Path, phase := Phase, error_term := Term } | Es],
                      key => err_key(Phase, Other),
                      message => iolist_to_binary(err_msg({Phase, Other})) }
           end,
-    [Res|format_errors(Ctx, Es, Mod)].
+    [Res|format_errors_(Ctx, Es)].
 
 %% -- Error handling dispatch to the module responsible for the error
 err_msg({elaborate, Reason})     -> elaborate_err_msg(Reason);

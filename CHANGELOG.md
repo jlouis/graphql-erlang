@@ -17,7 +17,35 @@ the compatibility issues you are likely to encounter.
   
   To update your system, you have to do the following:
   
-  TODO
+  If the validation, elaboration or type_check step fails with a throw
+  containing `{error, E}`, then you have to send that error through
+  the formatter. For instance by calling `graphql:format_errors(Ctx,
+  E)`. You can also supply your own error module:
+  `graphql:format_errors(Ctx#{error_module => Mod}, E)`.
+  
+  Execution assumes the presence of `#{ error_module := Mod } = Ctx`
+  in the context and uses that for formatting.
+  
+  To implement your own error module, implement the functions
+  
+  `crash(Ctx, Path, Err) -> JSON`
+  `err(Ctx, Path, Err) -> JSON`
+  
+  The rationale: by giving API users explicit control over error
+  formatting, it is far easier to embed the engine in another system.
+  You can decide what to do with errors. In particular, if you have
+  unique request IDs for each request, it is usually worthwhile to
+  embed those into the error path itself.
+  
+  Crashes are something you might not want to report in detail to the
+  user. In particular, they could contain sensitive information on
+  error. So one can hide that information.
+  
+  While here, also remove most of the internal error reporting from
+  the engine and punt it to the above formatter functions. The only
+  thing which is reported are wrong resolver returns which is always a
+  bug in the system.
+
 ### Added
 - You can now annotate enum values with descriptions
 - You can now use `graphql:throw(Result)` to exit early inside
