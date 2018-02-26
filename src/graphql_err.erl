@@ -40,7 +40,7 @@ crash(_Ctx, Path, Err) ->
     error_logger:error_report([{crash, Err}]),
     #{ path => Path,
        key => internal_server_error,
-       message => "Internal Server Error" }.
+       message => <<"Internal Server Error">> }.
 
 err(_Ctx, Path, Err) ->
     Msg = io_lib:format("~p", [Err]),
