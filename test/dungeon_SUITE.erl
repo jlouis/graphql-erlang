@@ -697,7 +697,7 @@ error_handling(Config) ->
                     #{<<"id">> => <<"cm9vbTox">>,<<"leyline">> => null}},
           errors =>
               [#{key => internal_server_error,
-                 message => "Internal Server Error",
+                 message => <<"Internal Server Error">>,
                  path => [<<"RoomErrors2">>,<<"room">>,<<"leyline">>]}]},
     Expected2 = run(Config, <<"RoomErrors2">>, #{ <<"id">> => Room1 }),
     ok.
