@@ -8,6 +8,12 @@ Versioning generally follows semantic versioning, but breaks it for
 releases less than 1.0.0 in certain situations. The changelog mentions
 the compatibility issues you are likely to encounter.
 
+## [Unreleased]
+
+### Fix
+
+- The `key` field in errors are now an atom so it can be JSON encoded.
+
 ## [0.12.0] 2018-02-23 Flag day release, broke compatibility backwards!
 
 ### Changed

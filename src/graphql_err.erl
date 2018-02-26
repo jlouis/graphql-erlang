@@ -77,14 +77,19 @@ err_msg({validate, Reason})      -> validate_err_msg(Reason);
 err_msg({uncategorized, Reason}) ->
     io_lib:format("General uncategorized error: ~p", [Reason]).
 
-err_key(elaborate, Key)     -> Key;
+err_key(elaborate, Key)     -> simplify(Key);
 err_key(execute, {type_resolver_error, _}) -> type_resolver_error;
 err_key(execute, {resolver_crash, _}) -> resolver_crash;
 err_key(execute, {resolver_error, _}) -> resolver_error;
-err_key(execute, Key)       -> Key;
-err_key(type_check, Key)    -> Key;
-err_key(validate, Key)      -> Key;
-err_key(uncategorized, Key) -> Key.
+err_key(execute, Key)       -> simplify(Key);
+err_key(type_check, Key)    -> simplify(Key);
+err_key(validate, Key)      -> simplify(Key);
+err_key(uncategorized, Key) -> simplify(Key).
+
+
+simplify(A) when is_atom(A) -> A;
+simplify(B) when is_binary(B) -> B;
+simplify(T) when is_tuple(T) -> element(1, T).
 
 -spec path([Input]) -> [binary()]
   when
