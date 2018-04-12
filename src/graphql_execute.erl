@@ -535,10 +535,11 @@ complete_value(Path, _Ctx, #enum_type { id = ID,
         {ok, null, Errors} ->
             {ok, null, Errors};
         {ok, Result, Errors} ->
-            case graphql_schema:lookup_enum_type(Result) of
-                #enum_type { id = ID } ->
+
+            case graphql_schema:validate_enum(ID, Result) of
+                ok ->
                     {ok, Result, Errors};
-                #enum_type {} ->
+                {other_enums, _EnumTypes} ->
                     null(Path, {invalid_enum_output, ID, Result}, Errors);
                 not_found ->
                     null(Path, {invalid_enum_output, ID, Result}, Errors)

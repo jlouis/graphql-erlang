@@ -193,15 +193,15 @@ check_param(Path, _, #scalar_type{} = STy, V) ->
     non_polar_coerce(Path, STy, V);
 check_param(Path, VarEnv, #enum_type{} = ETy, {enum, V}) when is_binary(V) ->
     check_param(Path, VarEnv, ETy, V);
-check_param(Path, _, #enum_type { id = Ty }, V) when is_binary(V) ->
+check_param(Path, _, #enum_type { id = Ty } = ETy, V) when is_binary(V) ->
     %% Determine the type of any enum term, and then coerce it
-    case graphql_schema:lookup_enum_type(V) of
-        #enum_type { id = Ty } = ETy ->
+    case graphql_schema:validate_enum(Ty, V) of
+        ok ->
             non_polar_coerce(Path, ETy, V);
         not_found ->
             err(Path, {enum_not_found, Ty, V});
-        OtherTy ->
-            err(Path, {param_mismatch, {enum, Ty, OtherTy}})
+        {other_enums, OtherTys} ->
+            err(Path, {param_mismatch, {enum, Ty, OtherTys}})
     end;
 check_param(Path, VarEnv, #input_object_type{} = IOType, Obj) when is_map(Obj) ->
     %% When an object comes in through JSON for example, then the input object
@@ -637,15 +637,15 @@ judge(Ctx, Path, Value, {list, _} = SType) ->
     %% If the value is not of list-type, but we expect a list,
     %% then hoist the value into a singleton list and recurse
     judge(Ctx, Path, [Value], SType);
-judge(_Ctx, Path, {enum, N}, SType) ->
-    case graphql_schema:lookup_enum_type(N) of
+judge(_Ctx, Path, {enum, N}, SType = #enum_type{id = ID}) ->
+    case graphql_schema:validate_enum(ID, N) of
         not_found ->
             err(Path, {unknown_enum, N});
-        SType ->
+        ok ->
             non_polar_coerce(Path, SType, N);
-        Other ->
+        {other_enums, Others} ->
             err(Path, {type_mismatch,
-                       #{ document => Other,
+                       #{ document => Others,
                           schema => SType }})
     end;
 judge(#{ varenv := VarEnv }, Path, {input_object, _} = InputObj, SType) ->

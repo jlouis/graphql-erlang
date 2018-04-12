@@ -12,7 +12,7 @@
          load/1,
          get/1,
          lookup/1,
-         lookup_enum_type/1,
+         validate_enum/2,
          lookup_interface_implementors/1
         ]).
 -export([resolve_root_type/2]).
@@ -23,8 +23,8 @@
 -export([init/1, handle_call/3, handle_cast/2, terminate/2, handle_info/2,
     code_change/3]).
 
--define(ENUMS, graphql_schema_enums).
--define(OBJECTS, graphql_schema_objects).
+-define(ENUMS, graphql_schema_enums).     % Table mapping enum values of type binary() to set of enum type ids
+-define(OBJECTS, graphql_schema_objects). % Table of all types
 
 -record(state, {}).
 
@@ -97,10 +97,15 @@ get(ID) ->
        _ -> exit(schema_not_found)
     end.
 
--spec lookup_enum_type(binary()) -> binary() | not_found.
-lookup_enum_type(EnumValue) ->
-    try ets:lookup_element(?ENUMS, EnumValue, 3) of
-        Ty -> ?MODULE:get(Ty)
+%% Check if given enum value matches the given type id, other enums, or nothing at all.
+-spec validate_enum(binary(), binary()) -> ok | not_found | {other_enums, [#enum_type{}]}.
+validate_enum(EnumID, EnumValue) ->
+    try ets:lookup_element(?ENUMS, EnumValue, 2) of
+        #{EnumID := _} -> ok;
+        EnumIDsMap ->
+            EnumIDs = maps:keys(EnumIDsMap),
+            OtherEnums = [?MODULE:get(ID) || ID <- EnumIDs],
+            {other_enums, OtherEnums}
     catch
         error:badarg ->
             not_found
@@ -218,8 +223,19 @@ determine_table(_) -> {error, unknown}.
 
 %% insert enum values
 insert_enum(Tab, #enum_type { id = ID, values = VMap }) ->
-    Vals = maps:to_list(VMap),
-    [begin
-        ets:insert(Tab, {Key, Value, ID})
-      end || {Value, #enum_value { val = Key }} <- Vals],
+    Vals = maps:values(VMap),
+    [ append_enum_id(Tab, Key, ID)
+      || #enum_value { val = Key } <- Vals],
     ok.
+
+append_enum_id(Tab, Key, ID) ->
+    CurrentIDs = try ets:lookup_element(?ENUMS, Key, 2) of
+        EnumIDsMap -> EnumIDsMap
+    catch
+        error:badarg ->
+            #{}
+    end,
+    NewIDs = CurrentIDs#{ID => undefined},
+    ets:insert(Tab, {Key, NewIDs}),
+    ok.
+
