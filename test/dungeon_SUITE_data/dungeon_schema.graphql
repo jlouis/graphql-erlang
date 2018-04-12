@@ -8,6 +8,8 @@ enum Mood {
      DODGY
      +description(text: "This monster attacks every living being, including itself")
      AGGRESSIVE
+     +description(text: "Beast mode.  Even worse")
+     BEAST
 }
 
 enum Property {

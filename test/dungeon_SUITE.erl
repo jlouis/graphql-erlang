@@ -414,6 +414,28 @@ populate(Config) ->
                                        <<"I LOVE WEAVING!">>}]}}}},
 
     ExpectedNestedInput = run(Config, <<"IntroduceMonsterNestedVar">>, NestedInput),
+
+    ct:log("Check duplicate enum values (BEAST mood/property)"),
+
+    DupEnumInput = #{
+        <<"clientMutationId">> => <<"MUTID">>,
+        <<"name">> => <<"orc">>,
+        <<"color">> => <<"#593E1A">>,
+        <<"hitpoints">> => 30,
+        <<"properties">> => [<<"BEAST">>],
+        <<"mood">> => <<"BEAST">>
+    },
+    #{ data := #{
+        <<"introduceMonster">> := #{
+            <<"clientMutationId">> := <<"MUTID">>,
+            <<"monster">> := #{
+                <<"id">> := _,
+                <<"name">> := <<"orc">>,
+                <<"color">> := <<"#593E1A">>,
+                <<"hitpoints">> := 30,
+                <<"properties">> := [<<"BEAST">>],
+                <<"mood">> := <<"BEAST">>}
+        }}} = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => DupEnumInput }),
     ok.
 
 direct_input(Config) ->
@@ -902,6 +924,11 @@ invalid_enums(Config) ->
              message := <<"The value <<>> is not a valid enum value for type Mood">>,
              path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}]} =
           run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input#{ <<"mood">> => <<>> }}),
+    #{errors :=
+      [#{key := param_mismatch,
+         message := <<"The enum value matches types [Property] but was used in a context where an enum value of type Mood was expected">>,
+         path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}]} =
+        run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input#{ <<"mood">> => <<"DRAGON">> }}),
     #{ errors :=
            [#{ key := enum_not_found,
                message := <<"The value <<\"AGGRESSIF\">> is not a valid enum value for type Mood">>,

@@ -35,6 +35,7 @@ enum Mood {
 	TRANQUIL
 	DODGY
 	AGGRESSIVE
+	BEAST
 }
 
 enum Property {
