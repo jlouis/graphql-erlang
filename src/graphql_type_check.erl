@@ -41,7 +41,7 @@
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
--export([x/1, x_params/3]).
+-export([x/2, x_params/4]).
 %% -- TOP LEVEL TYPE CHECK CODE -------------------------------
 
 %% Type checking proceeds by the ordinary way of writing a type
@@ -51,12 +51,13 @@
 %% their types as we type check other things.
 %%
 %% Type checking then proceeds one Clause at a time.
--spec x(graphql:ast()) -> {ok, #{ atom() => any()}}.
-x(Doc) ->
-    x(#{}, Doc).
+-spec x(graphql_schema:endpoint_context(), graphql:ast()) -> {ok, #{ atom() => any()}}.
+x(EP, Doc) ->
+    x(EP, #{}, Doc).
 
-x(Ctx, {document, Clauses}) ->
-   type_check(Ctx, [document], Clauses).
+x(EP, Ctx, {document, Clauses}) ->
+   EPCtx = Ctx#{endpoint_context => EP}, 
+   type_check(EPCtx, [document], Clauses).
 
 type_check(Ctx, Path, Clauses) ->
    {Fragments, _Rest} = lists:partition(
@@ -109,24 +110,24 @@ get_operation(FunEnv, OpName, _Params) ->
 %% This is the entry-point when checking parameters for an already parsed,
 %% type checked and internalized query. It serves to verify that a requested
 %% operation and its parameters matches the types in the operation referenced
--spec x_params(any(), any(), any()) -> graphql:param_context().
-x_params(FunEnv, OpName, Params) ->
+-spec x_params(graphql_schema:endpoint_context(), any(), any(), any()) -> graphql:param_context().
+x_params(EP, FunEnv, OpName, Params) ->
     case get_operation(FunEnv, OpName, Params) of
         undefined ->
             #{};
         not_found ->
             err([], {operation_not_found, OpName});
         VarEnv ->
-            tc_params([OpName], VarEnv, Params)
+            tc_params(EP, [OpName], VarEnv, Params)
     end.
 
 %% Parameter checking has positive polarity, so we fold over
 %% the type var environment from the schema and verify that each
 %% type is valid
-tc_params(Path, VarEnv, InitialParams) ->
+tc_params(EP, Path, VarEnv, InitialParams) ->
     F =
       fun(K, V0, PS) ->
-        case tc_param(Path, VarEnv, K, V0, maps:get(K, PS, not_found)) of
+        case tc_param(EP, Path, VarEnv, K, V0, maps:get(K, PS, not_found)) of
             V0 -> PS;
             V1 -> PS#{ K => V1 }
         end
@@ -137,13 +138,13 @@ tc_params(Path, VarEnv, InitialParams) ->
 %% If a given parameter is not given, and there is a default, we can supply
 %% the default value in some cases. The spec requires special handling of
 %% null values, which are handled here.
-tc_param(Path, _, K, #vardef { ty = {non_null, _}, default = null }, not_found) ->
+tc_param(_EP, Path, _, K, #vardef { ty = {non_null, _}, default = null }, not_found) ->
     err([K | Path], missing_non_null_param);
-tc_param(Path, VarEnv, K, #vardef { default = Default,
+tc_param(EP, Path, VarEnv, K, #vardef { default = Default,
                                ty = Ty }, not_found) ->
-    coerce_default_param([K | Path], VarEnv, Ty, Default);
-tc_param(Path, VarEnv, K, #vardef { ty = Ty }, Val) ->
-    check_param([K | Path], VarEnv, Ty, Val).
+    coerce_default_param(EP, [K | Path], VarEnv, Ty, Default);
+tc_param(EP, Path, VarEnv, K, #vardef { ty = Ty }, Val) ->
+    check_param(EP, [K | Path], VarEnv, Ty, Val).
 
 %% When checking params, the top level has been elaborated by the
 %% elaborator, but the levels under it has not. So we have a case where
@@ -153,17 +154,17 @@ tc_param(Path, VarEnv, K, #vardef { ty = Ty }, Val) ->
 %% calls out to the correct helper-function
 
 %% The following expands un-elaborated (nested) types
-check_param(Path, VarEnv, Ty, V) when is_binary(Ty) ->
-    ResolvedType = case graphql_schema:lookup(Ty) of
+check_param(EP, Path, VarEnv, Ty, V) when is_binary(Ty) ->
+    ResolvedType = case graphql_schema:lookup(EP, Ty) of
                        #scalar_type {} = T -> T;
                        #input_object_type {} = T -> T;
                        #enum_type {} = T -> T;
                        _ ->
                            err(Path, {not_input_type, Ty, V})
                    end,
-    check_param(Path, VarEnv, ResolvedType, V);
+    check_param(EP, Path, VarEnv, ResolvedType, V);
 %% Handle the case of a variable
-check_param(Path, VarEnv, SType, {var, ID}) ->
+check_param(_EP, Path, VarEnv, SType, {var, ID}) ->
     Var = graphql_ast:name(ID),
     case maps:get(Var, VarEnv, not_found) of
         not_found ->
@@ -179,23 +180,23 @@ check_param(Path, VarEnv, SType, {var, ID}) ->
                                   schema => SType }})
             end
     end;
-check_param(Path, _, {non_null, _}, null) ->
+check_param(_EP, Path, _, {non_null, _}, null) ->
     err(Path, non_null);
-check_param(Path, VarEnv, {non_null, Ty}, V) ->
-    check_param(Path, VarEnv, Ty, V);
-check_param(_Path, _, _Ty, null) ->
+check_param(EP, Path, VarEnv, {non_null, Ty}, V) ->
+    check_param(EP, Path, VarEnv, Ty, V);
+check_param(_EP, _Path, _, _Ty, null) ->
     null;
-check_param(Path, VarEnv, {list, T}, L) when is_list(L) ->
+check_param(EP, Path, VarEnv, {list, T}, L) when is_list(L) ->
     %% Build a dummy structure to match the recursor. Unwrap this
     %% structure before replacing the list parameter.
-    [check_param(Path, VarEnv, T, X) || X <- L];
-check_param(Path, _, #scalar_type{} = STy, V) ->
+    [check_param(EP, Path, VarEnv, T, X) || X <- L];
+check_param(_EP, Path, _, #scalar_type{} = STy, V) ->
     non_polar_coerce(Path, STy, V);
-check_param(Path, VarEnv, #enum_type{} = ETy, {enum, V}) when is_binary(V) ->
-    check_param(Path, VarEnv, ETy, V);
-check_param(Path, _, #enum_type { id = Ty }, V) when is_binary(V) ->
+check_param(EP, Path, VarEnv, #enum_type{} = ETy, {enum, V}) when is_binary(V) ->
+    check_param(EP, Path, VarEnv, ETy, V);
+check_param(EP, Path, _, #enum_type { id = Ty }, V) when is_binary(V) ->
     %% Determine the type of any enum term, and then coerce it
-    case graphql_schema:lookup_enum_type(V) of
+    case graphql_schema:lookup_enum_type(EP, V) of
         #enum_type { id = Ty } = ETy ->
             non_polar_coerce(Path, ETy, V);
         not_found ->
@@ -203,21 +204,21 @@ check_param(Path, _, #enum_type { id = Ty }, V) when is_binary(V) ->
         OtherTy ->
             err(Path, {param_mismatch, {enum, Ty, OtherTy}})
     end;
-check_param(Path, VarEnv, #input_object_type{} = IOType, Obj) when is_map(Obj) ->
+check_param(EP, Path, VarEnv, #input_object_type{} = IOType, Obj) when is_map(Obj) ->
     %% When an object comes in through JSON for example, then the input object
     %% will be a map which is already unique in its fields. To handle this, turn
     %% the object into the same form as the one we use on query documents and pass
     %% it on. Note that the code will create a map later on once the input has been
     %% uniqueness-checked.
-    check_param(Path, VarEnv, IOType, {input_object, maps:to_list(Obj)});
-check_param(Path, VarEnv, #input_object_type{} = IOType, {input_object, KVPairs}) ->
-    check_input_object(Path, VarEnv, IOType, {input_object, KVPairs});
+    check_param(EP, Path, VarEnv, IOType, {input_object, maps:to_list(Obj)});
+check_param(EP, Path, VarEnv, #input_object_type{} = IOType, {input_object, KVPairs}) ->
+    check_input_object(EP, Path, VarEnv, IOType, {input_object, KVPairs});
 %% Everything else are errors
-check_param(Path, _, Ty, V) ->
+check_param(_EP, Path, _, Ty, V) ->
     err(Path, {param_mismatch, Ty, V}).
 
-coerce_default_param(Path, VarEnv, Ty, Default) ->
-    try check_param(Path, VarEnv, Ty, Default) of
+coerce_default_param(EP, Path, VarEnv, Ty, Default) ->
+    try check_param(EP, Path, VarEnv, Ty, Default) of
         Result -> Result
     catch
         Class:Err ->
@@ -230,20 +231,20 @@ coerce_default_param(Path, VarEnv, Ty, Default) ->
     end.
 
 %% Input objects are first coerced. Then they are checked.
-check_input_object(Path, VarEnv,#input_object_type{ fields = Fields }, Obj) ->
+check_input_object(EP, Path, VarEnv,#input_object_type{ fields = Fields }, Obj) ->
     Coerced = coerce_input_object(Path, Obj),
-    check_input_object_fields(Path, VarEnv, maps:to_list(Fields), Coerced, #{}).
+    check_input_object_fields(EP, Path, VarEnv, maps:to_list(Fields), Coerced, #{}).
 
 %% Input objects are in positive polarity, so the schema's fields are used
 %% to verify that every field is present, and that there are no excess fields
 %% As we process fields in the object, we remove them so we can check that
 %% there are no more fields in the end.
-check_input_object_fields(Path, _, [], Obj, Result) ->
+check_input_object_fields(_EP, Path, _, [], Obj, Result) ->
     case maps:size(Obj) of
         0 -> Result;
         K when K > 0 -> err(Path, {excess_fields_in_object, Obj})
     end;
-check_input_object_fields(Path,
+check_input_object_fields(EP, Path,
                           VarEnv, 
                           [{Name, #schema_arg { ty = Ty,
                                                 default = Default }} | Next],
@@ -255,12 +256,13 @@ check_input_object_fields(Path,
                              {non_null, _} when Default == null ->
                                  err([Name | Path], missing_non_null_param);
                              _ ->
-                                 coerce_default_param(Path, VarEnv, Ty, Default)
+                                 coerce_default_param(EP, Path, VarEnv, Ty, Default)
                          end;
                      V ->
-                         check_param([Name | Path], VarEnv, Ty, V)
+                         check_param(EP, [Name | Path], VarEnv, Ty, V)
                  end,
-    check_input_object_fields(Path,
+    check_input_object_fields(EP,
+                              Path,
                               VarEnv,
                               Next,
                               maps:remove(Name, Obj),
@@ -346,23 +348,23 @@ sset(Ctx, Path, Scope, SSet) ->
 %% Since fields have negative polarity, we only consider type checking
 %% of the fields which the client requested. Every other field is
 %% ignored.
-field(#{ fragenv := FE } = Ctx, Path, ScopeTy, #frag_spread { id = ID, directives = Ds } = FSpread) ->
+field(#{ fragenv := FE, endpoint_context := EP } = Ctx, Path, ScopeTy, #frag_spread { id = ID, directives = Ds } = FSpread) ->
     Name = graphql_ast:name(ID),
     case maps:get(Name, FE, not_found) of
         not_found ->
             err([Name | Path], unknown_fragment);
         #frag { schema = FragTy } ->
-            ok = fragment_embed([Name | Path], FragTy, ScopeTy),
+            ok = fragment_embed(EP, [Name | Path], FragTy, ScopeTy),
             %% You can always include a fragspread, as long as it exists
             %% It may be slightly illegal in a given context but this just
             %% means the system will ignore the fragment on execution
             FSpread#frag_spread { directives = directives(Ctx, Path, Ds) }
     end;
-field(Ctx, Path, Scope, #frag { id = '...',
+field(Ctx=#{endpoint_context:=EP}, Path, Scope, #frag { id = '...',
                                 schema = InnerScope,
                                 selection_set = SSet,
                                 directives = Ds} = InlineFrag) ->
-    ok = fragment_embed([<<"...">> | Path], InnerScope, Scope),
+    ok = fragment_embed(EP, [<<"...">> | Path], InnerScope, Scope),
     InlineFrag#frag {
         directives = directives(Ctx, [<<"...">> | Path], Ds),
         selection_set = sset(Ctx, [InlineFrag | Path], InnerScope, SSet)
@@ -417,13 +419,13 @@ args(Ctx, Path, Args, Schema) ->
 args(_Ctx, _Path, [], [], Acc) -> Acc;
 args(_Ctx, Path, [_|_] = Args, [], _Acc) ->
     err(Path, {excess_args, Args});
-args(Ctx, Path, Args, [{Name, #schema_arg { ty = STy }} = SArg | Next], Acc) ->
+args(Ctx=#{endpoint_context:=EP}, Path, Args, [{Name, #schema_arg { ty = STy }} = SArg | Next], Acc) ->
     case take_arg(Args, SArg) of
         {error, Reason} ->
             err([Name | Path], Reason);
         {ok, {_, #{ type := Ty, value := Val}} = A, NextArgs} ->
             SchemaType =
-                case graphql_elaborate:type(STy) of
+                case graphql_elaborate:type(EP, STy) of
                     {error, Reason} -> exit(Reason);
                     {_Polarity, SchemaTypeRsult} -> SchemaTypeRsult
                 end,
@@ -466,48 +468,48 @@ take_arg(Args, {Key, #schema_arg { ty = Ty, default = Default }}) ->
 %%
 
 %% First a series of congruence checks
-fragment_embed(Path, SpreadType, {list, ScopeType}) ->
+fragment_embed(EP, Path, SpreadType, {list, ScopeType}) ->
     %% Check congruences of lists
-    fragment_embed(Path, SpreadType, ScopeType);
-fragment_embed(Path, SpreadType, {non_null, ScopeType}) ->
+    fragment_embed(EP, Path, SpreadType, ScopeType);
+fragment_embed(EP, Path, SpreadType, {non_null, ScopeType}) ->
     %% Check congruences of non-null values
-    fragment_embed(Path, SpreadType, ScopeType);
-fragment_embed(Path, {non_null, SpreadType}, ScopeType) ->
+    fragment_embed(EP, Path, SpreadType, ScopeType);
+fragment_embed(EP, Path, {non_null, SpreadType}, ScopeType) ->
     %% Check congruences of non-null values
-    fragment_embed(Path, SpreadType, ScopeType);
+    fragment_embed(EP, Path, SpreadType, ScopeType);
 %% Real concrete output objects/negative polarity checks
-fragment_embed(_Path, #object_type { id = Ty },
+fragment_embed(_EP, _Path, #object_type { id = Ty },
                       #object_type { id = Ty  }) ->
     %% Object spread in Object scope requires a perfect match
     ok;
-fragment_embed(Path, #object_type { id = SpreadTy },
+fragment_embed(_EP, Path, #object_type { id = SpreadTy },
                      #object_type { id = ScopeTy  }) ->
     %% Object spread in Object scope requires a perfect match
     err(Path, {fragment_spread, SpreadTy, ScopeTy});
-fragment_embed(Path, #object_type { id = ID },
+fragment_embed(_EP, Path, #object_type { id = ID },
                      #union_type { id = UID,
                                    types = ScopeTypes }) ->
     case lists:member(ID, ScopeTypes) of
         true -> ok;
         false -> err(Path, {not_union_member, ID, UID})
     end;
-fragment_embed(Path, #object_type { id = ID,
+fragment_embed(_EP, Path, #object_type { id = ID,
                                     interfaces = IFaces },
                      #interface_type { id = IID }) ->
     case lists:member(IID, IFaces) of
         true -> ok;
         false -> err(Path, {not_interface_member, ID, IID})
     end;
-fragment_embed(Path, #interface_type { id = IID },
+fragment_embed(_EP, Path, #interface_type { id = IID },
                      #object_type { id = OID, interfaces = IFaces }) ->
     case lists:member(IID, IFaces) of
         true -> ok;
         false -> err(Path, {not_interface_embedder, IID, OID})
     end;
-fragment_embed(Path, #interface_type { id = SpreadID },
+fragment_embed(EP, Path, #interface_type { id = SpreadID },
                      #interface_type { id = ScopeID }) ->
-    SpreadTypes = graphql_schema:lookup_interface_implementors(SpreadID),
-    ScopeTypes = graphql_schema:lookup_interface_implementors(ScopeID),
+    SpreadTypes = graphql_schema:lookup_interface_implementors(EP, SpreadID),
+    ScopeTypes = graphql_schema:lookup_interface_implementors(EP, ScopeID),
     case ordsets:intersection(
            ordsets:from_list(SpreadTypes),
            ordsets:from_list(ScopeTypes)) of
@@ -516,9 +518,9 @@ fragment_embed(Path, #interface_type { id = SpreadID },
         [] ->
             err(Path, {no_common_object, SpreadID, ScopeID})
     end;
-fragment_embed(Path, #interface_type { id = SpreadID },
+fragment_embed(EP, Path, #interface_type { id = SpreadID },
                      #union_type{ id = ScopeID, types = ScopeMembers }) ->
-    SpreadTypes = graphql_schema:lookup_interface_implementors(SpreadID),
+    SpreadTypes = graphql_schema:lookup_interface_implementors(EP, SpreadID),
     case ordsets:intersection(
            ordsets:from_list(SpreadTypes),
            ordsets:from_list(ScopeMembers)) of
@@ -527,15 +529,15 @@ fragment_embed(Path, #interface_type { id = SpreadID },
         [] ->
             err(Path, {no_common_object, SpreadID, ScopeID})
     end;
-fragment_embed(Path, #union_type { id = UID, types = UMembers },
+fragment_embed(_EP, Path, #union_type { id = UID, types = UMembers },
                      #object_type { id = OID }) ->
     case lists:member(OID, UMembers) of
         true -> ok;
         false -> err(Path, {not_union_embedder, UID, OID})
     end;
-fragment_embed(Path, #union_type { id = SpreadID, types = SpreadMembers },
+fragment_embed(EP, Path, #union_type { id = SpreadID, types = SpreadMembers },
                      #interface_type { id = ScopeID }) ->
-    ScopeTypes = graphql_schema:lookup_interface_implementors(ScopeID),
+    ScopeTypes = graphql_schema:lookup_interface_implementors(EP, ScopeID),
     case ordsets:intersection(
            ordsets:from_list(SpreadMembers),
            ordsets:from_list(ScopeTypes)) of
@@ -544,7 +546,7 @@ fragment_embed(Path, #union_type { id = SpreadID, types = SpreadMembers },
         [] ->
             err(Path, {no_common_object, SpreadID, ScopeID})
     end;
-fragment_embed(Path, #union_type { id = SpreadID, types = SpreadMembers },
+fragment_embed(_EP, Path, #union_type { id = SpreadID, types = SpreadMembers },
                      #union_type { id = ScopeID,  types = ScopeMembers }) ->
     case ordsets:intersection(
            ordsets:from_list(SpreadMembers),
@@ -637,8 +639,8 @@ judge(Ctx, Path, Value, {list, _} = SType) ->
     %% If the value is not of list-type, but we expect a list,
     %% then hoist the value into a singleton list and recurse
     judge(Ctx, Path, [Value], SType);
-judge(_Ctx, Path, {enum, N}, SType) ->
-    case graphql_schema:lookup_enum_type(N) of
+judge(_Ctx=#{endpoint_context:=EP}, Path, {enum, N}, SType) ->
+    case graphql_schema:lookup_enum_type(EP, N) of
         not_found ->
             err(Path, {unknown_enum, N});
         SType ->
@@ -648,11 +650,11 @@ judge(_Ctx, Path, {enum, N}, SType) ->
                        #{ document => Other,
                           schema => SType }})
     end;
-judge(#{ varenv := VarEnv }, Path, {input_object, _} = InputObj, SType) ->
+judge(#{ varenv := VarEnv, endpoint_context := EP }, Path, {input_object, _} = InputObj, SType) ->
     case SType of
         #input_object_type{} = IOType ->
             Coerced = coerce_input_object(Path, InputObj),
-            check_input_object(Path, VarEnv, IOType, Coerced);
+            check_input_object(EP, Path, VarEnv, IOType, Coerced);
         _OtherType ->
             err(Path, {type_mismatch, #{ document => InputObj, schema => SType }})
     end;

@@ -3,16 +3,16 @@
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
--export([inject/2]).
-inject(BaseMapping, {ok, {document, Entries}}) ->
+-export([inject/3]).
+inject(EP, BaseMapping, {ok, {document, Entries}}) ->
     Mapping = handle_mapping(BaseMapping),
     {SchemaEntries, Other} = lists:partition(fun schema_defn/1, Entries),
     report_other_entries(Other),
-    Defs = [mk(Mapping, E) || E <- SchemaEntries],
+    Defs = [mk(EP, Mapping, E) || E <- SchemaEntries],
     [inject(Def) || Def <- Defs],
     ok.
 
-mk(#{ scalars := Sc }, #p_scalar { id = ID, annotations = Annots }) ->
+mk(_EP, #{ scalars := Sc }, #p_scalar { id = ID, annotations = Annots }) ->
     Name = name(ID),
     Description = description(Annots),
     Mod = mapping(Name, Sc),
@@ -22,20 +22,20 @@ mk(#{ scalars := Sc }, #p_scalar { id = ID, annotations = Annots }) ->
        annotations => annotations(Annots),
        resolve_module => Mod
       }};
-mk(#{ unions := Us }, #p_union { id = ID,
+mk(EP, #{ unions := Us }, #p_union { id = ID,
                                  annotations = Annots,
                                  members = Ms }) ->
     Name = name(ID),
     Description = description(Annots),
     Mod = mapping(Name, Us),
-    Types = [handle_type(M) || M <- Ms],
+    Types = [handle_type(EP, M) || M <- Ms],
     {union, #{
        id => Name,
        description => Description,
        annotations => annotations(Annots),
        resolve_module => Mod,
        types => Types }};
-mk(#{ objects := OM }, #p_type {
+mk(EP, #{ objects := OM }, #p_type {
            id = ID,
            annotations = Annots,
            fields = Fs,
@@ -43,7 +43,7 @@ mk(#{ objects := OM }, #p_type {
     Name = name(ID),
     Description = description(Annots),
     Mod = mapping(Name, OM),
-    Fields = fields(Fs),
+    Fields = fields(EP, Fs),
     Implements = [name(I) || I <- Impls],
     {object, #{
        id => Name,
@@ -52,7 +52,7 @@ mk(#{ objects := OM }, #p_type {
        annotations => annotations(Annots),
        resolve_module => Mod,
        interfaces => Implements }};
-mk(#{ enums := En }, #p_enum { id = ID,
+mk(_EP, #{ enums := En }, #p_enum { id = ID,
                                annotations = Annots,
                                variants = Vs }) ->
     Name = name(ID),
@@ -65,26 +65,26 @@ mk(#{ enums := En }, #p_enum { id = ID,
        annotations => annotations(Annots),
        values => Variants,
        resolve_module => Mod }};
-mk(_Map, #p_input_object {
+mk(EP, _Map, #p_input_object {
             id = ID,
             annotations = Annots,
             defs = Ds }) ->
     Name = name(ID),
     Description = description(Annots),
-    Defs = input_defs(Ds),
+    Defs = input_defs(EP, Ds),
     {input_object, #{
        id => Name,
        description => Description,
        annotations => annotations(Annots),
        fields => Defs }};
-mk(#{ interfaces := IF }, #p_interface {
+mk(EP, #{ interfaces := IF }, #p_interface {
                             id = ID,
                             annotations = Annots,
                             fields = FS }) ->
     Name = name(ID),
     Description = description(Annots),
     Mod = mapping(Name, IF),
-    Fields = fields(FS),
+    Fields = fields(EP, FS),
     {interface, #{
        id => Name,
        description => Description,
@@ -93,11 +93,11 @@ mk(#{ interfaces := IF }, #p_interface {
        fields => Fields
       }}.
 
-fields(Raw) ->
-    maps:from_list([field(R) || R <- Raw]).
+fields(EP, Raw) ->
+    maps:from_list([field(EP, R) || R <- Raw]).
 
-input_defs(Raw) ->
-    maps:from_list([input_def(D) || D <- Raw]).
+input_defs(EP, Raw) ->
+    maps:from_list([input_def(EP, D) || D <- Raw]).
 
 inject(Def) ->
     ok = graphql:insert_schema_definition(Def).
@@ -147,32 +147,32 @@ description(Annots) ->
             find(<<"text">>, Args)
     end.
 
-input_def(#p_input_value { id = ID,
+input_def(EP, #p_input_value { id = ID,
                            annotations = Annots,
                            default = Default,
                            type = Type }) ->
     Name = name(ID),
     Description = description(Annots),
     K = binary_to_atom(Name, utf8),
-    V = #{ type => handle_type(Type),
+    V = #{ type => handle_type(EP, Type),
            default => Default,
            annotations => annotations(Annots),
            description => Description },
     {K, V}.
 
-field(#p_field_def{ id = ID, annotations = Annots, type = T, args = Args }) ->
+field(EP, #p_field_def{ id = ID, annotations = Annots, type = T, args = Args }) ->
     Name = name(ID),
     Description = description(Annots),
     %% We assume schemas are always under our control, so this is safe
     K = binary_to_atom(Name, utf8),
-    V = #{ type => handle_type(T),
+    V = #{ type => handle_type(EP, T),
            description => Description,
            annotations => annotations(Annots),
-           args => handle_args(Args)},
+           args => handle_args(EP, Args)},
     {K, V}.
 
-handle_args(Args) ->
-    maps:from_list([input_def(A) || A <- Args]).
+handle_args(EP, Args) ->
+    maps:from_list([input_def(EP, A) || A <- Args]).
 
 find(_T, []) -> not_found;
 find(T, [{{name, _, T}, V}|_]) -> V;
@@ -196,13 +196,13 @@ mapi(F, L) -> mapi(F, L, 0).
 mapi(_F, [], _) -> [];
 mapi(F,  [X|Xs], K) -> [F(X, K) | mapi(F, Xs, K+1)].
 
-handle_type({non_null, T}) -> {non_null, handle_type(T)};
-handle_type({list, T}) -> {list, handle_type(T)};
-handle_type({name, _, T}) -> binary_to_atom(T, utf8);
-handle_type({scalar, Name}) ->
-    #scalar_type{} = Ty = graphql_schema:get(Name),
-    handle_type(Ty);
-handle_type(#scalar_type{ id = Id }) -> binary_to_atom(Id, utf8).
+handle_type(EP, {non_null, T}) -> {non_null, handle_type(EP, T)};
+handle_type(EP, {list, T}) -> {list, handle_type(EP, T)};
+handle_type(_EP, {name, _, T}) -> binary_to_atom(T, utf8);
+handle_type(EP, {scalar, Name}) ->
+    #scalar_type{} = Ty = graphql_schema:get(EP, Name),
+    handle_type(EP, Ty);
+handle_type(_EP, #scalar_type{ id = Id }) -> binary_to_atom(Id, utf8).
 
 mapping(Name, Map) ->
     case maps:get(Name, Map, undefined) of

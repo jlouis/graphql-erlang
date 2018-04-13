@@ -3,7 +3,7 @@
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
--export([x/1, x/2]).
+-export([x/2, x/3]).
 -export([builtin_input_coercer/1]).
 
 -type source() :: reference().
@@ -35,13 +35,14 @@
           work = #{} :: #{ source() => defer_closure() },
           timeout :: non_neg_integer() }).
 
--spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
-x(X) -> x(#{ params => #{} }, X).
+-spec x(graphql_schema:endpoint_context(), graphql:ast()) -> #{ atom() => graphql:json() }.
+x(EP, X) -> x(EP, #{ params => #{} }, X).
 
--spec x(term(), graphql:ast()) -> #{ atom() => graphql:json() }.
-x(Ctx, X) ->
+-spec x(graphql_schema:endpoint_context(), term(), graphql:ast()) -> #{ atom() => graphql:json() }.
+x(EP, Ctx, X) ->
     Canon = canon_context(Ctx),
-    execute_request(Canon, X).
+    EPCtx = Canon#{endpoint_context => EP},
+    execute_request(EPCtx, X).
 
 execute_request(InitialCtx, {document, Operations}) ->
     {Frags, Ops} = lists:partition(fun (#frag {}) -> true;(_) -> false end, Operations),
@@ -199,7 +200,7 @@ execute_sset_field(Path, Ctx, Fields, Type, Value) ->
     Missing = #{},
     execute_sset_field(Path, Ctx, Fields, Type, Value, Map, Errs, Work, Missing).
 
-execute_sset_field(_Path, _Ctx, [], _Type, _Value, Map, Errs, Work, Missing) ->
+execute_sset_field(__Path, _Ctx, [], _Type, _Value, Map, Errs, Work, Missing) ->
     Result = maps:from_list(lists:reverse(Map)),
     case Work#work.items of
         [] ->
@@ -248,7 +249,7 @@ lookup_field_name(<<"__typename">>, _) -> typename;
 lookup_field_name(N, #object_type { fields = FS }) ->
     maps:get(N, FS, not_found).
 
-view_include_skip_directives(_Ctx, []) -> include;
+view_include_skip_directives(__Ctx, []) -> include;
 view_include_skip_directives(Ctx, [#directive { id = ID } = D | Next]) ->
     Args = resolve_args(Ctx, D),
     case {name(ID), Args} of
@@ -437,12 +438,13 @@ report_wrong_return(Obj, Name, Fun, Val) ->
        Fun,
        Val]).
 
-resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectType, Value, Name, FAns, Fun, Args) ->
+resolve_field_value(Ctx=#{endpoint_context:=EP}, #object_type { id = OID, annotations = OAns} = ObjectType, Value, Name, FAns, Fun, Args) ->
     CtxAnnot = Ctx#{
         field => Name,
         field_annotations => FAns,
         object_type => OID,
-        object_annotations => OAns
+        object_annotations => OAns,
+        endpoint_context => EP
     },
     try (if
         is_function(Fun, 4) -> Fun(CtxAnnot, Value, Name, Args);
@@ -488,11 +490,11 @@ handle_resolver_result({defer, Token, DeferStateMap}) ->
     {defer, Token, DeferStateMap};
 handle_resolver_result(_Unknown) -> wrong.
 
-complete_value(Path, Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
+complete_value(Path, Ctx=#{endpoint_context:=EP}, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
     error_logger:warning_msg(
       "Canary: Type lookup during value completion for: ~p~n",
       [Ty]),
-    SchemaType = graphql_schema:get(Ty),
+    SchemaType = graphql_schema:get(EP, Ty),
     complete_value(Path, Ctx, SchemaType, Fields, {ok, Value});
 complete_value(Path, #{ defer_target := Upstream } = Ctx,
                {non_null, InnerTy}, Fields, Result) ->
@@ -528,14 +530,14 @@ complete_value(Path, Ctx, {list, InnerTy}, Fields, {ok, Value}) ->
     complete_value_list(Path, Ctx, InnerTy, Fields, Value);
 complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
     complete_value_scalar(Path, ID, RM, Value);
-complete_value(Path, _Ctx, #enum_type { id = ID,
+complete_value(Path, _Ctx=#{endpoint_context:=EP}, #enum_type { id = ID,
                                         resolve_module = RM},
                _Fields, {ok, Value}) ->
     case complete_value_scalar(Path, ID, RM, Value) of
         {ok, null, Errors} ->
             {ok, null, Errors};
         {ok, Result, Errors} ->
-            case graphql_schema:lookup_enum_type(Result) of
+            case graphql_schema:lookup_enum_type(EP, Result) of
                 #enum_type { id = ID } ->
                     {ok, Result, Errors};
                 #enum_type {} ->
@@ -555,20 +557,20 @@ complete_value(Path, _Ctx, _Ty, _Fields, {error, Reason}) ->
     null(Path, Reason).
 
 %% Complete an abstract value
-complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value}) ->
-    case resolve_abstract_type(Resolver, Value) of
+complete_value_abstract(Path, Ctx=#{endpoint_context:=EP}, Resolver, Fields, {ok, Value}) ->
+    case resolve_abstract_type(EP, Resolver, Value) of
         {ok, ResolvedType} ->
             complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
         {error, Reason} ->
             null(Path, Reason)
     end.
 
-resolve_abstract_type(Module, Value) when is_atom(Module) ->
-    resolve_abstract_type(fun Module:execute/1, Value);
-resolve_abstract_type(Resolver, Value) when is_function(Resolver, 1) ->
+resolve_abstract_type(EP, Module, Value) when is_atom(Module) ->
+    resolve_abstract_type(EP, fun Module:execute/1, Value);
+resolve_abstract_type(EP, Resolver, Value) when is_function(Resolver, 1) ->
     try Resolver(Value) of
         {ok, Ty} ->
-            Obj = #object_type{} = graphql_schema:get(binarize(Ty)),
+            Obj = #object_type{} = graphql_schema:get(EP, binarize(Ty)),
             {ok, Obj};
         {error, Reason} ->
             {error, {type_resolver_error, Reason}}
@@ -863,25 +865,25 @@ resolve_args_(Ctx, [{ID, Val} | As], Acc) ->
 %%
 %% For a discussion about the Pet -> [Pet] coercion in the
 %% specification, see (Oct2016 Section 3.1.7)
-var_coerce(S, T, V) when is_binary(S)   ->
-    X = graphql_schema:lookup(S),
-    var_coerce(X, T, V);
-var_coerce(S, T, V) when is_binary(T)   ->
-    X = graphql_schema:lookup(T),
-    var_coerce(S, X, V);
-var_coerce(Tau, Tau, Value)             -> Value;
-var_coerce({non_null, Tau}, Tau, Value) -> Value;
-var_coerce(Tau, {list, SType}, Value)   -> [var_coerce(Tau, SType, Value)].
+var_coerce(EP, S, T, V) when is_binary(S)   ->
+    X = graphql_schema:lookup(EP, S),
+    var_coerce(EP, X, T, V);
+var_coerce(EP, S, T, V) when is_binary(T)   ->
+    X = graphql_schema:lookup(EP, T),
+    var_coerce(EP, S, X, V);
+var_coerce(_EP, Tau, Tau, Value)             -> Value;
+var_coerce(_EP, {non_null, Tau}, Tau, Value) -> Value;
+var_coerce(EP, Tau, {list, SType}, Value)   -> [var_coerce(EP, Tau, SType, Value)].
 
 %% Produce a valid value for an argument.
 value(Ctx, {Ty, Val})                     -> value(Ctx, Ty, Val);
 value(Ctx, #{ type := Ty, value := Val }) -> value(Ctx, Ty, Val).
 
-value(#{ params := Params } = _Ctx, SType, {var, ID, DType}) ->
+value(#{ params := Params,  endpoint_context := EP } = _Ctx, SType, {var, ID, DType}) ->
     %% Parameter expansion and type check is already completed
     %% at this stage
     Value = maps:get(name(ID), Params),
-    var_coerce(DType, SType, Value);
+    var_coerce(EP, DType, SType, Value);
 value(_Ctx, _Ty, null) ->
     null;
 value(Ctx, {non_null, Ty}, Val) ->
@@ -892,7 +894,7 @@ value(Ctx, {list, Ty}, Val) ->
                L when is_list(L)  -> L
            end,
     [value(Ctx, Ty, V) || V <- Vals];
-value(Ctx, Ty, Val) ->
+value(Ctx=#{endpoint_context:=EP}, Ty, Val) ->
     case Ty of
         #input_object_type { fields = FieldEnv } ->
             Obj = case Val of
@@ -908,7 +910,7 @@ value(Ctx, Ty, Val) ->
         #enum_type {} ->
             Val;
         Bin when is_binary(Bin) ->
-            LoadedTy = graphql_schema:get(Bin),
+            LoadedTy = graphql_schema:get(EP, Bin),
             value(Ctx, LoadedTy, Val)
     end.
 
