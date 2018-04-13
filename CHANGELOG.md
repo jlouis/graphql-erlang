@@ -13,6 +13,7 @@ the compatibility issues you are likely to encounter.
 ### Fix
 
 - The `key` field in errors are now an atom so it can be JSON encoded.
+- The same `enum` value can now be used in multiple `enum` types.
 
 ## [0.12.0] 2018-02-23 Flag day release, broke compatibility backwards!
 
