@@ -5,14 +5,15 @@
 -export([dump/1]).
 
 -spec dump(string()) -> ok.
-dump(FName) ->
-    Graph = x(),
+dump(FName) -> ep_dump(graphql:default_endpoint(), FName).
+ep_dump(EP, FName) ->
+    Graph = x(EP),
     file:write_file(FName, Graph).
 
-x() ->
+x(EP) ->
     H = header(),
     F = footer(),
-    Body = body(),
+    Body = body(EP),
     [H, Body, F].
 
 footer() -> "}\n".
@@ -30,8 +31,8 @@ header() ->
      "  nodesep=0.3;",
      "  remincross=true;"]).
 
-body() ->
-    Entries = graphql_schema:all(),
+body(EP) ->
+    Entries = graphql_schema:all(EP),
     Map = maps:from_list([{id(E), E} || E <- Entries]),
     [
       [format(entry(E, Map)) || E <- Entries],

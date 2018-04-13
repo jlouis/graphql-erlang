@@ -2,13 +2,13 @@
 
 -include("graphql_schema.hrl").
 
--export([x/0]).
+-export([x/1]).
 
--spec x() -> ok.
-x() ->
-    Objects = graphql_schema:all(),
+-spec x(graphql_schema:endpoint_context()) -> ok.
+x(EP) ->
+    Objects = graphql_schema:all(EP),
     try
-        [x(Obj) || Obj <- Objects],
+        [x(EP, Obj) || Obj <- Objects],
         ok
     catch
         throw:Error ->
@@ -20,8 +20,8 @@ x() ->
             exit(Error)
     end.
 
-x(Obj) ->
-    try validate(Obj) of
+x(EP, Obj) ->
+    try validate(EP, Obj) of
         ok -> ok
     catch
         throw:{invalid, Reason} ->
@@ -29,61 +29,61 @@ x(Obj) ->
     end.
 
 
-validate(#scalar_type {}) -> ok;
-validate(#root_schema {} = X) -> root_schema(X);
-validate(#object_type {} = X) -> object_type(X);
-validate(#enum_type {} = X) -> enum_type(X);
-validate(#interface_type {} = X) -> interface_type(X);
-validate(#union_type {} = X) -> union_type(X);
-validate(#input_object_type {} = X) -> input_object_type(X).
+validate(_EP, #scalar_type {}) -> ok;
+validate(EP, #root_schema {} = X) -> root_schema(EP, X);
+validate(EP, #object_type {} = X) -> object_type(EP, X);
+validate(EP, #enum_type {} = X) -> enum_type(EP, X);
+validate(EP, #interface_type {} = X) -> interface_type(EP, X);
+validate(EP, #union_type {} = X) -> union_type(EP, X);
+validate(EP, #input_object_type {} = X) -> input_object_type(EP, X).
 
-enum_type(#enum_type {}) ->
+enum_type(_EP, #enum_type {}) ->
     %% TODO: Validate values
     ok.
 
-input_object_type(#input_object_type { fields = FS }) ->
-    all(fun schema_input_type_arg/1, maps:to_list(FS)),
+input_object_type(EP, #input_object_type { fields = FS }) ->
+    all(EP, fun schema_input_type_arg/2, maps:to_list(FS)),
     ok.
 
-union_type(#union_type { types = Types }) ->
-    all(fun is_union_type/1, Types),
+union_type(EP, #union_type { types = Types }) ->
+    all(EP, fun is_union_type/2, Types),
     ok.
 
-interface_type(#interface_type { fields= FS }) ->
-    all(fun schema_field/1, maps:to_list(FS)),
+interface_type(EP, #interface_type { fields= FS }) ->
+    all(EP, fun schema_field/2, maps:to_list(FS)),
     ok.
 
-object_type(#object_type {
+object_type(EP, #object_type {
 	fields = FS,
 	interfaces = IFaces} = Obj) ->
-    all(fun is_interface/1, IFaces),
-    all(fun(IF) -> implements(lookup(IF), Obj) end, IFaces),
-    all(fun schema_field/1, maps:to_list(FS)),
+    all(EP, fun is_interface/2, IFaces),
+    all(EP, fun(EPi, IF) -> implements(lookup(EPi, IF), Obj) end, IFaces),
+    all(EP, fun schema_field/2, maps:to_list(FS)),
     ok.
 
-root_schema(#root_schema {
+root_schema(EP, #root_schema {
 	query = Q,
 	mutation = M,
 	subscription = S,
 	interfaces = IFaces }) ->
-    undefined_object(Q),
-    undefined_object(M),
-    undefined_object(S),
-    all(fun is_interface/1, IFaces),
+    undefined_object(EP, Q),
+    undefined_object(EP, M),
+    undefined_object(EP, S),
+    all(EP, fun is_interface/2, IFaces),
     ok.
     
-schema_field({_, #schema_field { ty = Ty, args = Args }}) ->
-    all(fun schema_input_type_arg/1, maps:to_list(Args)),
-    type(Ty),
+schema_field(EP, {_, #schema_field { ty = Ty, args = Args }}) ->
+    all(EP, fun schema_input_type_arg/2, maps:to_list(Args)),
+    type(EP, Ty),
     ok.
 
-schema_input_type_arg({_, #schema_arg { ty = Ty }}) ->
+schema_input_type_arg(EP, {_, #schema_arg { ty = Ty }}) ->
     %% TODO: Default check!
-    input_type(Ty),
+    input_type(EP, Ty),
     ok.
 
-undefined_object(undefined) -> ok;
-undefined_object(Obj) -> is_object(Obj).
+undefined_object(_EP, undefined) -> ok;
+undefined_object(EP, Obj) -> is_object(EP, Obj).
 
 implements(#interface_type { fields = IFFields } = IFace,
            #object_type { fields = ObjFields }) ->
@@ -115,28 +115,28 @@ implements_field_check([{IK, _} | _] = IL, [{OK, _} | OS]) when IK > OK ->
 implements_field_check([{IK, _} | _], [{OK, _} | _]) when IK < OK ->
     {error, {field_not_found_in_object, IK}}.
     
-is_interface(IFace) ->
-    case lookup(IFace) of
+is_interface(EP, IFace) ->
+    case lookup(EP, IFace) of
         #interface_type{} -> ok;
         _ -> err({not_interface, IFace})
     end.
 
-is_object(Obj) ->
-    case lookup(Obj) of
+is_object(EP, Obj) ->
+    case lookup(EP, Obj) of
         #object_type{} -> ok;
         _ -> err({not_object, Obj})
     end.
 
-is_union_type(Obj) ->
-    case lookup(Obj) of
+is_union_type(EP, Obj) ->
+    case lookup(EP, Obj) of
         #object_type{} -> ok;
         _ -> err({not_union_type, Obj})
     end.
 
-type({non_null, T}) -> type(T);
-type({list, T}) -> type(T);
-type(X) when is_binary(X) ->
-    case lookup(X) of
+type(EP, {non_null, T}) -> type(EP, T);
+type(EP, {list, T}) -> type(EP, T);
+type(EP, X) when is_binary(X) ->
+    case lookup(EP, X) of
         #input_object_type {} ->
             err({invalid_output_type, X});
 
@@ -144,10 +144,10 @@ type(X) when is_binary(X) ->
             ok
     end.
 
-input_type({non_null, T}) -> input_type(T);
-input_type({list, T}) -> input_type(T);
-input_type(X) when is_binary(X) ->
-    case lookup(X) of
+input_type(EP, {non_null, T}) -> input_type(EP, T);
+input_type(EP, {list, T}) -> input_type(EP, T);
+input_type(EP, X) when is_binary(X) ->
+    case lookup(EP, X) of
         #input_object_type {} -> ok;
         #enum_type {} -> ok;
         #scalar_type {} -> ok;
@@ -155,13 +155,13 @@ input_type(X) when is_binary(X) ->
             err({invalid_input_type, X})
     end.
 
-all(_F, []) -> ok;
-all(F, [E|Es]) ->
-    ok = F(E),
-    all(F, Es).
+all(_EP, _F, []) -> ok;
+all(EP, F, [E|Es]) ->
+    ok = F(EP, E),
+    all(EP, F, Es).
 
-lookup(Key) ->
-    case graphql_schema:lookup(Key) of
+lookup(EP, Key) ->
+    case graphql_schema:lookup(EP, Key) of
         not_found -> err({not_found, Key});
         X -> X
     end.

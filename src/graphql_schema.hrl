@@ -15,7 +15,7 @@
 -type location() :: query | mutation | field
                   | fragment_definition | fragment_spread | inline_fragment.
 
--type resolver() :: fun ((ctx, term(), resolver_args()) -> term()).
+-type resolver() :: fun ((ctx(), term(), resolver_args()) -> term()).
 
 -record(enum_value,
         { val :: binary(),
