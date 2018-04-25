@@ -207,9 +207,9 @@ type_check_err_msg(non_null) ->
 type_check_err_msg({enum_not_found, Ty, Val}) ->
     X = io_lib:format("The value ~p is not a valid enum value for type ", [Val]),
     [X, graphql_err:format_ty(Ty)];
-type_check_err_msg({param_mismatch, {enum, Ty, OtherTy}}) ->
-    ["The enum value is of type ", graphql_err:format_ty(OtherTy),
-     " but used in a context where an enum value"
+type_check_err_msg({param_mismatch, {enum, Ty, OtherTys}}) ->
+    ["The enum value matches types ", graphql_err:format_ty(lists:sort(OtherTys)),
+     " but was used in a context where an enum value"
      " of type ", graphql_err:format_ty(Ty), " was expected"];
 type_check_err_msg({param_mismatch, Ty, V}) ->
     io_lib:format("The parameter value ~p is not of type ~p", [V, graphql_err:format_ty(Ty)]);
