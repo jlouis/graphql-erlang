@@ -4,6 +4,7 @@
 -include("graphql_schema.hrl").
 
 -export([inject/2]).
+
 inject(BaseMapping, {ok, {document, Entries}}) ->
     Mapping = handle_mapping(BaseMapping),
     {SchemaEntries, Other} = lists:partition(fun schema_defn/1, Entries),
@@ -100,7 +101,13 @@ input_defs(Raw) ->
     maps:from_list([input_def(D) || D <- Raw]).
 
 inject(Def) ->
-    ok = graphql:insert_schema_definition(Def).
+    case graphql:insert_schema_definition(Def) of
+        ok ->
+            ok;
+        {error, {already_exists, Entry}} ->
+            exit({entry_already_exists_in_schema, Entry})
+    end.
+
 
 schema_defn(#p_type{}) -> true;
 schema_defn(#p_input_object{}) -> true;

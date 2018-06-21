@@ -42,10 +42,12 @@ reset() ->
     ok = graphql_builtins:standard_types_inject(),
     ok.
 
--spec insert(any()) -> true.
-insert(S) -> insert(S, #{ canonicalize => true }).
+-spec insert(any()) -> ok.
+insert(S) ->
+    insert(S, #{ canonicalize => true }).
 
--spec insert(any(), any()) -> true | false.
+-spec insert(any(), any()) ->
+  ok | {error, Reason :: term()}.
 insert(S, #{ canonicalize := true }) ->
     try graphql_schema_canonicalize:x(S) of
         Rec ->
@@ -53,7 +55,7 @@ insert(S, #{ canonicalize := true }) ->
                 true -> ok;
                 false ->
                     Identify = fun({_, #{ id := ID }}) -> ID end,
-                    {error, already_exists, Identify(S)}
+                    {error, {already_exists, Identify(S)}}
             end
     catch
         Class:Reason ->
@@ -83,7 +85,7 @@ load(S) ->
 insert_new_(Rec) ->
     case gen_server:call(?MODULE, {insert_new, Rec}) of
         true -> ok;
-        false -> {error, already_exists, id(Rec)}
+        false -> {error, {already_exists, id(Rec)}}
     end.
 
 -spec all() -> [any()].
@@ -173,9 +175,10 @@ handle_call({insert, X}, _From, State) ->
         {enum, Tab, Enum} ->
             ets:insert(Tab, X),
             insert_enum(Enum, X),
-            {reply, true, State};
+            {reply, ok, State};
         Tab ->
-            {reply, ets:insert(Tab, X), State}
+            true = ets:insert(Tab, X),
+            {reply, ok, State}
     end;
 handle_call({insert_new, X}, _From, State) ->
     case determine_table(X) of
