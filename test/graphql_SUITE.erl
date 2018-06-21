@@ -59,9 +59,11 @@ groups() ->
                hello_world_query,
                user_queries ] },
 
-    SchemaTest = {schema_test, [shuffle, parallel], [
-        schema_test
-    ]},
+    SchemaTest = {schema_test, [shuffle, parallel],
+                  [
+                   schema_test,
+                   double_iface
+                  ]},
 
     Introspection = {introspection, [shuffle, parallel], [
        is_supports_type
@@ -127,7 +129,29 @@ parse_schema(Config) ->
             ct:fail(Reason)
     end.
 
+double_iface(Config) ->
+    FName = filename:join([?config(data_dir, Config), "double_iface.spec"]),
+    {ok, Data} = file:read_file(FName),
+    case graphql:load_schema(#{ scalars =>
+                                    #{ default => scalar_resource },
+                                interfaces =>
+                                    #{ 'Node' => node_resource}
+                             },
+                             Data) of
+        ok ->
+            case graphql:validate_schema() of
+                ok ->
+                    ct:fail(double_iface_schema_validated);
+                {error, _Reason} ->
+                    ok
+            end;
+        {error, Reason} ->
+            ok
+    end.
+    
 %% -- SCHEMA TEST --------------------------------
+
+
 schema_test(Config) ->
     Q =
       "{ feed { id, title }, "
