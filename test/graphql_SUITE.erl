@@ -132,20 +132,16 @@ parse_schema(Config) ->
 double_iface(Config) ->
     FName = filename:join([?config(data_dir, Config), "double_iface.spec"]),
     {ok, Data} = file:read_file(FName),
-    case graphql:load_schema(#{ scalars =>
+    try graphql:load_schema(#{ scalars =>
                                     #{ default => scalar_resource },
                                 interfaces =>
                                     #{ 'Node' => node_resource}
                              },
                              Data) of
-        ok ->
-            case graphql:validate_schema() of
-                ok ->
-                    ct:fail(double_iface_schema_validated);
-                {error, _Reason} ->
-                    ok
-            end;
-        {error, Reason} ->
+        _Res ->
+            ct:fail(schema_load_passed_but_must_fail)
+    catch
+        exit:{entry_already_exists_in_schema, <<"Node">>} ->
             ok
     end.
     
