@@ -38,8 +38,8 @@ EscapedUnicode      = u{HexDigit}{HexDigit}{HexDigit}{HexDigit}
 EscapedCharacter    = ["\\\/bfnrt]
 StringCharacter     = ([^\"{_LineTerminator}]|\\{EscapedUnicode}|\\{EscapedCharacter})
 StringValue         = "{StringCharacter}*"
-MultiCharacter      = ([^`]|\\{EscapedUnicode}|\\{EscapedCharacter})
-MultiStringValue    = `{MultiCharacter}*`
+MultiCharacter      = ([^"]|"[^"]|""[^"]|\\{EscapedUnicode}|\\{EscapedCharacter})
+MultiStringValue    = """{MultiCharacter}*"""
 
 Rules.
 
@@ -48,7 +48,7 @@ Rules.
 {IntValue}		   : {token, {int, TokenLine, list_to_integer(TokenChars)}}.
 {FloatValue}	   : {token, {float, TokenLine, list_to_float(TokenChars)}}.
 {StringValue}	   : {token, {bstring, TokenLine, iolist_to_binary(unquote(TokenChars))}}.
-{MultiStringValue} : {token, {bstring, TokenLine, iolist_to_binary(unquote_ms(TokenChars))}}.
+{MultiStringValue} : {token, {bstring, TokenLine, iolist_to_binary(unquote(TokenChars))}}.
 {Name}		       : {token, identifier(TokenChars, TokenLine)}.
 
 Erlang code.
@@ -77,6 +77,3 @@ identifier(ID, TokenLine) -> {name, TokenLine, iolist_to_binary(ID)}.
 
 unquote(Str) ->
     string:strip(Str, both, $").
-
-unquote_ms(Str) ->
-    string:strip(Str, both, $`).

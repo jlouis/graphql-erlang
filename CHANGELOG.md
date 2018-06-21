@@ -10,6 +10,10 @@ the compatibility issues you are likely to encounter.
 
 ## [Unreleased]
 
+### NONCOMPATIBLE CHANGES
+- Multiline quotes are now """quoted""" rather than \`quoted\` to
+  match the GraphQL Jun2018 specification.
+
 ### Fix
 
 - The `key` field in errors are now an atom so it can be JSON encoded.
