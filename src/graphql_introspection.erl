@@ -40,7 +40,7 @@ augment_root(QName) ->
                                              <<"__schema">> => Schema,
                                              <<"__type">> => Type
                                             }},
-    true = graphql_schema:insert(Augmented, #{}),
+    ok = graphql_schema:insert(Augmented, #{}),
     ok.
 
 schema_resolver(_Ctx, none, #{}) ->
