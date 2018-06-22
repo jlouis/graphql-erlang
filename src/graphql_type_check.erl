@@ -91,6 +91,10 @@ clauses(Ctx, Path, [#op{} = Op | Next]) ->
 %% the function scheme, and error occurs.
 
 %% Determine the operation in the query which is the one to execute
+get_operation(FunEnv, <<>>, Params) ->
+    %% Supplying an empty string is the same as not supplying anything at all
+    %% This should solve problems where we have empty requests
+    get_operation(FunEnv, undefined, Params);
 get_operation(FunEnv, undefined, Params) ->
     case maps:to_list(FunEnv) of
         [] when Params == #{} ->

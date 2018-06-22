@@ -806,6 +806,12 @@ merge_selection_sets(Fields) ->
 
 get_operation(#{ operation_name := undefined }, [Op]) ->
     {ok, Op};
+%% A variant is that certain clients send the empty string as their
+%% operation. In this case, the system will fail to find the
+%% operationName. Solve this by allowing an empty operation as were it
+%% an undefined one, and fail if there is more than a single operation:
+get_operation(#{ operation_name := <<>> }, [Op]) ->
+    {ok, Op};
 get_operation(#{ operation_name := undefined }, _) ->
     {error, more_than_one_operation};
 get_operation(#{ operation_name := OpName }, Ops) ->

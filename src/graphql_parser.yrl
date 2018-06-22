@@ -56,6 +56,10 @@ OperationDefinition -> OperationType SelectionSet :
     #op { ty = '$1', selection_set = '$2' }.
 OperationDefinition -> OperationType Name SelectionSet :
     #op { ty = '$1', id = '$2', selection_set = '$3' }.
+OperationDefinition -> OperationType VariableDefinitions SelectionSet :
+    #op { ty = '$1', vardefs = '$2', selection_set = '$3' }.
+OperationDefinition -> OperationType VariableDefinitions Directives SelectionSet :
+    #op { ty = '$1', vardefs = '$2', directives = '$3', selection_set = '$4' }.
 OperationDefinition -> OperationType Name VariableDefinitions SelectionSet :
     #op { ty = '$1', id = '$2', vardefs = '$3', selection_set = '$4' }.
 OperationDefinition -> OperationType Name Directives SelectionSet :

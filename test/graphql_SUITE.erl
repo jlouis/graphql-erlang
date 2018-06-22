@@ -57,6 +57,7 @@ groups() ->
     Basic = {basic, [shuffle, parallel],
              [ hello_world,
                hello_world_query,
+               named_queries,
                user_queries ] },
 
     SchemaTest = {schema_test, [shuffle, parallel],
@@ -94,6 +95,22 @@ user_queries(Config) ->
     Query = "{ user(id: \"2\") { id name } }",
     #{ data :=
        #{ <<"user">> := #{ <<"id">> := <<"2">>, <<"name">> := <<"Marie">> }}} = th:x(Config, Query),
+    ok.
+
+named_queries(Config) ->
+    %% Standard query with a name
+    Query1 = "query Q($id : String) { user(id: $id) { id name } }",
+    %% The same query, but without a name. This seems to be allowed by
+    %% many clients in what they produce so make sure we accept it as well
+    %%
+    %% My Proglang heart weeps, but so be it...
+    Query2 = "query ($id : String) { user(id: $id) { id name } }",
+    Expected =
+        #{ data =>
+               #{ <<"user">> => #{ <<"id">> => <<"2">>,
+                                   <<"name">> => <<"Marie">> }}},
+    Expected = th:x(Config, Query1, <<"Q">>, #{ <<"id">> => <<"2">> }),
+    Expected = th:x(Config, Query2, <<>>, #{ <<"id">> => <<"2">> }),
     ok.
 
 %% -- SCHEMA --------------------------------
