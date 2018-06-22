@@ -8,7 +8,19 @@ Versioning generally follows semantic versioning, but breaks it for
 releases less than 1.0.0 in certain situations. The changelog mentions
 the compatibility issues you are likely to encounter.
 
-## [Unreleased]
+## [0.13.0] 2018-06-22 Flag day release, broke compatibility backwards!
+
+An ongoing effort to change the GraphQL server so it is closer to the
+Jun2018 GraphQL specification has started. The first of these changes
+is a smaller one:
+
+### Change
+
+- (#164) Change the multi-line quote from a backtick (\`) into three
+  double-quotes (""") in order to close the gap toward the Jun2018
+  specification. More changes are to follow to the Type Specification
+  Language to bring it into consistency with the spec, but this change
+  can be adapted early and fairly easily.
 
 ### Added
 
