@@ -8,6 +8,10 @@ Versioning generally follows semantic versioning, but breaks it for
 releases less than 1.0.0 in certain situations. The changelog mentions
 the compatibility issues you are likely to encounter.
 
+## [Unreleased]
+
+...
+
 ## [0.13.0] 2018-06-22 Flag day release, broke compatibility backwards!
 
 An ongoing effort to change the GraphQL server so it is closer to the
