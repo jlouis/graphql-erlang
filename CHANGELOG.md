@@ -14,7 +14,7 @@ An ongoing effort to change the GraphQL server so it is closer to the
 Jun2018 GraphQL specification has started. The first of these changes
 is a smaller one:
 
-### Change
+### Changed
 
 - (#164) Change the multi-line quote from a backtick (\`) into three
   double-quotes (""") in order to close the gap toward the Jun2018
