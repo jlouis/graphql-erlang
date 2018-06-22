@@ -10,7 +10,13 @@ the compatibility issues you are likely to encounter.
 
 ## [Unreleased]
 
-### Fix
+### Added
+
+- (#159) Add support for queries without a name: `query (...) { ... }`
+  since some Clients are doing this and it seems like it should be
+  supported.
+
+### Fixed
 
 - The `key` field in errors are now an atom so it can be JSON encoded.
 - The same `enum` value can now be used in multiple `enum` types.
