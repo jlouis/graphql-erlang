@@ -12,8 +12,6 @@ execute(_Ctx, #room { id = ID,
         <<"magic">> -> graphql:throw({error, unsupported});
         <<"leyline">> ->
             %% Force a crash to test the crash path
-            X = true,
-            X = false,
-            {ok, 1};
+            error(crash);
         <<"contents">> -> {ok, [dungeon:load(OID) || OID <- Contents]}
     end.
