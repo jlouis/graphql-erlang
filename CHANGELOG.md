@@ -22,6 +22,10 @@ the compatibility issues you are likely to encounter.
   make this consistent with the spec, you can define your own
   integer-scalar type if you need larger integers, but be cautious due
   to the 53 bit limit in JSON.
+- Strings are far more lenient in what they allow now. Integers and
+  floating points values are represented as their string
+  representations, and the booleans are turned into strings. This
+  follows consistency with the specification.
 
 ## [0.13.0] 2018-06-22 Flag day release, broke compatibility backwards!
 
