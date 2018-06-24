@@ -212,8 +212,6 @@ execute_sset_field(_Path, _Ctx, [], _Type, _Value, Map, Errs, Work, Missing) ->
 execute_sset_field(Path, Ctx, [{Key, [F|_] = Fields} | Next],
              Type, Value, Map, Errs, Work, Missing) ->
     case lookup_field(F, Type) of
-        null ->
-            execute_sset_field(Path, Ctx, Next, Type, Value, Map, Errs, Work, Missing);
         not_found ->
             execute_sset_field(Path, Ctx, Next, Type, Value, Map, Errs, Work, Missing);
         typename ->
