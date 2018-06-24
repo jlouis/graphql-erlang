@@ -10,7 +10,18 @@ the compatibility issues you are likely to encounter.
 
 ## [Unreleased]
 
-...
+### Changed
+
+- Coercions in the input and output direction for built-in-types are
+  now more lenient than it was. We allow more coercions than before,
+  and this makes us more consistent with the specification.
+- Int is an Int32 in particular now. We don't allow coercion outside
+  signed 32 bit integer space because many clients are unable to
+  process it, and the spec says that this is what one should do, even
+  though we can easily handle larger values in Erlang. However, to
+  make this consistent with the spec, you can define your own
+  integer-scalar type if you need larger integers, but be cautious due
+  to the 53 bit limit in JSON.
 
 ## [0.13.0] 2018-06-22 Flag day release, broke compatibility backwards!
 
