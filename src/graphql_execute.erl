@@ -212,8 +212,6 @@ execute_sset_field(_Path, _Ctx, [], _Type, _Value, Map, Errs, Work, Missing) ->
 execute_sset_field(Path, Ctx, [{Key, [F|_] = Fields} | Next],
              Type, Value, Map, Errs, Work, Missing) ->
     case lookup_field(F, Type) of
-        not_found ->
-            execute_sset_field(Path, Ctx, Next, Type, Value, Map, Errs, Work, Missing);
         typename ->
             execute_sset_field(Path, Ctx, Next, Type, Value,
                                [{Key, typename(Type)} | Map],
@@ -242,9 +240,8 @@ typename(#object_type { id = ID }) -> ID.
 lookup_field(#field { id = ID }, Obj) ->
     lookup_field_name(name(ID), Obj).
 
-lookup_field_name(<<"__typename">>, _) -> typename;
-lookup_field_name(N, #object_type { fields = FS }) ->
-    maps:get(N, FS, not_found).
+lookup_field_name(<<"__typename">>, _)             -> typename;
+lookup_field_name(N, #object_type { fields = FS }) -> maps:get(N, FS).
 
 view_include_skip_directives(_Ctx, []) -> include;
 view_include_skip_directives(Ctx, [#directive { id = ID } = D | Next]) ->
