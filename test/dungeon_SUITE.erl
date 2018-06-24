@@ -83,6 +83,7 @@ groups() ->
          , auxiliary_data
          , find_monster
          , find_monster_singleton
+         , invalid_scalar_int_input
          ]},
     Errors =
         {errors, [],
@@ -438,11 +439,32 @@ populate(Config) ->
         }}} = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => DupEnumInput }),
     ok.
 
+invalid_scalar_int_input(Config) ->
+    %% This is a test case where the creation of the input fails because
+    %% The given integers will throw away information
+
+    %% Base input is the following piece of data
+    Input = #{
+      <<"name">> => <<"Black Hobgoblin">>,
+      <<"color">> => <<"#000000">>,
+      <<"properties">> => [<<"DRAGON">>, <<"MURLOC">>],
+      <<"mood">> => <<"AGGRESSIVE">>
+    },
+
+    #{ errors := [_] } =
+        run(Config, <<"IntroduceMonster">>,
+            #{ <<"input">> => Input#{ <<"hitpoints">> => 5.3 }}),
+
+    #{ errors := [_] } =
+        run(Config, <<"IntroduceMonster">>,
+            #{ <<"input">> => Input#{ <<"hitpoints">> => 1 bsl 34 }}),
+    ok.
+
 direct_input(Config) ->
     Input = #{
       <<"name">> => <<"Albino Hobgoblin">>,
       <<"color">> => <<"#ffffff">>,
-      <<"hitpoints">> => 5,
+      <<"hitpoints">> => 5.0,
       <<"properties">> => [<<"DRAGON">>, <<"MURLOC">>],
       <<"mood">> => <<"AGGRESSIVE">>
     },
