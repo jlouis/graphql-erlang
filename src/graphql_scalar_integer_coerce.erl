@@ -25,5 +25,13 @@ output(<<"Int">>, I) when is_integer(I) ->
         true ->
             {ok, I}
     end;
+output(<<"Int">>, F) when is_float(F) ->
+    Trunc = trunc(F),
+    if
+        Trunc == F ->
+            {ok, Trunc};
+        true ->
+            {error, not_integer}
+    end;
 output(_,_) ->
     {ok, null}.
