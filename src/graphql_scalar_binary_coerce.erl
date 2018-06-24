@@ -5,4 +5,10 @@
 input(_, X) -> {ok, X}.
 
 output(_,B) when is_binary(B) -> {ok, B};
-output(_,_)                   -> {ok, null}.
+output(_,X) when is_list(X) ->
+    try iolist_to_binary(X) of
+        Val -> {ok, Val}
+    catch _:_ -> {error, not_coercible}
+    end;
+output(_, _) ->
+    {error, not_coercible}.
