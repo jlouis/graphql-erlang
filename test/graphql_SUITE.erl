@@ -63,7 +63,9 @@ groups() ->
     SchemaTest = {schema_test, [shuffle, parallel],
                   [
                    schema_test,
-                   double_iface
+                   double_iface,
+                   empty_union,
+                   non_unique_union
                   ]},
 
     Introspection = {introspection, [shuffle, parallel], [
@@ -152,7 +154,7 @@ double_iface(Config) ->
     try graphql:load_schema(#{ scalars =>
                                     #{ default => scalar_resource },
                                 interfaces =>
-                                    #{ 'Node' => node_resource}
+                                    #{ default => node_resource}
                              },
                              Data) of
         _Res ->
@@ -161,6 +163,49 @@ double_iface(Config) ->
         exit:{entry_already_exists_in_schema, <<"Node">>} ->
             ok
     end.
+
+empty_union(Config) ->
+    FName = filename:join([?config(data_dir, Config), "empty_union.spec"]),
+    {ok, Data} = file:read_file(FName),
+    try
+        case graphql:load_schema(#{ scalars =>
+                                        #{ default => scalar_resource },
+                                    interfaces =>
+                                        #{ default => node_resource}
+                                  },
+                                 Data) of
+            ok ->
+                ok = graphql:validate_schema(),
+                ct:fail(schema_load_passed_but_must_fail);
+            {error, _} ->
+                ok
+        end
+    catch
+        x ->
+            ok
+    end.
+
+non_unique_union(Config) ->
+    FName = filename:join([?config(data_dir, Config), "non_unique_union.spec"]),
+    {ok, Data} = file:read_file(FName),
+    try
+        graphql:load_schema(#{ scalars =>
+                                    #{ default => scalar_resource },
+                                interfaces =>
+                                    #{ default => node_resource },
+                                objects =>
+                                   #{ default => node_resource },
+                                unions =>
+                                   #{ default => union_resource }
+                             },
+                             Data),
+        ok = graphql:validate_schema(),
+        ct:fail(schema_load_passed_but_must_fail)
+    catch
+        exit:{schema_validation, <<"Loc">>, {union_not_unique, <<"Coord">>}} ->
+            ok
+    end.
+
     
 %% -- SCHEMA TEST --------------------------------
 

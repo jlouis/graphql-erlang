@@ -45,9 +45,16 @@ input_object_type(#input_object_type { fields = FS }) ->
     all(fun schema_input_type_arg/1, maps:to_list(FS)),
     ok.
 
+union_type(#union_type { types = [] } = Union) ->
+    err({empty_union, Union});
 union_type(#union_type { types = Types }) ->
     all(fun is_union_type/1, Types),
-    ok.
+    case unique([name(T) || T <- Types]) of
+        ok ->
+            ok;
+        {not_unique, X} ->
+            err({union_not_unique, X})
+    end.
 
 interface_type(#interface_type { fields= FS }) ->
     all(fun schema_field/1, maps:to_list(FS)),
@@ -165,6 +172,17 @@ lookup(Key) ->
         not_found -> err({not_found, Key});
         X -> X
     end.
+
+unique([]) -> ok;
+unique([X|Xs]) ->
+    case lists:member(X, Xs) of
+        false -> unique(Xs);
+        true ->
+            {not_unique, X}
+    end.
+
+name({name, _, N}) -> N;
+name(X) when is_binary(X) -> X.
     
 err(Reason) -> throw({invalid, Reason}).
 
@@ -176,6 +194,10 @@ err_fmt({schema_validation, Type, {not_found, NF}}) ->
     io_lib:format(
       "Schema Error in type ~p: it refers to a type ~p, "
       "which is not present in the schema", [Type, NF]);
+err_fmt({schema_validation, Type, {union_not_unique, X}}) ->
+    io_lib:format(
+      "Schema Error in type ~p: it contains duplicate types ~p",
+      [Type, X]);
 err_fmt(X) ->
     io_lib:format(
       "Unhandled schema validator error message: ~p", [X]).
