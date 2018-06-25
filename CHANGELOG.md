@@ -10,6 +10,12 @@ the compatibility issues you are likely to encounter.
 
 ## [Unreleased]
 
+### Fixed
+
+- (#167) Fix unions to be more consistent: disallow empty unions
+  (already covered but now tested), and force unique names on unions
+  (by means of a validation).
+
 ### Changed
 
 - Coercions in the input and output direction for built-in-types are
