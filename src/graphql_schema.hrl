@@ -48,7 +48,7 @@
           description :: binary(),
           resolve_type :: mod() | fun ((any()) -> {ok, atom()} | {error, term()}),
           annotations = #{} :: #{ binary() => any() },
-          types :: [binary()]
+          types :: [binary() | {name, non_neg_integer(), binary()}]
         }).
 -type union_type() :: #union_type{}.
 
