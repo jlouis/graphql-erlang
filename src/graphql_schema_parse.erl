@@ -13,84 +13,88 @@ inject(BaseMapping, {ok, {document, Entries}}) ->
     [inject(Def) || Def <- Defs],
     ok.
 
-mk(#{ scalars := Sc }, #p_scalar { id = ID, annotations = Annots }) ->
+mk(#{ scalars := Sc }, #p_scalar { description = Desc,
+                                   directives = Directives,
+                                   id = ID }) ->
     Name = name(ID),
-    Description = description(Annots),
     Mod = mapping(Name, Sc),
     {scalar, #{
        id => Name,
-       description => Description,
-       annotations => annotations(Annots),
+       directives => Directives,
+       description => description(Desc),
        resolve_module => Mod
       }};
 mk(#{ unions := Us }, #p_union { id = ID,
-                                 annotations = Annots,
+                                 directives = Directives,
+                                 description = Desc,
                                  members = Ms }) ->
     Name = name(ID),
-    Description = description(Annots),
     Mod = mapping(Name, Us),
     Types = [handle_type(M) || M <- Ms],
     {union, #{
        id => Name,
-       description => Description,
-       annotations => annotations(Annots),
+       description => description(Desc),
+       directives => Directives,
        resolve_module => Mod,
        types => Types }};
-mk(#{ objects := OM }, #p_type {
-           id = ID,
-           annotations = Annots,
-           fields = Fs,
-           implements = Impls }) ->
+mk(#{ objects := OM },
+   #p_object { id = ID,
+               description = Desc,
+               directives = Directives,
+               fields = Fs,
+               interfaces = Impls }) ->
     Name = name(ID),
-    Description = description(Annots),
     Mod = mapping(Name, OM),
     Fields = fields(Fs),
     Implements = [name(I) || I <- Impls],
     {object, #{
        id => Name,
-       description => Description,
+       description => description(Desc),
        fields => Fields,
-       annotations => annotations(Annots),
+       directives => Directives,
        resolve_module => Mod,
        interfaces => Implements }};
-mk(#{ enums := En }, #p_enum { id = ID,
-                               annotations = Annots,
-                               variants = Vs }) ->
+mk(#{ enums := En },
+   #p_enum {id = ID,
+            directives = Directives,
+            description = Desc,
+            variants = Vs }) ->
     Name = name(ID),
-    Description = description(Annots),
     Variants = variants(Vs),
     Mod = mapping(Name, En),
     {enum, #{
        id => Name,
-       description => Description,
-       annotations => annotations(Annots),
+       description => description(Desc),
+       directives => Directives,
        values => Variants,
        resolve_module => Mod }};
-mk(_Map, #p_input_object {
-            id = ID,
-            annotations = Annots,
-            defs = Ds }) ->
+mk(_Map,
+   #p_input_object { id = ID,
+                     description = Desc,
+                     directives = Directives,
+                     defs = Ds }) ->
     Name = name(ID),
-    Description = description(Annots),
     Defs = input_defs(Ds),
-    {input_object, #{
+    {input_object,
+     #{
        id => Name,
-       description => Description,
-       annotations => annotations(Annots),
+       description => description(Desc),
+       directives => Directives,
        fields => Defs }};
-mk(#{ interfaces := IF }, #p_interface {
-                            id = ID,
-                            annotations = Annots,
-                            fields = FS }) ->
+mk(#{ interfaces := IF },
+   #p_interface { id = ID,
+                  description = Description,
+                  directives = Directives,
+                  fields = FS }) ->
     Name = name(ID),
-    Description = description(Annots),
     Mod = mapping(Name, IF),
     Fields = fields(FS),
-    {interface, #{
+    {interface,
+     #{
        id => Name,
-       description => Description,
+       description => description(Description),
        resolve_module => Mod,
-       annotations => annotations(Annots),
+       directives => Directives,
        fields => Fields
       }}.
 
@@ -109,7 +113,7 @@ inject(Def) ->
     end.
 
 
-schema_defn(#p_type{}) -> true;
+schema_defn(#p_object{}) -> true;
 schema_defn(#p_input_object{}) -> true;
 schema_defn(#p_interface{}) -> true;
 schema_defn(#p_union{}) -> true;
@@ -136,65 +140,51 @@ handle_map(M) ->
 binarize(default) -> default;
 binarize(A) when is_atom(A) -> atom_to_binary(A, utf8).
 
-name({name, _, N}) -> N.
+name({name, _, N}) -> N;
+name(Str) when is_binary(Str) -> Str.
 
-annotations(As) ->
-    maps:from_list([annotation(A) || A <- As]).
-
-annotation(#annotation { id = {name, _, T}, args = Args }) ->
-    {T, maps:from_list([annotation_arg(Ag) || Ag <- Args])}.
-
-annotation_arg({{name, _, A}, Val}) -> {A, Val}.
-
-description(Annots) ->
-    case find(<<"description">>, Annots) of
-        not_found ->
-            <<"No description provided">>;
-        #annotation { args = Args } ->
-            find(<<"text">>, Args)
-    end.
+description(undefined) -> <<"No description provided">>;
+description(D) -> D.
 
 input_def(#p_input_value { id = ID,
-                           annotations = Annots,
+                           description = Desc,
+                           directives = Directives,
                            default = Default,
                            type = Type }) ->
     Name = name(ID),
-    Description = description(Annots),
     K = binary_to_atom(Name, utf8),
     V = #{ type => handle_type(Type),
            default => Default,
-           annotations => annotations(Annots),
-           description => Description },
+           directives => Directives,
+           description =>description(Desc) },
     {K, V}.
 
-field(#p_field_def{ id = ID, annotations = Annots, type = T, args = Args }) ->
+field(#p_field_def{ id = ID,
+                    description = Desc,
+                    directives = Directives,
+                    type = T,
+                    args = Args }) ->
     Name = name(ID),
-    Description = description(Annots),
     %% We assume schemas are always under our control, so this is safe
     K = binary_to_atom(Name, utf8),
     V = #{ type => handle_type(T),
-           description => Description,
-           annotations => annotations(Annots),
+           description => description(Desc),
+           directives => Directives,
            args => handle_args(Args)},
     {K, V}.
 
 handle_args(Args) ->
     maps:from_list([input_def(A) || A <- Args]).
 
-find(_T, []) -> not_found;
-find(T, [{{name, _, T}, V}|_]) -> V;
-find(T, [{{name, _, _}, _}|Next]) -> find(T, Next);
-find(T, [#annotation { id = {name, _, T}} = A|_]) -> A;
-find(T, [#annotation{}|Next]) -> find(T, Next).
-
 variants(Vs) ->
-    F = fun(#p_enum_value { id = V,
-                            annotations = Annots }, I) ->
-                K = binary_to_atom(V, utf8),
-                Description = description(Annots),
+    F = fun
+            (#p_enum_value { id = V,
+                             description = Desc,
+                             directives = Directives }, I) ->
+                K = binary_to_atom(name(V), utf8),
                 {K, #{ value => I,
-                       annotations => annotations(Annots),
-                       description => Description }}
+                       directives => Directives,
+                       description => description(Desc) }}
         end,
     maps:from_list(mapi(F, Vs)).
 

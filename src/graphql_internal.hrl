@@ -10,7 +10,7 @@
 
 -type value() ::
 	  name()
-    | null
+        | null
 	| {int, integer(), pos_integer()}
 	| {float, float(), pos_integer()}
 	| {string, binary(), pos_integer()}
@@ -68,7 +68,7 @@
         { ty :: undefined | operation_type(),
           id = 'ROOT' :: name() | 'ROOT',
           vardefs = [] :: [#vardef{}],
-          directives = [] :: [#directive{}],
+          directives = [] :: [directive()],
           selection_set = [] :: [#field{} | #frag_spread{}],
           schema = undefined :: 'undefined' | any()
         }).
@@ -80,66 +80,78 @@
 %%% --- Parsed Schemas
 %% Parsed schemas all starts with a p_ suffix
 
--record(annotation,
-        { id :: name(),
-          args = [] :: [any()]
-        }).
--type annotation() :: #annotation{}.
-
 -record(p_field_def,
-        { annotations = [] :: [annotation()],
-          id :: name(),
+        { id :: name(),
+          description = undefined :: 'undefined' | binary(),
           args = [] :: any(),
           type :: graphql_type(),
           directives = [] :: [any()]
         }).
 -type p_field_def() :: #p_field_def{}.
 
--record(p_type,
-        { annotations = [] :: [annotation()],
-          id :: name(),
+-record(p_object,
+        { id :: name(),
+          description = undefined :: 'undefined' | binary(),
           fields = [] :: [p_field_def()],
-          implements = [] :: [name()]
+          directives = [] :: [directive()],
+          interfaces = [] :: [name()]
         }).
 
 -record(p_input_value,
         { id :: name(),
-          annotations = [] :: any(),
+          description = undefined :: 'undefined' | binary(),
           default = null :: any(),
+          directives = [] :: [directive()],          
           type :: graphql_type()
         }).
 
 -record(p_interface,
         { id :: name(),
-          annotations = [] :: any(),
+          description = undefined :: 'undefined' | binary(),
+          directives = [] :: [directive()],
           fields = [] :: any()
         }).
 
 -record(p_union,
         { id :: name(),
-          annotations = [] :: any(),
+          description = undefined :: 'undefined' | binary(),
+          directives = [] :: [directive()],
           members :: [name()]
         }).
 
 -record(p_scalar,
         { id :: name(),
-          annotations = [] :: any()
+          description = undefined :: 'undefined' | binary(),
+          directives = [] :: [directive()]
         }).
 
 -record(p_enum_value,
-        { id :: binary(),
-          annotations = [] :: any() }).
+        { id :: name(),
+          description = undefined :: 'undefined' | binary(),
+          directives = [] :: [directive()]}).
+
 -type p_enum_value() :: #p_enum_value{}.
 
 -record(p_enum,
         { id :: name(),
-          annotations = [] :: any(),
+          description = undefined :: 'undefined' | binary(),
+          directives = [] :: [directive()],
           variants = [] :: [p_enum_value()]
         }).
 
 -record(p_input_object,
         { id :: name(),
+          description = undefined :: 'undefined' | binary(),
           defs = [] :: any(),
-          annotations = [] :: any()
+          directives = [] :: [directive()]
         }).
+
+-record(p_root_operation,
+        { op_type :: operation_type(),
+          name :: name()
+        }).
+
+-record(p_schema_definition,
+        { defs = [] :: [#p_root_operation{}],
+          directives = [] :: [directive()] }).
 

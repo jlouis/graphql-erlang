@@ -2,13 +2,13 @@ scalar ColorType
 scalar Color
 
 enum Mood {
-     +description(text: "A very calm monster")
-     TRANQUIL
-     +description(text: "A monster trying to avoid you")
+  "A very calm monster"
+  TRANQUIL
+     "A monster trying to avoid you"
      DODGY
-     +description(text: "This monster attacks every living being, including itself")
+     "This monster attacks every living being, including itself"
      AGGRESSIVE
-     +description(text: "Beast mode.  Even worse")
+     "Beast mode.  Even worse"
      BEAST
 }
 
@@ -47,7 +47,7 @@ type Monster implements Node {
   plushFactor : Float!
   spikyness : Float
   stats(
-    +description(text: "Return stats above this attack value")
+    "Return stats above this attack value"
     minAttack: Int = 0
    ) : [Stats]
   statsVariantOne : [Stats]!
@@ -143,7 +143,6 @@ type IntroduceItemPayload {
 }
 
 # Roots
-
 type MutationRoot {
   introduceRoom(input: IntroduceRoomInput!) : IntroduceRoomPayload
   introduceMonster(input: IntroduceMonsterInput!) : IntroduceMonsterPayload

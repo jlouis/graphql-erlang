@@ -15,7 +15,7 @@ Comma               = ,
 Ignored             = {WhiteSpace}|{LineTerminator}|{Comment}|{Comma}
 
 % Lexical tokens
-Punctuator          = [+!$():=@\[\]{|}]|\.\.\.
+Punctuator          = [&!$():=@\[\]{|}]|\.\.\.
 Name                = [_A-Za-z][_0-9A-Za-z]*
 
 % Int Value
@@ -43,13 +43,13 @@ MultiStringValue    = """{MultiCharacter}*"""
 
 Rules.
 
-{Ignored}		   : skip_token.
+{Ignored}	   : skip_token.
 {Punctuator}	   : {token, {list_to_atom(TokenChars), TokenLine}}.
-{IntValue}		   : {token, {int, TokenLine, list_to_integer(TokenChars)}}.
+{IntValue}	   : {token, {int, TokenLine, list_to_integer(TokenChars)}}.
 {FloatValue}	   : {token, {float, TokenLine, list_to_float(TokenChars)}}.
 {StringValue}	   : {token, {bstring, TokenLine, iolist_to_binary(unquote(TokenChars))}}.
 {MultiStringValue} : {token, {bstring, TokenLine, iolist_to_binary(unquote(TokenChars))}}.
-{Name}		       : {token, identifier(TokenChars, TokenLine)}.
+{Name}	           : {token, identifier(TokenChars, TokenLine)}.
 
 Erlang code.
 

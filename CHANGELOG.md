@@ -18,6 +18,12 @@ the compatibility issues you are likely to encounter.
 
 ### Changed
 
+- Implement the Type Definition Language as stated in the Jun2018
+  specification sans the notion of extending types (this will be
+  added at a later point in time).
+- Removal of `annotations`. They are now directives. This means
+  `field_annotations` and `object_annotations` are now named
+  `*_directives` in the `Ctx` context under `execute/4`.
 - Coercions in the input and output direction for built-in-types are
   now more lenient than it was. We allow more coercions than before,
   and this makes us more consistent with the specification.

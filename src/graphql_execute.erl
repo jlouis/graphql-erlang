@@ -339,12 +339,12 @@ execute_field_await(Path,
 
 execute_field(Path, #{ op_type := OpType , default_timeout := DT} = Ctx,
               ObjType, Value, [F|_] = Fields,
-              #schema_field { annotations = FAns, resolve = RF}) ->
+              #schema_field { directives = Directives, resolve = RF}) ->
     Name = name(F),
     #schema_field { ty = ElaboratedTy } = field_type(F),
     Args = resolve_args(Ctx, F),
     Fun = resolver_function(ObjType, RF),
-    case resolve_field_value(Ctx, ObjType, Value, Name, FAns, Fun, Args) of
+    case resolve_field_value(Ctx, ObjType, Value, Name, Directives, Fun, Args) of
         {defer, Token, _} when OpType == mutation ->
             %% A mutation must not run the mutation in the parallel, so it awaits
             %% the data straight away
@@ -432,12 +432,14 @@ report_wrong_return(Obj, Name, Fun, Val) ->
        Fun,
        Val]).
 
-resolve_field_value(Ctx, #object_type { id = OID, annotations = OAns} = ObjectType, Value, Name, FAns, Fun, Args) ->
+resolve_field_value(Ctx, #object_type { id = OID,
+                                        directives = ODirectives} = ObjectType,
+                    Value, Name, FDirectives, Fun, Args) ->
     CtxAnnot = Ctx#{
         field => Name,
-        field_annotations => FAns,
+        field_directives => FDirectives,
         object_type => OID,
-        object_annotations => OAns
+        object_directives => ODirectives
     },
     try (if
         is_function(Fun, 4) -> Fun(CtxAnnot, Value, Name, Args);

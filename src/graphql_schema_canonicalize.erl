@@ -10,58 +10,61 @@ x({root, Root}) ->
     M = root_mutation(Root),
     S = root_subscription(Root),
     IFs = root_interfaces(Root),
-    #root_schema { query = Q, mutation = M, subscription = S, interfaces = IFs };
-x({interface, #{ id := ID, description := Desc, fields := FieldDefs } = I}) ->
+    #root_schema { query = Q,
+                   mutation = M,
+                   subscription = S,
+                   interfaces = IFs };
+x({interface, #{ id := ID,
+                 description := Desc,
+                 fields := FieldDefs } = I}) ->
     Resolver = interface_resolver(I),
-    #interface_type { id = c_id(ID), description = binarize(Desc),
-        resolve_type = Resolver,
-        annotations = annotations(I),
-        fields = map_2(fun c_field/2, FieldDefs) };
+    #interface_type { id = c_id(ID),
+                      description = binarize(Desc),
+                      resolve_type = Resolver,
+                      directives = directives(I),
+                      fields = map_2(fun c_field/2, FieldDefs)
+                    };
 x({union, #{ id := ID, description := Desc, types := Types } = U}) ->
     Resolver = union_resolver(U),
-    #union_type {
-        id = c_id(ID),
-        description = binarize(Desc),
-        annotations = annotations(U),
-        types = [c_type(T) || T <- Types],
-        resolve_type = Resolver
-    };
+    #union_type { id = c_id(ID),
+                  description = binarize(Desc),
+                  directives = directives(U),
+                  types = [c_type(T) || T <- Types],
+                  resolve_type = Resolver
+                };
 
 x({enum, #{ id := ID, description := Desc, values := VDefs} = Enum}) ->
     ModuleResolver = enum_resolve(Enum),
-    #enum_type {
-    	id = c_id(ID),
-    	description = binarize(Desc),
-    	annotations = annotations(Enum),
-    	values = map_2(fun c_enum_val/2, VDefs),
-        resolve_module = ModuleResolver
-     };
+    #enum_type { id = c_id(ID),
+                 description = binarize(Desc),
+                 directives = directives(Enum),
+                 values = map_2(fun c_enum_val/2, VDefs),
+                 resolve_module = ModuleResolver
+               };
 
 x({object, #{ id := ID, fields := FieldDefs, description := Desc } = Obj}) ->
     Interfaces = c_interfaces(Obj),
     ModuleResolver = maps:get(resolve_module, Obj, undefined),
-    #object_type {
-        id = c_id(ID),
-        resolve_module = ModuleResolver,
-        description = binarize(Desc),
-        annotations = annotations(Obj),
-        fields = map_2(fun c_field/2, FieldDefs),
-        interfaces = Interfaces
-    };
+    #object_type { id = c_id(ID),
+                   resolve_module = ModuleResolver,
+                   description = binarize(Desc),
+                   directives = directives(Obj),
+                   fields = map_2(fun c_field/2, FieldDefs),
+                   interfaces = Interfaces
+                 };
 x({input_object, #{ id := ID, fields := FieldDefs, description := Desc } = IO}) ->
-    #input_object_type { id = c_id(ID), description = binarize(Desc),
-         annotations = annotations(IO),
-         fields = map_2(fun c_input_value/2, FieldDefs) };
-
-%% Scalar--START
-
+    #input_object_type { id = c_id(ID),
+                         description = binarize(Desc),
+                         directives = directives(IO),
+                         fields = map_2(fun c_input_value/2, FieldDefs)
+                       };
 x({scalar, #{ id := ID, description := Desc} = Scalar}) ->
     ModuleResolver = scalar_resolve(Scalar),
-    #scalar_type {
-       id = c_id(ID),
-       description = binarize(Desc),
-       annotations = annotations(Scalar),
-       resolve_module = ModuleResolver }.
+    #scalar_type { id = c_id(ID),
+                   description = binarize(Desc),
+                   directives = directives(Scalar),
+                   resolve_module = ModuleResolver
+                 }.
 
 %% -- ROOT -------------
 root_query(#{ query := Q}) -> binarize(Q);
@@ -89,9 +92,7 @@ c_enum_val(K, #{ value := V, description := Desc } = Map) ->
         description = binarize(Desc),
         deprecation = deprecation(Map) }}.
 
-
 %% -- FIELDS ----------
-
 c_input_value(K, V) ->
     {binarize(K), c_input_value_val(V)}.
 
@@ -111,12 +112,12 @@ c_field(K, V) ->
 
 c_field_val(M) ->
     #schema_field {
-    	ty = c_field_val_ty(M),
-    	resolve = c_field_val_resolve(M),
-    	args = c_field_val_args(M),
-    	deprecation = deprecation(M),
-    	annotations = annotations(M),
-    	description = c_field_val_description(M)
+       ty = c_field_val_ty(M),
+       resolve = c_field_val_resolve(M),
+       args = c_field_val_args(M),
+       deprecation = deprecation(M),
+       directives = directives(M),
+       description = c_field_val_description(M)
     }.
 
 c_field_val_ty(#{ type := Ty }) ->
@@ -169,37 +170,27 @@ map_2(F, M) ->
     Unpacked = maps:to_list(M),
     maps:from_list([F(K, V) || {K, V} <- Unpacked]).
 
-scalar_resolve(#{ resolve_module := ModuleResolver }) when is_atom(ModuleResolver) ->
+scalar_resolve(#{ resolve_module := ModuleResolver })
+  when is_atom(ModuleResolver) ->
     ModuleResolver;
 
-scalar_resolve(#{ id := 'ID'}) ->
-     graphql_scalar_binary_coerce;
+scalar_resolve(#{ id := 'ID'})     -> graphql_scalar_binary_coerce;
+scalar_resolve(#{ id := 'String'}) -> graphql_scalar_binary_coerce;
+scalar_resolve(#{ id := 'Bool'})   -> graphql_scalar_bool_coerce;
+scalar_resolve(#{ id := 'Int'})    -> graphql_scalar_integer_coerce;
+scalar_resolve(#{ id := 'Float'})  -> graphql_scalar_float_coerce;
+scalar_resolve(_)                  -> graphql_enum_coerce.
 
-scalar_resolve(#{ id := 'String'}) ->
-     graphql_scalar_binary_coerce;
-
-scalar_resolve(#{ id := 'Bool'}) ->
-     graphql_scalar_bool_coerce;
-
-scalar_resolve(#{ id := 'Int'}) ->
-     graphql_scalar_integer_coerce;
-
-scalar_resolve(#{ id := 'Float'}) ->
-     graphql_scalar_float_coerce;
-
-scalar_resolve(_) ->
-     graphql_enum_coerce.
-
-enum_resolve(#{ resolve_module := ModuleResolver }) when is_atom(ModuleResolver) ->
+enum_resolve(#{ resolve_module := ModuleResolver })
+  when is_atom(ModuleResolver) ->
     ModuleResolver;
 enum_resolve(_) ->
     graphql_enum_coerce.
 
-%% -- Annotations
-annotations(#{ annotations := Annots }) -> Annots;
-annotations(#{}) -> #{}.
+%% -- Directives
+directives(#{ directives := Ds }) -> Ds;
+directives(#{}) -> [].
 
 %% -- Deprecation
-deprecation(#{ deprecation := Reason }) ->
-    binarize(Reason);
+deprecation(#{ deprecation := Reason }) -> binarize(Reason);
 deprecation(#{}) -> undefined.
