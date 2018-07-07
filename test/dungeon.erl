@@ -197,12 +197,6 @@ inject(Config) ->
     {ok, SchemaData} = file:read_file(SchemaFile),
     Mapping = mapping_rules(),
     ok = graphql:load_schema(Mapping, SchemaData),
-
-    Schema = {root, #{
-                query => 'QueryRoot',
-                mutation => 'MutationRoot',
-                interfaces => ['Node'] }},
-    ok = graphql:insert_schema_definition(Schema),
     ok.
 
 unwrap(X) ->

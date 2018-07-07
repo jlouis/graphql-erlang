@@ -10,7 +10,15 @@ inject(BaseMapping, {ok, {document, Entries}}) ->
     {SchemaEntries, Other} = lists:partition(fun schema_defn/1, Entries),
     report_other_entries(Other),
     Defs = [mk(Mapping, E) || E <- SchemaEntries],
-    [inject(Def) || Def <- Defs],
+    case lists:keytake(schema, 1, Defs) of
+        false ->
+            [inject(Def) || Def <- Defs];
+        {value, Root, Rest} ->
+            %% Guard against multiple schema defs
+            false = lists:keytake(schema, 1, Rest),
+            [inject(R) || R <- Rest],
+            inject_root(Root)
+    end,
     ok.
 
 mk(#{}, #p_schema_definition { directives = Directives,
@@ -109,6 +117,9 @@ fields(Raw) ->
 input_defs(Raw) ->
     maps:from_list([input_def(D) || D <- Raw]).
 
+inject_root(Root) ->
+    graphql:insert_root(Root).
+
 inject(Def) ->
     case graphql:insert_schema_definition(Def) of
         ok ->
@@ -117,6 +128,7 @@ inject(Def) ->
             exit({entry_already_exists_in_schema, Entry})
     end.
 
+schema_defn(#p_schema_definition{}) -> true;
 schema_defn(#p_object{}) -> true;
 schema_defn(#p_input_object{}) -> true;
 schema_defn(#p_interface{}) -> true;
@@ -177,7 +189,7 @@ field(#p_field_def{ id = ID,
     {K, V}.
 
 root_op(#p_root_operation { op_type = OpType,
-                            name = Name }) ->
+                            type = Name }) ->
     case OpType of
         {query, _} -> {query, name(Name)};
         {mutation, _} -> {mutation, name(Name)};

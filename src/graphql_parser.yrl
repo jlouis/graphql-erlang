@@ -9,7 +9,8 @@ Nonterminals
 
   TypeSystemDefinition
     SchemaDefinition
-      RootOperationTypeDefinition
+      RootOperationList
+        RootOperationTypeDefinition
     TypeDefinition
       ObjectTypeDefinition
         ImplementsInterfaces
@@ -249,11 +250,19 @@ TypeSystemDefinition -> SchemaDefinition : '$1'.
 TypeSystemDefinition -> TypeDefinition : '$1'.
 %% TypeSystemDefinition -> DirectiveDefinition : '$1'.
 
+
+SchemaDefinition -> 'schema' '{' RootOperationList '}'
+    : #p_schema_definition { defs = '$3' }.
 SchemaDefinition -> 'schema' Directives '{' RootOperationTypeDefinition '}'
     : #p_schema_definition { directives = '$2', defs = '$4' }.
     
-RootOperationTypeDefinition -> OperationType ':' Name
-    : #p_root_operation { op_type = '$1', name = '$2' }. 
+RootOperationList -> RootOperationTypeDefinition
+    : ['$1'].
+RootOperationList -> RootOperationTypeDefinition RootOperationList
+    : ['$1'|'$2'].
+    
+RootOperationTypeDefinition -> OperationType ':' Type
+    : #p_root_operation { op_type = '$1', type = '$3' }. 
 
 Description -> bstring : g_string('$1').
 

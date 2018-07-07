@@ -18,6 +18,10 @@ the compatibility issues you are likely to encounter.
 
 ### Changed
 
+- Support schema definitions in GraphQL specs
+- Insertion of the root schema is now `graphql:insert_root/1`. This
+  also canonicalizes and validates the schema as a whole so there is
+  no need to call `graphql:validate_schema()` anymore.
 - Implement the Type Definition Language as stated in the Jun2018
   specification sans the notion of extending types (this will be
   added at a later point in time).

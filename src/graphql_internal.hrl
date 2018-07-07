@@ -148,7 +148,7 @@
 
 -record(p_root_operation,
         { op_type :: operation_type(),
-          name :: name()
+          type :: graphql_type()
         }).
 
 -record(p_schema_definition,

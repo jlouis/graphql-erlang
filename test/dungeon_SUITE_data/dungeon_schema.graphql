@@ -161,3 +161,7 @@ type QueryRoot {
   roll(delay: Int) : Dice
 }
 
+schema {
+  query : QueryRoot
+  mutation : MutationRoot
+}

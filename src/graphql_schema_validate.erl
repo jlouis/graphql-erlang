@@ -2,7 +2,46 @@
 
 -include("graphql_schema.hrl").
 
--export([x/0]).
+-export([x/0, root/1]).
+
+-spec root(#root_schema{}) -> #root_schema{}.
+root(#root_schema{ query = Q,
+                   mutation = M,
+                   subscription = S} = Root) ->
+    ok = x(),
+    {ok, QC} = root_lookup(Q, query),
+    {ok, MC} = root_lookup(M, mutation),
+    {ok, SC} = root_lookup(S, subscription),
+    Root#root_schema { query = QC,
+                       mutation = MC,
+                       subscription = SC }.
+
+
+root_lookup(undefined, Type) ->
+    %% If given an undefined entry, try to use the default
+    %% and inject it. Make mention that we are using a default
+    %% Value
+    Val = case Type of
+              query -> <<"Query">>;
+              mutation -> <<"Mutation">>;
+              subscription -> <<"Subscription">>
+          end,
+    root_lookup_(Val, Type, default);
+root_lookup(Val, Type) ->
+    root_lookup_(Val, Type, direct).
+
+%% Root lookup rules are as follows:
+%% - Queries MUST exist and it has to be the default value if nothing has
+%%   been added
+%% - Directly written Mutations and Subscriptions MUST exist
+%% - Try to coerce otherwise 
+root_lookup_(Q, Type, Def) ->
+    case graphql_schema:lookup(Q) of
+        not_found when Type == query -> err({schema_without_query, Q});
+        not_found when Def == direct -> err({schema_missing_type, Q});
+        not_found -> {ok, undefined};
+        #object_type{} -> {ok, Q}
+    end.
 
 -spec x() -> ok.
 x() ->
@@ -73,15 +112,7 @@ root_schema(#root_schema {
                mutation = M,
                subscription = S,
                interfaces = IFaces }) ->
-    case Q of
-        undefined ->
-            case graphql_schema:lookup(<<"Query">>) of
-                not_found -> err({query_not_defined, <<"Query">>});
-                #object_type{} -> ok
-            end;
-        QT ->
-            is_object(QT)
-    end,
+    is_object(Q),
     undefined_object(M),
     undefined_object(S),
     all(fun is_interface/1, IFaces),

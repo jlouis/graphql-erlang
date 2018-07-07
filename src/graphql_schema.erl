@@ -9,7 +9,7 @@
 -export([
          all/0,
          insert/1, insert/2,
-         load/1,
+         load/1, load_schema/1,
          get/1,
          lookup/1,
          validate_enum/2,
@@ -67,6 +67,11 @@ insert(S, #{ canonicalize := true }) ->
 insert(S, #{}) ->
     gen_server:call(?MODULE, {insert, S}).
 
+
+-spec load_schema(#root_schema{}) -> ok.
+load_schema(#root_schema{ query = Q } = Root) ->
+    ok = graphql_introspection:augment_root(Q),
+    insert_new_(Root).
 
 -spec load(any()) -> ok | {error, Reason}
   when Reason :: term().

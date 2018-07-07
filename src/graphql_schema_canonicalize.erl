@@ -15,11 +15,11 @@ x({root, Root}) ->
                    subscription = S,
                    interfaces = IFs };
 x({schema, #{ defs := Defs,
-              directives := Directives }}) ->
+              directives := Directives } = Root}) ->
     #root_schema { query = maps:get(query, Defs, undefined),
                    mutation = maps:get(mutation, Defs, undefined),
                    subscription = maps:get(subscription, Defs, undefined),
-                   directives = directives(Directives),
+                   directives = directives(Root),
                    interfaces = [] };
 x({interface, #{ id := ID,
                  description := Desc,

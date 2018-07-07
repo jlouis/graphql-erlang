@@ -7,6 +7,7 @@
          parse/1,
          elaborate/1,
          type_check/1, type_check_params/3,
+         insert_root/1,
          validate/1,
          execute/1, execute/2
         ]).
@@ -145,6 +146,12 @@ execute(Ctx, AST) ->
   when Reason :: term().
 insert_schema_definition(Defn) ->
     graphql_schema:load(Defn).
+
+-spec insert_root(schema_definition()) -> ok.
+insert_root(Defn) ->
+    Root = graphql_schema_canonicalize:x(Defn),
+    Schema = graphql_schema_validate:root(Root),
+    graphql_schema:load_schema(Schema).
 
 %% STUB for now
 -spec validate_schema() -> ok | {error, any()}.
