@@ -140,8 +140,7 @@ handle_map(M) ->
 binarize(default) -> default;
 binarize(A) when is_atom(A) -> atom_to_binary(A, utf8).
 
-name({name, _, N}) -> N;
-name(Str) when is_binary(Str) -> Str.
+name({name, _, N}) -> N.
 
 description(undefined) -> <<"No description provided">>;
 description(D) -> D.
@@ -181,7 +180,7 @@ variants(Vs) ->
             (#p_enum_value { id = V,
                              description = Desc,
                              directives = Directives }, I) ->
-                K = binary_to_atom(name(V), utf8),
+                K = binary_to_atom(V, utf8),
                 {K, #{ value => I,
                        directives => Directives,
                        description => description(Desc) }}

@@ -126,7 +126,7 @@
         }).
 
 -record(p_enum_value,
-        { id :: name(),
+        { id :: binary(),
           description = undefined :: 'undefined' | binary(),
           directives = [] :: [directive()]}).
 
