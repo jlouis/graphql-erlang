@@ -69,11 +69,19 @@ object_type(#object_type {
     ok.
 
 root_schema(#root_schema {
-	query = Q,
-	mutation = M,
-	subscription = S,
-	interfaces = IFaces }) ->
-    undefined_object(Q),
+               query = Q,
+               mutation = M,
+               subscription = S,
+               interfaces = IFaces }) ->
+    case Q of
+        undefined ->
+            case graphql_schema:lookup(<<"Query">>) of
+                not_found -> err({query_not_defined, <<"Query">>});
+                #object_type{} -> ok
+            end;
+        QT ->
+            is_object(QT)
+    end,
     undefined_object(M),
     undefined_object(S),
     all(fun is_interface/1, IFaces),

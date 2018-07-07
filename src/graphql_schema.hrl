@@ -105,9 +105,10 @@
 
 -record(root_schema,
         { id = 'ROOT' :: atom(),
-          query :: binary(),
+          query = undefined :: undefined | binary(),
           mutation = undefined :: undefined | binary(),
           subscription = undefined :: undefined | binary(),
+          directives = [] :: [directive_type()],
           interfaces = [] :: [binary()]
         }).
 -type root_schema() :: #root_schema{}.

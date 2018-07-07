@@ -13,6 +13,11 @@ inject(BaseMapping, {ok, {document, Entries}}) ->
     [inject(Def) || Def <- Defs],
     ok.
 
+mk(#{}, #p_schema_definition { directives = Directives,
+                               defs = RootOps }) ->
+    {schema,
+     #{ defs => maps:from_list([root_op(R) || R <- RootOps]),
+        directives => Directives }};
 mk(#{ scalars := Sc }, #p_scalar { description = Desc,
                                    directives = Directives,
                                    id = ID }) ->
@@ -112,7 +117,6 @@ inject(Def) ->
             exit({entry_already_exists_in_schema, Entry})
     end.
 
-
 schema_defn(#p_object{}) -> true;
 schema_defn(#p_input_object{}) -> true;
 schema_defn(#p_interface{}) -> true;
@@ -171,6 +175,14 @@ field(#p_field_def{ id = ID,
            directives => Directives,
            args => handle_args(Args)},
     {K, V}.
+
+root_op(#p_root_operation { op_type = OpType,
+                            name = Name }) ->
+    case OpType of
+        {query, _} -> {query, name(Name)};
+        {mutation, _} -> {mutation, name(Name)};
+        {subscription, _} -> {subscription, name(Name)}
+    end.
 
 handle_args(Args) ->
     maps:from_list([input_def(A) || A <- Args]).
