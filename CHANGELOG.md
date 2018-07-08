@@ -10,6 +10,32 @@ the compatibility issues you are likely to encounter.
 
 ## [Unreleased]
 
+### Compatibility
+
+To run this version of GraphQL, you have to carry out the following
+changes:
+
+- Use the GraphQL official type specification language and not the one
+  we defined. In particular, there are no more annotations (They are
+  now handled as directives). And docstrings are optional entries on
+  definitions now.
+- Alter your execute/4 functions to use `field_directives` and
+  `object_directives` rather than using the old annotation code (if
+  you applied this).
+- Use the call `graphql:insert_root/1` to insert the root schema
+  definition. This also forces validation of the GraphQL
+  schema/contract.
+- Calls to `graphql:validate_schema()` can be removed.
+- Optional: Embed the root definition inside the graphql schema
+  specification:
+  
+```
+schema {
+  query : MyQueryType
+  mutation : MyMutationType
+}
+```
+
 ### Fixed
 
 - (#167) Fix unions to be more consistent: disallow empty unions
