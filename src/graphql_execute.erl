@@ -1,5 +1,6 @@
 -module(graphql_execute).
 
+-include_lib("graphql/include/graphql.hrl").
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
@@ -433,8 +434,13 @@ report_wrong_return(Obj, Name, Fun, Val) ->
        Val]).
 
 format_directives([]) -> [];
+format_directives([#directive { id = N, args = Args }|Ds]) ->
+    [#directive{ id = name(N),
+                 args = maps:from_list(
+                          [{name(ID), Value} || {ID, Value} <- Args])}
+     | format_directives(Ds)];
 format_directives([#directive_type { id = N, args = Args }|Ds]) ->
-    [#directive{ id = name(N), args = maps:to_list(Args) }| format_directives(Ds)].
+    [#directive{ id = name(N), args = Args }| format_directives(Ds)].
 
 resolve_field_value(Ctx, #object_type { id = OID,
                                         directives = ODirectives} = ObjectType,

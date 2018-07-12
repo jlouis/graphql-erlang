@@ -1,17 +1,15 @@
--include_lib("graphql/include/graphql.hrl").
-
 %% GQL AST Records and types
 
 %% All identifiers in the AST are given like this
 
--type graphql_base_type() :: name() | binary().
+-type graphql_base_type() :: graphql:name() | binary().
 -type graphql_type() ::
           {non_null, graphql_type()}
         | {list, graphql_type()}
         | graphql_base_type().
 
 -type value() ::
-	  name()
+	  graphql:name()
         | null
 	| {int, integer(), pos_integer()}
 	| {float, float(), pos_integer()}
@@ -29,41 +27,41 @@
 -type selection_set() :: field() | frag() | frag_spread().
 
 -record(field, {
-	id :: name(),
+	id :: graphql:name(),
 	args = [] :: [any()],
 	directives = [] :: [any()],
 	selection_set = [] :: [any()],
-	alias = undefined :: undefined | name(),
+	alias = undefined :: undefined | graphql:name(),
 	schema :: any()
 }).
 -type field() :: #field{}.
 
 -record(frag,
-        { id :: '...' | name(), %% One variant is for inline fragments
+        { id :: '...' | graphql:name(), %% One variant is for inline fragments
           ty :: undefined | graphql_base_type(),
-          directives = [] :: [directive()],
+          directives = [] :: [graphql:directive()],
           selection_set = [] :: [#field{}],
           schema = undefined :: 'undefined' | any()
         }).
 -type frag() :: #frag{}.
 
 -record(frag_spread,
-        { id :: name(),
-          directives = [] :: [directive()]
+        { id :: graphql:name(),
+          directives = [] :: [graphql:directive()]
         }).
 -type frag_spread() :: #frag_spread{}.
 
 -record(vardef,
-        { id :: name(),
+        { id :: graphql:name(),
           ty :: graphql_type(),
           default = null :: value()
         }).
 
 -record(op,
         { ty :: undefined | operation_type(),
-          id = 'ROOT' :: name() | 'ROOT',
+          id = 'ROOT' :: graphql:name() | 'ROOT',
           vardefs = [] :: [#vardef{}],
-          directives = [] :: [directive()],
+          directives = [] :: [graphql:directive()],
           selection_set = [] :: [#field{} | #frag_spread{}],
           schema = undefined :: 'undefined' | any()
         }).
@@ -76,7 +74,7 @@
 %% Parsed schemas all starts with a p_ suffix
 
 -record(p_field_def,
-        { id :: name(),
+        { id :: graphql:name(),
           description = undefined :: 'undefined' | binary(),
           args = [] :: any(),
           type :: graphql_type(),
@@ -85,60 +83,60 @@
 -type p_field_def() :: #p_field_def{}.
 
 -record(p_object,
-        { id :: name(),
+        { id :: graphql:name(),
           description = undefined :: 'undefined' | binary(),
           fields = [] :: [p_field_def()],
-          directives = [] :: [directive()],
-          interfaces = [] :: [name()]
+          directives = [] :: [graphql:directive()],
+          interfaces = [] :: [graphql:name()]
         }).
 
 -record(p_input_value,
-        { id :: name(),
+        { id :: graphql:name(),
           description = undefined :: 'undefined' | binary(),
           default = null :: any(),
-          directives = [] :: [directive()],          
+          directives = [] :: [graphql:directive()],          
           type :: graphql_type()
         }).
 
 -record(p_interface,
-        { id :: name(),
+        { id :: graphql:name(),
           description = undefined :: 'undefined' | binary(),
-          directives = [] :: [directive()],
+          directives = [] :: [graphql:directive()],
           fields = [] :: any()
         }).
 
 -record(p_union,
-        { id :: name(),
+        { id :: graphql:name(),
           description = undefined :: 'undefined' | binary(),
-          directives = [] :: [directive()],
-          members :: [name()]
+          directives = [] :: [graphql:directive()],
+          members :: [graphql:name()]
         }).
 
 -record(p_scalar,
-        { id :: name(),
+        { id :: graphql:name(),
           description = undefined :: 'undefined' | binary(),
-          directives = [] :: [directive()]
+          directives = [] :: [graphql:directive()]
         }).
 
 -record(p_enum_value,
         { id :: binary(),
           description = undefined :: 'undefined' | binary(),
-          directives = [] :: [directive()]}).
+          directives = [] :: [graphql:directive()]}).
 
 -type p_enum_value() :: #p_enum_value{}.
 
 -record(p_enum,
-        { id :: name(),
+        { id :: graphql:name(),
           description = undefined :: 'undefined' | binary(),
-          directives = [] :: [directive()],
+          directives = [] :: [graphql:directive()],
           variants = [] :: [p_enum_value()]
         }).
 
 -record(p_input_object,
-        { id :: name(),
+        { id :: graphql:name(),
           description = undefined :: 'undefined' | binary(),
           defs = [] :: any(),
-          directives = [] :: [directive()]
+          directives = [] :: [graphql:directive()]
         }).
 
 -record(p_root_operation,
@@ -148,5 +146,5 @@
 
 -record(p_schema_definition,
         { defs = [] :: [#p_root_operation{}],
-          directives = [] :: [directive()] }).
+          directives = [] :: [graphql:directive()] }).
 

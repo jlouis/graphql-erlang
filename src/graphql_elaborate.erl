@@ -1,5 +1,6 @@
 -module(graphql_elaborate).
 
+-include_lib("graphql/include/graphql.hrl").
 -include("graphql_schema.hrl").
 -include("graphql_internal.hrl").
 

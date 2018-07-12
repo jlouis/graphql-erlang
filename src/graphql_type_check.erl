@@ -38,6 +38,7 @@
 %%% @end
 -module(graphql_type_check).
 
+-include_lib("graphql/include/graphql.hrl").
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 

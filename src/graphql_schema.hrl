@@ -88,7 +88,7 @@
 -record(input_object_type,
         { id :: binary(),
           description :: binary(),
-          directives = [] :: [directive_type()],
+          directives = [] :: [directive_type() | graphql:directive()],
           fields = #{} :: #{ binary() => schema_arg() }
         }).
 -type input_object_type() :: #input_object_type{}.
@@ -96,7 +96,7 @@
 -record(object_type,
         { id :: binary(),
           description :: binary(),
-          directives = [] :: [directive_type()],
+          directives = [] :: [directive_type() | graphql:directive()],
           resolve_module :: mod(),
           fields = #{} :: #{ binary() => schema_field() },
           interfaces = [] :: [binary()]

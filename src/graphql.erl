@@ -1,6 +1,7 @@
 -module(graphql).
 
 -include("graphql_internal.hrl").
+-include_lib("graphql/include/graphql.hrl").
 
 %% GraphQL Documents
 -export([
@@ -48,6 +49,10 @@
 
 -type schema_field() :: #{ atom() => any() }.
 -export_type([schema_field/0]).
+
+-type name() :: {name, pos_integer(), binary()} | binary().
+-type directive() :: #directive{}.
+-export_type([directive/0]).
 
 -define(DEFAULT_TIMEOUT, 750).
 

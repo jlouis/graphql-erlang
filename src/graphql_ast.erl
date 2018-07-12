@@ -1,11 +1,12 @@
 -module(graphql_ast).
 
+-include_lib("graphql/include/graphql.hrl").
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
 -export([name/1, id/1, typename/1, uniq/1]).
 
--spec name('ROOT' | name()) -> binary().
+-spec name('ROOT' | graphql:name()) -> binary().
 name('ROOT') -> <<"ROOT">>;
 name({name, _Line, X}) -> X;
 name({var, N}) -> name(N).

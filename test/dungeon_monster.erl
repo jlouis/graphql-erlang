@@ -20,6 +20,7 @@ execute(Ctx, #monster { id = ID,
     case Field of
         <<"id">> -> graphql:throw(dungeon:wrap({monster, ID}));
         <<"name">> ->
+            ct:pal("Name Context Directives: ~p", [maps:get(field_directives, Ctx)]),
             NameToken = graphql:token(Ctx),
             spawn_link(fun() ->
                                graphql:reply_cast(NameToken, {ok, Name})
@@ -37,6 +38,7 @@ execute(Ctx, #monster { id = ID,
             Data = [dungeon:load(OID) || OID <- Inventory],
             {ok, Data};
         <<"mood">> ->
+            ct:pal("Name Context Directives: ~p", [maps:get(field_directives, Ctx)]),
             case Args of
                 #{ <<"fail">> := true } ->
                     {ok, <<"INVALIDMOOD">>};

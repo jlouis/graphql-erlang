@@ -4,22 +4,22 @@ scalar Color
 enum Mood {
   "A very calm monster"
   TRANQUIL
-     "A monster trying to avoid you"
-     DODGY
-     "This monster attacks every living being, including itself"
-     AGGRESSIVE
-     "Beast mode.  Even worse"
-     BEAST
+  "A monster trying to avoid you"
+  DODGY
+  "This monster attacks every living being, including itself"
+  AGGRESSIVE
+  "Beast mode.  Even worse"
+  BEAST
 }
 
 enum Property {
-     BEAST
-     MECH
-     DRAGON
-     PIRATE
-     MURLOC
-     TOTEM
-     DEMON
+  BEAST
+  MECH
+  DRAGON
+  PIRATE
+  MURLOC
+  TOTEM
+  DEMON
 }
 
 interface Node {
@@ -38,12 +38,12 @@ type Stats {
 
 type Monster implements Node {
   id : ID!
-  name : String!
+  name : String! @private(scope: "memberOf")
   color(colorType: ColorType = "rgb") : Color!
   hitpoints : Int!
   inventory : [Thing]
   hp : Int!
-  mood(fail: Bool) : Mood
+  mood(fail: Bool) : Mood @private
   plushFactor : Float!
   spikyness : Float
   stats(
