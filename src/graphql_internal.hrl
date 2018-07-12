@@ -1,7 +1,9 @@
+-include_lib("graphql/include/graphql.hrl").
+
 %% GQL AST Records and types
 
 %% All identifiers in the AST are given like this
--type name() :: {name, pos_integer(), binary()}.
+
 -type graphql_base_type() :: name() | binary().
 -type graphql_type() ::
           {non_null, graphql_type()}
@@ -56,13 +58,6 @@
           ty :: graphql_type(),
           default = null :: value()
         }).
-
--record(directive,
-        { id :: name(),
-          args = [] :: [any()],
-          schema :: any()
-        }).
--type directive() :: #directive{}.
 
 -record(op,
         { ty :: undefined | operation_type(),

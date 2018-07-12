@@ -44,6 +44,8 @@ schema {
 
 ### Changed
 
+- Directives are now exported as a directive record included in
+  `graphql/include/graphql.hrl`.
 - Support schema definitions in GraphQL specs
 - Insertion of the root schema is now `graphql:insert_root/1`. This
   also canonicalizes and validates the schema as a whole so there is

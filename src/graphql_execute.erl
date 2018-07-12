@@ -432,14 +432,18 @@ report_wrong_return(Obj, Name, Fun, Val) ->
        Fun,
        Val]).
 
+format_directives([]) -> [];
+format_directives([#directive { id = N } = D|Ds]) ->
+    [D#directive{ id = name(N) }| format_directives(Ds)].
+
 resolve_field_value(Ctx, #object_type { id = OID,
                                         directives = ODirectives} = ObjectType,
                     Value, Name, FDirectives, Fun, Args) ->
     CtxAnnot = Ctx#{
         field => Name,
-        field_directives => FDirectives,
+        field_directives => format_directives(FDirectives),
         object_type => OID,
-        object_directives => ODirectives
+        object_directives => format_directives(ODirectives)
     },
     try (if
         is_function(Fun, 4) -> Fun(CtxAnnot, Value, Name, Args);

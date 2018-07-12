@@ -14,8 +14,7 @@ x({root, Root}) ->
                    mutation = M,
                    subscription = S,
                    interfaces = IFs };
-x({schema, #{ defs := Defs,
-              directives := Directives } = Root}) ->
+x({schema, #{ defs := Defs } = Root}) ->
     #root_schema { query = maps:get(query, Defs, undefined),
                    mutation = maps:get(mutation, Defs, undefined),
                    subscription = maps:get(subscription, Defs, undefined),
