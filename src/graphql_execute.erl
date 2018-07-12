@@ -433,8 +433,8 @@ report_wrong_return(Obj, Name, Fun, Val) ->
        Val]).
 
 format_directives([]) -> [];
-format_directives([#directive { id = N } = D|Ds]) ->
-    [D#directive{ id = name(N) }| format_directives(Ds)].
+format_directives([#directive_type { id = N, args = Args }|Ds]) ->
+    [#directive{ id = name(N), args = maps:to_list(Args) }| format_directives(Ds)].
 
 resolve_field_value(Ctx, #object_type { id = OID,
                                         directives = ODirectives} = ObjectType,
