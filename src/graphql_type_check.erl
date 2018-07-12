@@ -56,7 +56,7 @@
 x(Doc) ->
     x(#{}, Doc).
 
-x(Ctx, {document, Clauses}) ->
+x(Ctx, #document { definitions = Clauses }) ->
    type_check(Ctx, [document], Clauses).
 
 type_check(Ctx, Path, Clauses) ->

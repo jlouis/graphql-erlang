@@ -5,7 +5,7 @@
 
 -export([inject/2]).
 
-inject(BaseMapping, {ok, {document, Entries}}) ->
+inject(BaseMapping, {ok, #document { definitions = Entries}}) ->
     Mapping = handle_mapping(BaseMapping),
     {SchemaEntries, Other} = lists:partition(fun schema_defn/1, Entries),
     report_other_entries(Other),

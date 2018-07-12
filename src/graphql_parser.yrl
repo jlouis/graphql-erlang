@@ -58,7 +58,8 @@ Terminals
 
 Rootsymbol Document.
 
-Document -> Definitions : {document, '$1'}.
+Document -> Definitions
+  : #document { definitions = '$1' }.
 
 Definitions -> Definition : ['$1'].
 Definitions -> Definition Definitions : ['$1'|'$2'].

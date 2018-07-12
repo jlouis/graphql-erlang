@@ -11,8 +11,8 @@
 -spec x(graphql:ast()) -> graphql:ast().
 x(Doc) -> document(Doc).
 
-document({document, Ops}) ->
-    {document, operations([document], Ops)}.
+document(#document { definitions = Defs }) ->
+    #document { definitions = operations([document], Defs)}.
 
 operations(Path, Operations) ->
     [operation_(Path, Op) || Op <- Operations].

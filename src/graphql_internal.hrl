@@ -66,8 +66,6 @@
           schema = undefined :: 'undefined' | any()
         }).
 -type op() :: #op{}.
-
--type ast() :: {document, [#op{}]}.
 -type context() :: #{ atom() => any() }.
 
 %%% --- Parsed Schemas
