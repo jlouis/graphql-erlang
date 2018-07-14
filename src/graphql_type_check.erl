@@ -245,31 +245,6 @@ resolve_input_coercion(Path, ID, ResolveModule, Value) ->
             err(Path, {input_coerce_abort, {Cl, Err}})
     end.
 
-%% Fields are either fragment spreads, inline fragments, introspection
-%% queries or true field entries. Split on the variant of field and
-%% handle each accordingly.
-%%
-%% Handling fields themselves is a congruence over its
-%% (sub-)selection-set.
-%%
-%% The key is to type-check directives and eventual arguments to
-%% fields in this recursion.
-%%
-%% Since fields have negative polarity, we only consider type checking
-%% of the fields which the client requested. Every other field is
-%% ignored.
-field(Ctx, Path, _Scope,
-      #field {
-         id = ID,
-         args = Args,
-         selection_set = SSet,
-         directives = Ds,
-         schema = #schema_field { args = SArgs, ty = InnerScope }} = F) ->
-    Component = graphql_ast:name(ID),
-    F#field { args = args(Ctx, [Component | Path], Args, SArgs),
-              directives = directives(Ctx, [Component | Path], Ds),
-              selection_set = sset(Ctx, [Component | Path], InnerScope, SSet) }.
-
 %% -- DIRECTIVES --------------------------------
 
 %% Type check directives. These can take arguments, so type checking
@@ -355,20 +330,6 @@ judge_list(Ctx, Path, [V|Vs], Type, K) ->
 %% from the document first and then make the inversion analysis on the schema-type.
 judge(Ctx, Path, {name, _, N}, SType) ->
     judge(Ctx, Path, N, SType);
-judge(#{ varenv := VE }, Path, {var, ID}, SType) ->
-    Var = graphql_ast:name(ID),
-    case maps:get(Var, VE, not_found) of
-        not_found -> err(Path, {unbound_variable, Var});
-        #vardef { ty = DType } ->
-            case type_embed(DType, SType) of
-                yes ->
-                    {var, ID, DType};
-                no ->
-                    err(Path, {type_mismatch,
-                               #{ document => {var, Var, DType},
-                                  schema => SType }})
-            end
-    end;
 judge(Ctx, Path, Value, {non_null, InnerSType} = SType) ->
     case Value of
         null ->

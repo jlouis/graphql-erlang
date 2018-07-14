@@ -55,6 +55,7 @@
 -include("graphql_schema.hrl").
 
 -export([check/1]).
+-export([funenv/1]).
 
 -record(ctx,
         {
@@ -71,7 +72,6 @@
 %% check(Gamma, E, T) -> ok | {error, Reason} which checks that a
 %% given term E has type T and sub(S, T) which forms a relation S <: T
 %% of subsumption between types.
-
 
 %% Elaborate a type and also determine its polarity. This is used for
 %% input and output types
@@ -108,6 +108,11 @@ infer_type(N) when is_binary(N) ->
         #union_type{} = Union -> {'-', Union}
     end.
 
+%% Main inference judgement
+%%
+%% Given a context and some graphql expression, we derive
+%% a valid type for that expression. This is mostly handled by
+%% a lookup into the environment.
 -spec infer(Context :: ctx(), Exp :: expr()) -> {ok, ty()}.
 infer(Ctx, #directive { id = ID }) ->
     case graphql_ast:name(ID) of
@@ -149,10 +154,10 @@ infer(#ctx { vars = Vars } = Ctx, {var, ID}) ->
 infer(_Ctx, _) ->
     {error, not_implemented}.
 
--spec infer(Context :: ctx(),
-            Exp :: expr(),
-            TyMap :: ty()) ->
-                   {ok, ty()}.
+%% The infer/3 is a variant of infer where we have a context of some sort
+%% from which to run the derivation of the type (list of argument types,
+%% or the fields of a selection set for instance).
+-spec infer(Context :: ctx(), Exp :: expr(), TyMap :: ty()) -> {ok, ty()}.
 infer(Ctx, {arg, K}, ArgTypes) ->
     Name = graphql_ast:name(K),
     case maps:get(Name, ArgTypes, not_found) of
@@ -173,9 +178,16 @@ infer(Ctx, #field { id = ID } = F, FieldTypes) ->
             {ok, Ty}
     end.
 
+%% To check a document, establish a default context and
+%% check the document.
 check(#document{} = Doc) ->
     check(#ctx{}, Doc).
 
+%% The check/2 relation checks a expression under an environment
+%% it is used whenever we don't have a type but want to have a type
+%%
+%% @todo: Get rid of this since it is probably better embedded in
+%% the other flow.
 -spec check(Context :: ctx(), Exp :: expr()) -> {ok, expr()}.
 check(Ctx, {directives, OpType, Dirs}) ->
     NamedDirectives = [{graphql_ast:name(ID), D}
@@ -205,6 +217,14 @@ check(Ctx, #document{ definitions = Defs } = Doc) ->
     {ok, Doc#document {
            definitions = [check(InitialCtx, Op) || Op <- Ops] }}.
 
+%% Main check relation:
+%%
+%% Given a Context of environments
+%% An expression to check
+%% A type to check it against
+%%
+%% We derive an expression in which we have annotated types into
+%% the AST. This helps the later execution stage.
 -spec check(Context :: ctx(), Exp :: expr(), Ty :: ty()) -> {ok, expr()}.
 check(Ctx, {var, ID}, Sigma) ->
     {ok, Tau} = infer(Ctx, {var, ID}),
@@ -228,30 +248,35 @@ check(Ctx, {Context,
     CtxP = add_path(Ctx, D),
     case lists:member(Context, Locations) of
         true ->
-            {ok, D#directive { args = check(CtxP, {args, Args}, SArgs),
-                               schema = Ty }};
+            {ok, CArgs} = check(CtxP, {args, Args}, SArgs),
+            {ok, D#directive { args = CArgs, schema = Ty }};
         false ->
             Name = graphql_ast:name(ID),
             err(Ctx, {invalid_directive_location, Name, Context})
     end;
-check(Ctx, [], Ty) ->
+check(Ctx, {sset, []}, Ty) ->
     case Ty of
         #object_type{} -> err(Ctx, fieldless_object);
         #interface_type{} -> err(Ctx, fieldless_interface);
         _ ->
             {ok, []}
     end;
+check(Ctx, {sset, SSet}, Ty) ->
+    check(Ctx, SSet, Ty);
+check(_Ctx, [], _Ty) ->
+    {ok, []};
 check(Ctx, [#frag { id = '...' } = Frag | Fs], Sigma) ->
-    {ok, Rest} = check(Ctx, Fs, FieldTypes),
+    {ok, Rest} = check(Ctx, Fs, Sigma),
     {ok, FragTy} = infer(Ctx, Frag),
     {ok, CFrag} = check(Ctx, Frag, FragTy), 
     {ok, [CFrag | Rest]};
-check(Ctx, [#frag_spread { directives = Dirs } = FragSpread | Fs], FieldTypes) ->
+check(Ctx, [#frag_spread { directives = Dirs } = FragSpread | Fs], Sigma) ->
     CtxP = add_path(Ctx, FragSpread),
-    {ok, Rest} = check(Ctx, Fs, FieldTypes),
-    {ok, #frag { schema = Tau } = Frag} = infer(Ctx, FragSpread),
-    ok = sub_fragment(CtxP, Tau, Sigma),
+    {ok, Rest} = check(Ctx, Fs, Sigma),
+    {ok, #frag { schema = Tau }} = infer(Ctx, FragSpread),
+    ok = sub_frag(CtxP, Tau, Sigma),
     {ok, CDirectives} = check(CtxP, {directive, frag_spread, Dirs}),
+    %% @todo: Consider just expanding #frag{} here
     {ok, [FragSpread#frag_spread { directives = CDirectives }
           | Rest]};
 check(Ctx, [#field{} = F|Fs], {non_null, Ty}) -> check(Ctx, [F|Fs], Ty);
@@ -261,8 +286,8 @@ check(Ctx, [#field{}|_], #scalar_type{}) -> err(Ctx, selection_on_scalar);
 check(Ctx, [#field{}|_], #enum_type{}) -> err(Ctx, selection_on_enum);
 check(Ctx, [#field{ args = Args, directives = Dirs,
                     selection_set = SSet } = F | Fs], Sigma) ->
-    {ok, FieldTypes} = fields(Sigma),
     CtxP = add_path(Ctx, F),
+    {ok, FieldTypes} = fields(CtxP, Sigma),
     {ok, Rest} = check(Ctx, Fs, Sigma),
     {ok, CDirectives} = check(CtxP, {directive, field, Dirs}),
     case infer(Ctx, F, FieldTypes) of
@@ -272,7 +297,7 @@ check(Ctx, [#field{ args = Args, directives = Dirs,
                   |Rest]};
         {ok, #schema_field { ty = Ty, args = TArgs } = SF} ->
             {ok, Type} = output_type(Ty),
-            {ok, CSSet} = check(CtxP, SSet, Type),
+            {ok, CSSet} = check(CtxP, {sset, SSet}, Type),
             {ok, CArgs} = check(CtxP, {args, Args}, TArgs),
             {ok, [F#field {
                     args = CArgs,
@@ -282,14 +307,14 @@ check(Ctx, [#field{ args = Args, directives = Dirs,
                   | Rest]}
     end;
 check(Ctx, #frag { directives = Dirs,
-                   selection_set = SSet } = F, Type) ->
-    {ok, Fields} = fields(Type),
+                   selection_set = SSet } = F, Sigma) ->
     CtxP = add_path(Ctx, F),
-    {ok, Ty} = infer(Ctx, F),
-    ok = sub_frag(Ty, Type),
+    {ok, Fields} = fields(CtxP, Sigma),
+    {ok, Tau} = infer(Ctx, F),
+    ok = sub_frag(CtxP, Tau, Sigma),
     {ok, CDirectives} = check(CtxP, {directive, fragment, Dirs}),
-    {ok, CSSet} = check(CtxP, SSet, Fields),
-    {ok, F#frag { schema = Ty,
+    {ok, CSSet} = check(CtxP, {sset, SSet}, Fields),
+    {ok, F#frag { schema = Tau,
                   directives = CDirectives,
                   selection_set = CSSet }};
 check(Ctx, #op { vardefs = VDefs, directives = Dirs, selection_set = SSet } = Op,
@@ -298,7 +323,7 @@ check(Ctx, #op { vardefs = VDefs, directives = Dirs, selection_set = SSet } = Op
     {ok, Ty} = infer(Ctx, Op),
     OperationType = operation_context(Op),
     {ok, CDirectives} = check(CtxP, {directive, OperationType, Dirs}),
-    {ok, CSSet} = check(CtxP, SSet, Fields),
+    {ok, CSSet} = check(CtxP, {sset, SSet}, Fields),
     {ok, VarDefs} = var_defs(CtxP, {var_def, VDefs}),
     {ok, Op#op {
            schema = Ty,
@@ -357,12 +382,12 @@ sub(_DTy, _STy) ->
 %%
 %% Fragments doesn't care if they sit inside lists or if the scope
 %% type is non-null:
-sub_frag(Ctx, SpreadType, {list, ScopeType}) ->
-    sub_frag(Ctx, SpreadType, ScopeType);
-sub_frag(Ctx, SpreadType, {non_null, ScopeType}) ->
-    sub_frag(Ctx, SpreadType, ScopeType);
-sub_frag(Ctx, {non_null, SpreadType}, ScopeType) ->
-    sub_frag(Ctx, SpreadType, ScopeType);
+sub_frag(Ctx, Tau, {list, Sigma}) ->
+    sub_frag(Ctx, Tau, Sigma);
+sub_frag(Ctx, Tau, {non_null, Sigma}) ->
+    sub_frag(Ctx, Tau, Sigma);
+sub_frag(Ctx, {non_null, Tau}, Sigma) ->
+    sub_frag(Ctx, Tau, Sigma);
 %% Reflexivity:
 sub_frag(_Ctx, #object_type { id = Ty },
                       #object_type { id = Ty }) ->
@@ -371,13 +396,13 @@ sub_frag(_Ctx, #object_type { id = Ty },
 sub_frag(Ctx, #object_type { id = Tau },
                      #object_type { id = Sigma  }) ->
     %% If not a perfect match, this is an error:
-    err(Ctx, {fragment_spread, SpreadTy, ScopeTy});
+    err(Ctx, {fragment_spread, Tau, Sigma});
 %% An object subsumes a union scope if the object is member of
 %% Said union type
 sub_frag(Ctx, #object_type { id = ID },
                      #union_type { id = UID,
-                                   types = ScopeTypes }) ->
-    case lists:member(ID, ScopeTypes) of
+                                   types = Sigmas }) ->
+    case lists:member(ID, Sigmas) of
         true -> ok;
         false -> err(Ctx, {not_union_member, ID, UID})
     end;
@@ -402,11 +427,11 @@ sub_frag(Ctx, #interface_type { id = IID },
 %% so this should be allowed.
 sub_frag(Ctx, #interface_type { id = SpreadID },
                      #interface_type { id = ScopeID }) ->
-    SpreadTypes = graphql_schema:lookup_interface_implementors(SpreadID),
-    ScopeTypes = graphql_schema:lookup_interface_implementors(ScopeID),
+    Taus = graphql_schema:lookup_interface_implementors(SpreadID),
+    Sigmas = graphql_schema:lookup_interface_implementors(ScopeID),
     case ordsets:intersection(
-           ordsets:from_list(SpreadTypes),
-           ordsets:from_list(ScopeTypes)) of
+           ordsets:from_list(Taus),
+           ordsets:from_list(Sigmas)) of
         [_|_] ->
             ok;
         [] ->
@@ -416,9 +441,9 @@ sub_frag(Ctx, #interface_type { id = SpreadID },
 %% who implements the interface.
 sub_frag(Ctx, #interface_type { id = SpreadID },
                      #union_type{ id = ScopeID, types = ScopeMembers }) ->
-    SpreadTypes = graphql_schema:lookup_interface_implementors(SpreadID),
+    Taus = graphql_schema:lookup_interface_implementors(SpreadID),
     case ordsets:intersection(
-           ordsets:from_list(SpreadTypes),
+           ordsets:from_list(Taus),
            ordsets:from_list(ScopeMembers)) of
         [_|_] ->
             ok;
@@ -437,10 +462,10 @@ sub_frag(Ctx, #union_type { id = UID, types = UMembers },
 %% are.
 sub_frag(Ctx, #union_type { id = SpreadID, types = SpreadMembers },
                      #interface_type { id = ScopeID }) ->
-    ScopeTypes = graphql_schema:lookup_interface_implementors(ScopeID),
+    Sigmas = graphql_schema:lookup_interface_implementors(ScopeID),
     case ordsets:intersection(
            ordsets:from_list(SpreadMembers),
-           ordsets:from_list(ScopeTypes)) of
+           ordsets:from_list(Sigmas)) of
         [_|_] ->
             ok;
         [] ->
@@ -484,7 +509,7 @@ var_defs(Ctx, VDefs) ->
         [case input_type(V#vardef.ty) of
              {ok, Ty} -> V#vardef { ty = Ty };
              {error, not_found} -> err(Ctx, {type_not_found, graphql_ast:id(V)});
-             {error, {invalid_input_type, T}} -> err(Path, {not_input_type, T})
+             {error, {invalid_input_type, T}} -> err(Ctx, {not_input_type, T})
          end || V <- VDefs],
     NamedVars = [{graphql_ast:name(K), V}
                  || #vardef { id = K } = V <- VDefs],
@@ -492,17 +517,27 @@ var_defs(Ctx, VDefs) ->
         ok ->
             {ok, varenv(VDefs)};
         {not_unique, Var} ->
-            err(add_path(Ctx, {param_not_unique, Var}))
+            err(add_path(Ctx, Var), {param_not_unique, Var})
     end.
 
 %% Extract fields from a type
-fields(Ctx, #object_type { fields = Fields }) -> {ok, Fields};
-fields(Ctx, #interface_type { fields = Fields }) -> {ok, Fields};
-fields(Ctx, #union_type {}) -> {ok, #{}}.
+fields(_Ctx, #object_type { fields = Fields }) -> {ok, Fields};
+fields(_Ctx, #interface_type { fields = Fields }) -> {ok, Fields};
+fields(_Ctx, #union_type {}) -> {ok, #{}}.
 
 varenv(VDefs) ->
     L = [{graphql_ast:name(Var), Def} || #vardef { id = Var } = Def <- VDefs],
     maps:from_list(L).
+
+funenv(Ops) ->
+    F = fun
+        (#frag{}, FE) -> FE;
+        (#op { id = ID, vardefs = VDefs }, FE) ->
+            Name = graphql_ast:name(ID),
+            VarEnv = varenv(VDefs),
+            FE#{ Name => VarEnv }
+    end,
+    lists:foldl(F, #{}, Ops).
 
 fragenv(Frags) ->
     maps:from_list(
