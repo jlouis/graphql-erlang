@@ -180,44 +180,41 @@ infer(Ctx, #field { id = ID } = F, FieldTypes) ->
 
 %% To check a document, establish a default context and
 %% check the document.
-check(#document{} = Doc) ->
-    check(#ctx{}, Doc).
+check(#document{ definitions = Defs } = Doc) ->
+    {Fragments, Ops} = lists:partition(
+                         fun(#frag{}) -> true; (_) -> false end,
+                         Defs),
+    FragEnv = fragenv(Fragments),
+    CtxP = add_path(#ctx{}, document),
+    Ctx = CtxP#ctx { frags = FragEnv },
+    {ok, COps} = [begin
+                      {ok, Type} = infer(Ctx, Op),
+                      {ok, COp} = check(Ctx, Op, Type),
+                      COp
+                  end || Op <- Ops],
+    {ok, Doc#document { definitions = COps }}.
 
 %% The check/2 relation checks a expression under an environment
 %% it is used whenever we don't have a type but want to have a type
 %%
 %% @todo: Get rid of this since it is probably better embedded in
 %% the other flow.
--spec check(Context :: ctx(), Exp :: expr()) -> {ok, expr()}.
-check(Ctx, {directives, OpType, Dirs}) ->
-    NamedDirectives = [{graphql_ast:name(ID), D}
-                       || #directive { id = ID } = D <- Dirs],
-    case graphql_ast:uniq(NamedDirectives) of
-        ok ->
-            {ok, [check(Ctx, {OpType, D}) || D <- Dirs]};
-        {not_unique, X} ->
-            err(Ctx, {directives_not_unique, X})
-    end;
-check(Ctx, {OpType, #directive {} = D}) ->
-    {ok, Ty} = infer(Ctx, D),
-    check(Ctx, {OpType, D}, Ty);
-check(Ctx, #frag{} = F) ->
-    {ok, Type} = infer(Ctx, F),
-    check(Ctx, F, Type);
-check(Ctx, #op{} = O) ->
-    {ok, Type} = infer(Ctx, O),
-    check(Ctx, O, Type);
-check(Ctx, #document{ definitions = Defs } = Doc) ->
-    {Fragments, Ops} = lists:partition(
-                          fun(#frag{}) -> true; (_) -> false end,
-                          Defs),
-    FragEnv = fragenv(Fragments),
-    CtxP = add_path(Ctx, document),
-    InitialCtx = CtxP#ctx { frags = FragEnv },
-    {ok, Doc#document {
-           definitions = [check(InitialCtx, Op) || Op <- Ops] }}.
+-spec check_directives(Context :: ctx(), Exp :: expr()) -> {ok, expr()}.
+check_directives(Ctx, {directives, OpType, Dirs}) ->
+     NamedDirectives = [{graphql_ast:name(ID), D}
+                        || #directive { id = ID } = D <- Dirs],
+     case graphql_ast:uniq(NamedDirectives) of
+         ok ->
+             {ok, [begin
+                       {ok, Ty} = infer(Ctx, D),
+                       {ok, CDir} = check(Ctx, {OpType, D}, Ty),
+                       CDir 
+                   end || D <- Dirs]};
+         {not_unique, X} ->
+             err(Ctx, {directives_not_unique, X})
+     end.
 
-%% Main check relation:
+%% Main check relations:
 %%
 %% Given a Context of environments
 %% An expression to check
@@ -275,7 +272,8 @@ check(Ctx, [#frag_spread { directives = Dirs } = FragSpread | Fs], Sigma) ->
     {ok, Rest} = check(Ctx, Fs, Sigma),
     {ok, #frag { schema = Tau }} = infer(Ctx, FragSpread),
     ok = sub_frag(CtxP, Tau, Sigma),
-    {ok, CDirectives} = check(CtxP, {directive, frag_spread, Dirs}),
+    
+    {ok, CDirectives} = check_directives(CtxP, {directive, frag_spread, Dirs}),
     %% @todo: Consider just expanding #frag{} here
     {ok, [FragSpread#frag_spread { directives = CDirectives }
           | Rest]};
@@ -289,7 +287,7 @@ check(Ctx, [#field{ args = Args, directives = Dirs,
     CtxP = add_path(Ctx, F),
     {ok, FieldTypes} = fields(CtxP, Sigma),
     {ok, Rest} = check(Ctx, Fs, Sigma),
-    {ok, CDirectives} = check(CtxP, {directive, field, Dirs}),
+    {ok, CDirectives} = check_directives(CtxP, {directive, field, Dirs}),
     case infer(Ctx, F, FieldTypes) of
         {ok, {introspection, typename} = Ty} ->
             {ok, [F#field { schema = Ty,
@@ -312,7 +310,7 @@ check(Ctx, #frag { directives = Dirs,
     {ok, Fields} = fields(CtxP, Sigma),
     {ok, Tau} = infer(Ctx, F),
     ok = sub_frag(CtxP, Tau, Sigma),
-    {ok, CDirectives} = check(CtxP, {directive, fragment, Dirs}),
+    {ok, CDirectives} = check_directives(CtxP, {directive, fragment, Dirs}),
     {ok, CSSet} = check(CtxP, {sset, SSet}, Fields),
     {ok, F#frag { schema = Tau,
                   directives = CDirectives,
@@ -322,7 +320,7 @@ check(Ctx, #op { vardefs = VDefs, directives = Dirs, selection_set = SSet } = Op
     CtxP = add_path(Ctx, Op),
     {ok, Ty} = infer(Ctx, Op),
     OperationType = operation_context(Op),
-    {ok, CDirectives} = check(CtxP, {directive, OperationType, Dirs}),
+    {ok, CDirectives} = check_directives(CtxP, {directive, OperationType, Dirs}),
     {ok, CSSet} = check(CtxP, {sset, SSet}, Fields),
     {ok, VarDefs} = var_defs(CtxP, {var_def, VDefs}),
     {ok, Op#op {
