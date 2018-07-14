@@ -59,7 +59,8 @@
 -record(ctx,
         {
          path = [] :: any(),
-         vars :: #{ binary() => term() }
+         vars = #{} :: #{ binary() => term() },
+         frags = #{} :: #{ binary() =>  #frag{} }
         }).
 -type expr() :: any().
 -type ty() :: any().
@@ -128,6 +129,15 @@ infer(Ctx, #op { ty = Ty } = Op) ->
                     {ok, Ty}
             end
     end;
+infer(#ctx { frags = FragEnv } = Ctx, #frag_spread { id = ID }) ->
+    Name = graphql_ast:name(ID),
+    case maps:get(Name, FragEnv, not_found) of
+        not_found ->
+            CtxP = add_path(Ctx, Name),
+            err(CtxP, unknown_fragment);
+        #frag{} = Frag ->
+            {ok, Frag}
+    end;
 infer(#ctx { vars = Vars } = Ctx, {var, ID}) ->
     Var = graphql_ast:name(ID),
     case maps:get(Var, Vars, not_found) of
@@ -186,9 +196,14 @@ check(Ctx, #op{} = O) ->
     {ok, Type} = infer(Ctx, O),
     check(Ctx, O, Type);
 check(Ctx, #document{ definitions = Defs } = Doc) ->
+    {Fragments, Ops} = lists:partition(
+                          fun(#frag{}) -> true; (_) -> false end,
+                          Defs),
+    FragEnv = fragenv(Fragments),
     CtxP = add_path(Ctx, document),
+    InitialCtx = CtxP#ctx { frags = FragEnv },
     {ok, Doc#document {
-           definitions = [check(CtxP, Op) || Op <- Defs] }}.
+           definitions = [check(InitialCtx, Op) || Op <- Ops] }}.
 
 -spec check(Context :: ctx(), Exp :: expr(), Ty :: ty()) -> {ok, expr()}.
 check(Ctx, {var, ID}, Sigma) ->
@@ -226,15 +241,7 @@ check(Ctx, [], Ty) ->
         _ ->
             {ok, []}
     end;
-check(Ctx, [#field{} = F|Fs], {non_null, Ty}) -> check(Ctx, [F|Fs], Ty);
-check(Ctx, [#field{} = F|Fs], {list, Ty}) -> check(Ctx, [F|Fs], Ty);
-check(_Ctx, [#field{}|_], not_found) -> exit(broken_invariant);
-check(Ctx, [#field{}|_], #scalar_type{}) -> err(Ctx, selection_on_scalar);
-check(Ctx, [#field{}|_], #enum_type{}) -> err(Ctx, selection_on_enum);
-check(Ctx, [#field{} = F|Fs], #object_type { fields = Fields }) -> check(Ctx, [F|Fs], Fields);
-check(Ctx, [#field{} = F|Fs], #interface_type { fields = Fields }) -> check(Ctx, [F|Fs], Fields);
-check(Ctx, [#field{} = F|Fs], #union_type {}) -> check(Ctx, [F|Fs], #{});
-check(Ctx, [#frag { id = '...' } = Frag | Fs], FieldTypes) ->
+check(Ctx, [#frag { id = '...' } = Frag | Fs], Sigma) ->
     {ok, Rest} = check(Ctx, Fs, FieldTypes),
     {ok, FragTy} = infer(Ctx, Frag),
     {ok, CFrag} = check(Ctx, Frag, FragTy), 
@@ -242,14 +249,21 @@ check(Ctx, [#frag { id = '...' } = Frag | Fs], FieldTypes) ->
 check(Ctx, [#frag_spread { directives = Dirs } = FragSpread | Fs], FieldTypes) ->
     CtxP = add_path(Ctx, FragSpread),
     {ok, Rest} = check(Ctx, Fs, FieldTypes),
+    {ok, #frag { schema = Tau } = Frag} = infer(Ctx, FragSpread),
+    ok = sub_fragment(CtxP, Tau, Sigma),
     {ok, CDirectives} = check(CtxP, {directive, frag_spread, Dirs}),
     {ok, [FragSpread#frag_spread { directives = CDirectives }
           | Rest]};
+check(Ctx, [#field{} = F|Fs], {non_null, Ty}) -> check(Ctx, [F|Fs], Ty);
+check(Ctx, [#field{} = F|Fs], {list, Ty}) -> check(Ctx, [F|Fs], Ty);
+check(Ctx, [#field{}|_], not_found) -> exit({broken_invariant, Ctx});
+check(Ctx, [#field{}|_], #scalar_type{}) -> err(Ctx, selection_on_scalar);
+check(Ctx, [#field{}|_], #enum_type{}) -> err(Ctx, selection_on_enum);
 check(Ctx, [#field{ args = Args, directives = Dirs,
-                    selection_set = SSet } = F | Fs], FieldTypes)
-  when is_map(FieldTypes) ->
+                    selection_set = SSet } = F | Fs], Sigma) ->
+    {ok, FieldTypes} = fields(Sigma),
     CtxP = add_path(Ctx, F),
-    {ok, Rest} = check(Ctx, Fs, FieldTypes),
+    {ok, Rest} = check(Ctx, Fs, Sigma),
     {ok, CDirectives} = check(CtxP, {directive, field, Dirs}),
     case infer(Ctx, F, FieldTypes) of
         {ok, {introspection, typename} = Ty} ->
@@ -267,16 +281,12 @@ check(Ctx, [#field{ args = Args, directives = Dirs,
                     selection_set = CSSet }
                   | Rest]}
     end;
-check(Ctx, #frag{} = F, #object_type { fields = Fields }) ->
-    check(Ctx, F, Fields);
-check(Ctx, #frag{} = F, #interface_type { fields = Fields }) ->
-    check(Ctx, F, Fields);
-check(Ctx, #frag{} = F, #union_type {}) ->
-    check(Ctx, F, #{});
 check(Ctx, #frag { directives = Dirs,
-                   selection_set = SSet } = F, Fields) ->
+                   selection_set = SSet } = F, Type) ->
+    {ok, Fields} = fields(Type),
     CtxP = add_path(Ctx, F),
     {ok, Ty} = infer(Ctx, F),
+    ok = sub_frag(Ty, Type),
     {ok, CDirectives} = check(CtxP, {directive, fragment, Dirs}),
     {ok, CSSet} = check(CtxP, SSet, Fields),
     {ok, F#frag { schema = Ty,
@@ -329,6 +339,125 @@ sub(_DTy, _STy) ->
     %% Any other type combination are invalid
     no.
 
+%% Subsumption relation over fragment types
+%% Decide is a fragment can be embedded in a given scope
+%% We proceed by computing the valid set of the Scope and also the
+%% Valid set of the fragment. The intersection type between these two,
+%% Scope and Spread, must not be the empty set. Otherwise it is a failure.
+%%
+%% The implementation here works by case splitting the different possible
+%% output types one at a time and then handling them systematically rather
+%% than running an intersection computation. This trades off computation
+%% for code size when you have a match that can be optimized in any way.
+%%
+
+%% First a series of congruence checks. We essentially ignore
+%% The list and non-null modifiers and check if the given fragment
+%% can be expanded in the given scope by recursing.
+%%
+%% Fragments doesn't care if they sit inside lists or if the scope
+%% type is non-null:
+sub_frag(Ctx, SpreadType, {list, ScopeType}) ->
+    sub_frag(Ctx, SpreadType, ScopeType);
+sub_frag(Ctx, SpreadType, {non_null, ScopeType}) ->
+    sub_frag(Ctx, SpreadType, ScopeType);
+sub_frag(Ctx, {non_null, SpreadType}, ScopeType) ->
+    sub_frag(Ctx, SpreadType, ScopeType);
+%% Reflexivity:
+sub_frag(_Ctx, #object_type { id = Ty },
+                      #object_type { id = Ty }) ->
+    %% Object spread in Object scope requires a perfect match
+    ok;
+sub_frag(Ctx, #object_type { id = Tau },
+                     #object_type { id = Sigma  }) ->
+    %% If not a perfect match, this is an error:
+    err(Ctx, {fragment_spread, SpreadTy, ScopeTy});
+%% An object subsumes a union scope if the object is member of
+%% Said union type
+sub_frag(Ctx, #object_type { id = ID },
+                     #union_type { id = UID,
+                                   types = ScopeTypes }) ->
+    case lists:member(ID, ScopeTypes) of
+        true -> ok;
+        false -> err(Ctx, {not_union_member, ID, UID})
+    end;
+%% Likewise an object is subsumed by an interface if the object
+%% is member of said interface:
+sub_frag(Ctx, #object_type { id = ID,
+                                    interfaces = IFaces },
+                     #interface_type { id = IID }) ->
+    case lists:member(IID, IFaces) of
+        true -> ok;
+        false -> err(Ctx, {not_interface_member, ID, IID})
+    end;
+%% Otherwise, this is an error:
+sub_frag(Ctx, #interface_type { id = IID },
+                     #object_type { id = OID, interfaces = IFaces }) ->
+    case lists:member(IID, IFaces) of
+        true -> ok;
+        false -> err(Ctx, {not_interface_embedder, IID, OID})
+    end;
+%% Interface Tau subsumes interface Sigma if they have concrete
+%% objects in common. This means there is at least one valid expansion,
+%% so this should be allowed.
+sub_frag(Ctx, #interface_type { id = SpreadID },
+                     #interface_type { id = ScopeID }) ->
+    SpreadTypes = graphql_schema:lookup_interface_implementors(SpreadID),
+    ScopeTypes = graphql_schema:lookup_interface_implementors(ScopeID),
+    case ordsets:intersection(
+           ordsets:from_list(SpreadTypes),
+           ordsets:from_list(ScopeTypes)) of
+        [_|_] ->
+            ok;
+        [] ->
+            err(Ctx, {no_common_object, SpreadID, ScopeID})
+    end;
+%% Interfaces subsume unions, if the union has at least one member
+%% who implements the interface.
+sub_frag(Ctx, #interface_type { id = SpreadID },
+                     #union_type{ id = ScopeID, types = ScopeMembers }) ->
+    SpreadTypes = graphql_schema:lookup_interface_implementors(SpreadID),
+    case ordsets:intersection(
+           ordsets:from_list(SpreadTypes),
+           ordsets:from_list(ScopeMembers)) of
+        [_|_] ->
+            ok;
+        [] ->
+            err(Ctx, {no_common_object, SpreadID, ScopeID})
+    end;
+%% Unions subsume objects if they are members
+sub_frag(Ctx, #union_type { id = UID, types = UMembers },
+                     #object_type { id = OID }) ->
+    case lists:member(OID, UMembers) of
+        true -> ok;
+        false -> err(Ctx, {not_union_embedder, UID, OID})
+    end;
+%% Unions subsume interfaces iff there is an intersection between
+%% what members the union has and what the implementors of the interface
+%% are.
+sub_frag(Ctx, #union_type { id = SpreadID, types = SpreadMembers },
+                     #interface_type { id = ScopeID }) ->
+    ScopeTypes = graphql_schema:lookup_interface_implementors(ScopeID),
+    case ordsets:intersection(
+           ordsets:from_list(SpreadMembers),
+           ordsets:from_list(ScopeTypes)) of
+        [_|_] ->
+            ok;
+        [] ->
+            err(Ctx, {no_common_object, SpreadID, ScopeID})
+    end;
+%% Unions subsume if there are common members
+sub_frag(Ctx, #union_type { id = SpreadID, types = SpreadMembers },
+                     #union_type { id = ScopeID,  types = ScopeMembers }) ->
+    case ordsets:intersection(
+           ordsets:from_list(SpreadMembers),
+           ordsets:from_list(ScopeMembers)) of
+        [_|_] ->
+            ok;
+        [] ->
+            err(Ctx, {no_common_object, SpreadID, ScopeID})
+    end.
+
 %% -- INTERNAL FUNCTIONS ------------------------------------------------------------
 
 %% Assert a type is an input type
@@ -350,13 +479,34 @@ output_type(Ty) ->
     end.
 
 %% Handle a list of vardefs by elaboration of their types
-var_defs(Path, VDefs) ->
-    [case input_type(V#vardef.ty) of
-         {ok, Ty} -> V#vardef { ty = Ty };
-         {error, not_found} -> err(Path, {type_not_found, graphql_ast:id(V)});
-         {error, {invalid_input_type, T}} -> err(Path, {not_input_type, T})
-     end || V <- VDefs].
+var_defs(Ctx, VDefs) ->
+    VDefs = 
+        [case input_type(V#vardef.ty) of
+             {ok, Ty} -> V#vardef { ty = Ty };
+             {error, not_found} -> err(Ctx, {type_not_found, graphql_ast:id(V)});
+             {error, {invalid_input_type, T}} -> err(Path, {not_input_type, T})
+         end || V <- VDefs],
+    NamedVars = [{graphql_ast:name(K), V}
+                 || #vardef { id = K } = V <- VDefs],
+    case graphql_ast:uniq(NamedVars) of
+        ok ->
+            {ok, varenv(VDefs)};
+        {not_unique, Var} ->
+            err(add_path(Ctx, {param_not_unique, Var}))
+    end.
 
+%% Extract fields from a type
+fields(Ctx, #object_type { fields = Fields }) -> {ok, Fields};
+fields(Ctx, #interface_type { fields = Fields }) -> {ok, Fields};
+fields(Ctx, #union_type {}) -> {ok, #{}}.
+
+varenv(VDefs) ->
+    L = [{graphql_ast:name(Var), Def} || #vardef { id = Var } = Def <- VDefs],
+    maps:from_list(L).
+
+fragenv(Frags) ->
+    maps:from_list(
+      [{graphql_ast:name(ID), Frg} || #frag { id = ID } = Frg <- Frags]).
 
 operation_context(#op { ty = Ty }) ->
     case Ty of

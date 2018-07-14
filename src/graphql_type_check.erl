@@ -42,41 +42,7 @@
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
--export([x/1, x_params/3]).
-%% -- TOP LEVEL TYPE CHECK CODE -------------------------------
-
-%% Type checking proceeds by the ordinary way of writing a type
-%% checker. First we split the input query document definitions, which
-%% we call "Clauses", into its fragments and the remaining operations.
-%% Next, we create an environment of fragments, so we can refer to
-%% their types as we type check other things.
-%%
-%% Type checking then proceeds one Clause at a time.
--spec x(graphql:ast()) -> {ok, #{ atom() => any()}}.
-x(Doc) ->
-    x(#{}, Doc).
-
-x(Ctx, #document { definitions = Clauses }) ->
-   type_check(Ctx, [document], Clauses).
-
-type_check(Ctx, Path, Clauses) ->
-   {Fragments, _Rest} = lists:partition(
-                          fun (#frag{}) -> true; (_) -> false end,
-                          Clauses),
-
-   FragCtx = Ctx#{ fragenv => mk_fragenv(Fragments) },
-   NewClauses = clauses(FragCtx, Path, Clauses),
-   {ok, #{
-       fun_env => graphql_elaborate:mk_funenv(NewClauses),
-       ast => {document, NewClauses}
-   }}.
-
-clauses(_Ctx, _Path, []) ->
-    [];
-clauses(Ctx, Path, [#frag{} = Frag | Next]) ->
-    [frag(Ctx, Path, Frag) | clauses(Ctx, Path, Next)];
-clauses(Ctx, Path, [#op{} = Op | Next]) ->
-    [op(Ctx, Path, Op) | clauses(Ctx, Path, Next)].
+-export([x_params/3]).
 
 %% -- TYPE CHECK OF PARAMETER ENVS ------------------
 
@@ -168,22 +134,6 @@ check_param(Path, VarEnv, Ty, V) when is_binary(Ty) ->
                    end,
     check_param(Path, VarEnv, ResolvedType, V);
 %% Handle the case of a variable
-check_param(Path, VarEnv, SType, {var, ID}) ->
-    Var = graphql_ast:name(ID),
-    case maps:get(Var, VarEnv, not_found) of
-        not_found ->
-            err(Path, {unknown_var, Var});
-        #vardef { ty = DType } ->
-            case type_embed(DType, SType) of
-                yes ->
-                    %% Use the schema type here
-                    {var, ID, DType};
-                no ->
-                    err(Path, {type_mismatch,
-                               #{ document => {var, Var, DType},
-                                  schema => SType }})
-            end
-    end;
 check_param(Path, _, {non_null, _}, null) ->
     err(Path, non_null);
 check_param(Path, VarEnv, {non_null, Ty}, V) ->
@@ -235,7 +185,7 @@ coerce_default_param(Path, VarEnv, Ty, Default) ->
     end.
 
 %% Input objects are first coerced. Then they are checked.
-check_input_object(Path, VarEnv,#input_object_type{ fields = Fields }, Obj) ->
+check_input_object(Path, VarEnv, #input_object_type{ fields = Fields }, Obj) ->
     Coerced = coerce_input_object(Path, Obj),
     check_input_object_fields(Path, VarEnv, maps:to_list(Fields), Coerced, #{}).
 
@@ -295,49 +245,6 @@ resolve_input_coercion(Path, ID, ResolveModule, Value) ->
             err(Path, {input_coerce_abort, {Cl, Err}})
     end.
 
-%% -- FRAGMENTS --------------------------------
-
-%% Generate a map from fragment names to fragments for use as a
-%% fragment environment.
-mk_fragenv(Frags) ->
-    maps:from_list(
-      [{graphql_ast:name(ID), Frg}
-       || #frag { id = ID } = Frg <- Frags]).
-
-%% Type check a fragment
-frag(Ctx, Path, #frag { schema = ScopeTy,
-                        selection_set = SSet} = Frag) ->
-    Frag#frag { selection_set = sset(Ctx, Path, ScopeTy, SSet) }.
-
-%% -- OPERATIONS -------------------------------
-
-%% Check that the variable environment of an operation is unique
-op_unique_varenv(VDefs) ->
-    NamedVars = [{graphql_ast:name(K), V}
-                 || #vardef { id = K } = V <- VDefs],
-    graphql_ast:uniq(NamedVars).
-
-%% Type check an operation.
-op(Ctx, Path, #op { id = ID,
-                    schema = ScopeTy,
-                    vardefs = VDefs,
-                    selection_set = SSet} = Op) ->
-    case op_unique_varenv(VDefs) of
-        ok ->
-            VarEnv = graphql_elaborate:mk_varenv(VDefs),
-            CheckedSSet = sset(Ctx#{ varenv => VarEnv },
-                               [ID | Path], ScopeTy, SSet),
-            Op#op { selection_set = CheckedSSet };
-        {not_unique, Var} ->
-            err([ID | Path], {param_not_unique, Var})
-    end.
-
-%% -- SELECTION SETS ------------------------------------
-
-%% Type check a selection set by recursing into each field in the selection
-sset(Ctx, Path, Scope, SSet) ->
-    [field(Ctx, Path, Scope, S) || S <- SSet].
-
 %% Fields are either fragment spreads, inline fragments, introspection
 %% queries or true field entries. Split on the variant of field and
 %% handle each accordingly.
@@ -351,30 +258,6 @@ sset(Ctx, Path, Scope, SSet) ->
 %% Since fields have negative polarity, we only consider type checking
 %% of the fields which the client requested. Every other field is
 %% ignored.
-field(#{ fragenv := FE } = Ctx, Path, ScopeTy, #frag_spread { id = ID, directives = Ds } = FSpread) ->
-    Name = graphql_ast:name(ID),
-    case maps:get(Name, FE, not_found) of
-        not_found ->
-            err([Name | Path], unknown_fragment);
-        #frag { schema = FragTy } ->
-            ok = fragment_embed([Name | Path], FragTy, ScopeTy),
-            %% You can always include a fragspread, as long as it exists
-            %% It may be slightly illegal in a given context but this just
-            %% means the system will ignore the fragment on execution
-            FSpread#frag_spread { directives = directives(Ctx, Path, Ds) }
-    end;
-field(Ctx, Path, Scope, #frag { id = '...',
-                                schema = InnerScope,
-                                selection_set = SSet,
-                                directives = Ds} = InlineFrag) ->
-    ok = fragment_embed([<<"...">> | Path], InnerScope, Scope),
-    InlineFrag#frag {
-        directives = directives(Ctx, [<<"...">> | Path], Ds),
-        selection_set = sset(Ctx, [InlineFrag | Path], InnerScope, SSet)
-    };
-field(Ctx, Path, _Scope, #field { id = ID, schema = {introspection, typename}, directives = Ds } = F) ->
-    Component = graphql_ast:name(ID),
-    F#field { directives = directives(Ctx, [Component | Path], Ds)};
 field(Ctx, Path, _Scope,
       #field {
          id = ID,
@@ -458,141 +341,6 @@ take_arg(Args, {Key, #schema_arg { ty = Ty, default = Default }}) ->
         {value, Arg, NextArgs} ->
             {ok, Arg, NextArgs}
     end.
-
-%% Decide is a fragment can be embedded in a given scope
-%% We proceed by computing the valid set of the Scope and also the
-%% Valid set of the fragment. The intersection type between these two,
-%% Scope and Spread, must not be the empty set. Otherwise it is a failure.
-%%
-%% The implementation here works by case splitting the different possible
-%% output types one at a time and then handling them systematically rather
-%% than running an intersection computation. This trades off computation
-%% for code size when you have a match that can be optimized in any way.
-%%
-
-%% First a series of congruence checks
-fragment_embed(Path, SpreadType, {list, ScopeType}) ->
-    %% Check congruences of lists
-    fragment_embed(Path, SpreadType, ScopeType);
-fragment_embed(Path, SpreadType, {non_null, ScopeType}) ->
-    %% Check congruences of non-null values
-    fragment_embed(Path, SpreadType, ScopeType);
-fragment_embed(Path, {non_null, SpreadType}, ScopeType) ->
-    %% Check congruences of non-null values
-    fragment_embed(Path, SpreadType, ScopeType);
-%% Real concrete output objects/negative polarity checks
-fragment_embed(_Path, #object_type { id = Ty },
-                      #object_type { id = Ty  }) ->
-    %% Object spread in Object scope requires a perfect match
-    ok;
-fragment_embed(Path, #object_type { id = SpreadTy },
-                     #object_type { id = ScopeTy  }) ->
-    %% Object spread in Object scope requires a perfect match
-    err(Path, {fragment_spread, SpreadTy, ScopeTy});
-fragment_embed(Path, #object_type { id = ID },
-                     #union_type { id = UID,
-                                   types = ScopeTypes }) ->
-    case lists:member(ID, ScopeTypes) of
-        true -> ok;
-        false -> err(Path, {not_union_member, ID, UID})
-    end;
-fragment_embed(Path, #object_type { id = ID,
-                                    interfaces = IFaces },
-                     #interface_type { id = IID }) ->
-    case lists:member(IID, IFaces) of
-        true -> ok;
-        false -> err(Path, {not_interface_member, ID, IID})
-    end;
-fragment_embed(Path, #interface_type { id = IID },
-                     #object_type { id = OID, interfaces = IFaces }) ->
-    case lists:member(IID, IFaces) of
-        true -> ok;
-        false -> err(Path, {not_interface_embedder, IID, OID})
-    end;
-fragment_embed(Path, #interface_type { id = SpreadID },
-                     #interface_type { id = ScopeID }) ->
-    SpreadTypes = graphql_schema:lookup_interface_implementors(SpreadID),
-    ScopeTypes = graphql_schema:lookup_interface_implementors(ScopeID),
-    case ordsets:intersection(
-           ordsets:from_list(SpreadTypes),
-           ordsets:from_list(ScopeTypes)) of
-        [_|_] ->
-            ok;
-        [] ->
-            err(Path, {no_common_object, SpreadID, ScopeID})
-    end;
-fragment_embed(Path, #interface_type { id = SpreadID },
-                     #union_type{ id = ScopeID, types = ScopeMembers }) ->
-    SpreadTypes = graphql_schema:lookup_interface_implementors(SpreadID),
-    case ordsets:intersection(
-           ordsets:from_list(SpreadTypes),
-           ordsets:from_list(ScopeMembers)) of
-        [_|_] ->
-            ok;
-        [] ->
-            err(Path, {no_common_object, SpreadID, ScopeID})
-    end;
-fragment_embed(Path, #union_type { id = UID, types = UMembers },
-                     #object_type { id = OID }) ->
-    case lists:member(OID, UMembers) of
-        true -> ok;
-        false -> err(Path, {not_union_embedder, UID, OID})
-    end;
-fragment_embed(Path, #union_type { id = SpreadID, types = SpreadMembers },
-                     #interface_type { id = ScopeID }) ->
-    ScopeTypes = graphql_schema:lookup_interface_implementors(ScopeID),
-    case ordsets:intersection(
-           ordsets:from_list(SpreadMembers),
-           ordsets:from_list(ScopeTypes)) of
-        [_|_] ->
-            ok;
-        [] ->
-            err(Path, {no_common_object, SpreadID, ScopeID})
-    end;
-fragment_embed(Path, #union_type { id = SpreadID, types = SpreadMembers },
-                     #union_type { id = ScopeID,  types = ScopeMembers }) ->
-    case ordsets:intersection(
-           ordsets:from_list(SpreadMembers),
-           ordsets:from_list(ScopeMembers)) of
-        [_|_] ->
-            ok;
-        [] ->
-            err(Path, {no_common_object, SpreadID, ScopeID})
-    end.
-
-%% Decide if a type is an valid embedding in another type. We assume
-%% that the first parameter is the 'D' type and the second parameter
-%% is the 'S' type. These are the document and schema types
-%% respectively. In some situations, it is allowed to have a more
-%% strict type in the document then in the schema, but not vice versa.
-%% This is what leads to a type embedding.
-%%
-%% Some of the cases are reflexivity. Some of the cases are congruences.
-%% And some are special handling explicitly.
-%%
-type_embed(#scalar_type { id = ID }, #scalar_type { id = ID }) -> yes;
-type_embed(#enum_type { id = ID }, #enum_type { id = ID }) -> yes;
-type_embed(#input_object_type { id = ID }, #input_object_type { id = ID }) -> yes;
-type_embed({non_null, DTy}, {non_null, STy}) ->
-    type_embed(DTy, STy);
-type_embed({non_null, DTy}, STy) ->
-    %% A more strict document type of non-null is always allowed since
-    %% it can't be null in the schema then
-    type_embed(DTy, STy);
-type_embed(_DTy, {non_null, _STy}) ->
-    %% If the schema requires a non-null type but the document doesn't
-    %% supply that, it is an error
-    no;
-type_embed({list, DTy}, {list, STy}) ->
-    %% Lists are decided by means of a congruence
-    type_embed(DTy, STy);
-type_embed(DTy, {list, STy}) ->
-    %% A singleton type is allowed to be embedded in a list according to the
-    %% specification (Oct 2016)
-    type_embed(DTy, STy);
-type_embed(_DTy, _STy) ->
-    %% Any other type combination are invalid
-    no.
 
 %% Judge a list of values with the same type.
 judge_list(_Ctx, _Path, [], _Type, _K) ->

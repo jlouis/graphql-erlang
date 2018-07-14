@@ -9,13 +9,6 @@
 
 %% -- VARIABLE ENVIRONMENTS -----------------------
 
-%% -- VARENV -------------------------------------
-mk_varenv(VDefs) ->
-    maps:from_list([varenv_coerce(Def) || Def <- VDefs]).
-
-varenv_coerce(#vardef { id = Var } = VarDef) ->
-    {graphql_ast:name(Var), VarDef}.
-
 %% -- MK OF FUNENV ------------------------------
 
 %% The function environment encodes a mapping from the name of a query
