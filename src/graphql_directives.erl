@@ -1,5 +1,7 @@
 -module(graphql_directives).
 
+-include("graphql_schema.hrl").
+
 -export([include/0,
          skip/0]).
 
@@ -14,7 +16,8 @@ include() ->
                 ty = graphql_schema:get(<<"Bool">>),
                 default = false,
                 description = <<"Wether or not the item should be included">> }
-        }};
+        }}.
+
 skip() ->
     #directive_type {
        id = <<"skip">>,

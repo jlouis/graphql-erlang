@@ -54,15 +54,13 @@
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
--export([infer/1,
-         infer_params/3]).
+-export([check/1]).
 
 -record(ctx,
         {
-         path = [],
+         path = [] :: any(),
          vars :: #{ binary() => term() }
         }).
--type ctx() :: #ctx{}.
 -type expr() :: any().
 -type ty() :: any().
 
@@ -109,38 +107,28 @@ infer_type(N) when is_binary(N) ->
         #union_type{} = Union -> {'-', Union}
     end.
 
-infer(Doc) ->
-    try infer(#ctx{}, Doc) of
-        {ok, AST} ->
-            {ok, AST};
-        {error, Reason} ->
-            {error, Reason}
-    catch
-        throw:{error, Path, Msg} ->
-            graphql_err:abort(Path, type_check, Msg)
-    end.
-
-infer_params(_, _, _) ->
-    {error, not_implemented}.
-
-
 -spec infer(Context :: ctx(), Exp :: expr()) -> {ok, ty()}.
 infer(Ctx, #directive { id = ID }) ->
     case graphql_ast:name(ID) of
         <<"include">> -> {ok, graphql_directives:include()};
         <<"skip">> -> {ok, graphql_directives:skip()};
-        _Name -> err(Ctx, {unknown_directive, D})
+        Name -> err(Ctx, {unknown_directive, Name})
     end;
-infer(Ctx, #op {} = Op) ->
+infer(Ctx, #op { ty = Ty } = Op) ->
     CtxP = add_path(Ctx, Op),
-    RootSchema = root(Ctx, Op),
-    case graphql_schema:lookup(RootSchema) of
+    case graphql_schema:lookup('ROOT') of
         not_found ->
-            err(CtxP, {type_not_found, RootSchema});
-        #object_type{} = Ty ->
-            {ok, Ty}
+            err(Ctx, no_root_schema);
+        Schema ->
+            Root = graphql_schema:resolve_root_type(Ty, Schema),
+            case graphql_schema:lookup(Root) of
+                not_found ->
+                    err(CtxP, {type_not_found, Root});
+                #object_type{} = Ty ->
+                    {ok, Ty}
+            end
     end;
-infer(#ctx { vars = Vars }, {var, ID}) ->
+infer(#ctx { vars = Vars } = Ctx, {var, ID}) ->
     Var = graphql_ast:name(ID),
     case maps:get(Var, Vars, not_found) of
         not_found ->
@@ -148,7 +136,7 @@ infer(#ctx { vars = Vars }, {var, ID}) ->
         #vardef {} = VDef ->
             {ok, VDef}
     end;
-infer(Gamma, #document{} = Doc) ->
+infer(_Ctx, _) ->
     {error, not_implemented}.
 
 -spec infer(Context :: ctx(),
@@ -165,7 +153,7 @@ infer(Ctx, {arg, K}, ArgTypes) ->
     end;
 infer(Ctx, #field { id = ID } = F, FieldTypes) ->
     CtxP = add_path(Ctx, F),
-    graphql_ast:name(ID),
+    Name = graphql_ast:name(ID),
     case maps:get(Name, FieldTypes, not_found) of
         not_found when Name == <<"__typename">> ->
             {ok, {introspection, typename}};
@@ -200,7 +188,7 @@ check(Ctx, #op{} = O) ->
 check(Ctx, #document{ definitions = Defs } = Doc) ->
     CtxP = add_path(Ctx, document),
     {ok, Doc#document {
-           definitions = [check(CtxP, Op) || Op <- Operations] }}.
+           definitions = [check(CtxP, Op) || Op <- Defs] }}.
 
 -spec check(Context :: ctx(), Exp :: expr(), Ty :: ty()) -> {ok, expr()}.
 check(Ctx, {var, ID}, Sigma) ->
@@ -209,10 +197,10 @@ check(Ctx, {var, ID}, Sigma) ->
         yes -> {ok, {var, ID, Tau}};
         no ->
             err(Ctx, {type_mismatch,
-                      #{ document => {var, Var, Tau},
+                      #{ document => {var, ID, Tau},
                          schema => Sigma }})
     end;
-check(Ctx, {args, []}, _Ty) ->
+check(_Ctx, {args, []}, _Ty) ->
     {ok, []};
 check(Ctx, {args, [{K, V}|Args]}, Ty) ->
     {ok, Rest} = check(Ctx, {args, Args}, Ty),
@@ -220,15 +208,16 @@ check(Ctx, {args, [{K, V}|Args]}, Ty) ->
     {ok, [{K, #{ type => CTy,
                  value => V }}|Rest]};
 check(Ctx, {Context,
-            #directive{}},
-      #directive_type { args = SArgs, locations = Locations }) ->
+            #directive{ args = Args, id = ID} = D},
+      #directive_type { args = SArgs, locations = Locations } = Ty) ->
     CtxP = add_path(Ctx, D),
     case lists:member(Context, Locations) of
         true ->
             {ok, D#directive { args = check(CtxP, {args, Args}, SArgs),
                                schema = Ty }};
         false ->
-            err(Ctx, {invalid_directive_location, graphql_ast:name(ID), Context})
+            Name = graphql_ast:name(ID),
+            err(Ctx, {invalid_directive_location, Name, Context})
     end;
 check(Ctx, [], Ty) ->
     case Ty of
@@ -239,13 +228,25 @@ check(Ctx, [], Ty) ->
     end;
 check(Ctx, [#field{} = F|Fs], {non_null, Ty}) -> check(Ctx, [F|Fs], Ty);
 check(Ctx, [#field{} = F|Fs], {list, Ty}) -> check(Ctx, [F|Fs], Ty);
-check(Ctx, [#field{} = F|Fs], not_found) -> exit(broken_invariant);
-check(Ctx, [#field{} = F|Fs], #scalar_type{}) -> err(Ctx, selection_on_scalar);
-check(Ctx, [#field{} = F|Fs], #enum_type{}) -> err(Ctx, selection_on_enum);
+check(_Ctx, [#field{}|_], not_found) -> exit(broken_invariant);
+check(Ctx, [#field{}|_], #scalar_type{}) -> err(Ctx, selection_on_scalar);
+check(Ctx, [#field{}|_], #enum_type{}) -> err(Ctx, selection_on_enum);
 check(Ctx, [#field{} = F|Fs], #object_type { fields = Fields }) -> check(Ctx, [F|Fs], Fields);
 check(Ctx, [#field{} = F|Fs], #interface_type { fields = Fields }) -> check(Ctx, [F|Fs], Fields);
 check(Ctx, [#field{} = F|Fs], #union_type {}) -> check(Ctx, [F|Fs], #{});
-check(Ctx, [#field{ args = Args, directives = Dirs } = F | Fs], FieldTypes)
+check(Ctx, [#frag { id = '...' } = Frag | Fs], FieldTypes) ->
+    {ok, Rest} = check(Ctx, Fs, FieldTypes),
+    {ok, FragTy} = infer(Ctx, Frag),
+    {ok, CFrag} = check(Ctx, Frag, FragTy), 
+    {ok, [CFrag | Rest]};
+check(Ctx, [#frag_spread { directives = Dirs } = FragSpread | Fs], FieldTypes) ->
+    CtxP = add_path(Ctx, FragSpread),
+    {ok, Rest} = check(Ctx, Fs, FieldTypes),
+    {ok, CDirectives} = check(CtxP, {directive, frag_spread, Dirs}),
+    {ok, [FragSpread#frag_spread { directives = CDirectives }
+          | Rest]};
+check(Ctx, [#field{ args = Args, directives = Dirs,
+                    selection_set = SSet } = F | Fs], FieldTypes)
   when is_map(FieldTypes) ->
     CtxP = add_path(Ctx, F),
     {ok, Rest} = check(Ctx, Fs, FieldTypes),
@@ -266,9 +267,25 @@ check(Ctx, [#field{ args = Args, directives = Dirs } = F | Fs], FieldTypes)
                     selection_set = CSSet }
                   | Rest]}
     end;
+check(Ctx, #frag{} = F, #object_type { fields = Fields }) ->
+    check(Ctx, F, Fields);
+check(Ctx, #frag{} = F, #interface_type { fields = Fields }) ->
+    check(Ctx, F, Fields);
+check(Ctx, #frag{} = F, #union_type {}) ->
+    check(Ctx, F, #{});
+check(Ctx, #frag { directives = Dirs,
+                   selection_set = SSet } = F, Fields) ->
+    CtxP = add_path(Ctx, F),
+    {ok, Ty} = infer(Ctx, F),
+    {ok, CDirectives} = check(CtxP, {directive, fragment, Dirs}),
+    {ok, CSSet} = check(CtxP, SSet, Fields),
+    {ok, F#frag { schema = Ty,
+                  directives = CDirectives,
+                  selection_set = CSSet }};
 check(Ctx, #op { vardefs = VDefs, directives = Dirs, selection_set = SSet } = Op,
            #object_type { fields = Fields }) ->
     CtxP = add_path(Ctx, Op),
+    {ok, Ty} = infer(Ctx, Op),
     OperationType = operation_context(Op),
     {ok, CDirectives} = check(CtxP, {directive, OperationType, Dirs}),
     {ok, CSSet} = check(CtxP, SSet, Fields),
@@ -277,7 +294,7 @@ check(Ctx, #op { vardefs = VDefs, directives = Dirs, selection_set = SSet } = Op
            schema = Ty,
            directives = CDirectives,
            selection_set = CSSet,
-           var_defs = VarDefs}}.
+           vardefs = VarDefs}}.
     
 %% Subsumption relation over types:
 %%
@@ -316,7 +333,7 @@ sub(_DTy, _STy) ->
 
 %% Assert a type is an input type
 input_type(Ty) ->
-    case type(Ty) of
+    case infer_type(Ty) of
         {error, Reason} -> {error, Reason};
         {'*', V} -> {ok, V};
         {'+', V} -> {ok, V};
@@ -325,7 +342,7 @@ input_type(Ty) ->
 
 %% Assert a type is an output type
 output_type(Ty) ->
-    case type(Ty) of
+    case infer_type(Ty) of
         {error, Reason} -> {error, Reason};
         {'*', V} -> {ok, V};
         {'-', V} -> {ok, V};
@@ -352,5 +369,6 @@ operation_context(#op { ty = Ty }) ->
 add_path(#ctx { path = P } = Ctx, C) ->
     Ctx#ctx { path = [C|P] }.
 
-err(#context{ path = Path }, Msg) ->
+err(#ctx{ path = Path }, Msg) ->
     throw({error, Path, Msg}).
+

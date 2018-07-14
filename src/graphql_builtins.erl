@@ -2,7 +2,6 @@
 
 -include("graphql_schema.hrl").
 
--export([directive_schema/1]).
 -export([standard_types_inject/0]).
 
 -spec standard_types_inject() -> ok.
