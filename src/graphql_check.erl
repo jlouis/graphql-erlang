@@ -485,7 +485,10 @@ check(#document{ definitions = Defs } = Doc) ->
                       {ok, COp} = check(Ctx, Op, Type),
                       COp
                   end || Op <- Ops],
-    {ok, Doc#document { definitions = COps }}.
+    {ok, #{
+           ast => Doc#document { definitions = COps },
+           funenv => funenv(COps) }}.
+
 
 %% GraphQL queries are really given in two stages. One stage is the
 %% query document containing (static) queries which take parameters.
