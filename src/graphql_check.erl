@@ -54,10 +54,8 @@
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
-%%-export([check/1, check_params/3]).
-%%-export([funenv/1]).
--export([infer_type/2]).
--export([infer/2, infer_field/3]).
+-export([check/1, check_params/3]).
+-export([funenv/1]).
 
 -record(ctx,
         {
@@ -204,34 +202,13 @@ infer_field(Ctx, #field { id = ID } = F, FieldTypes) ->
             {ok, Ty}
     end.
 
--ifdef(NO).
 
 %% -- TYPE CHECKING --------------------------------------------------------
 %%
 %%
 
-%% The check/2 relation checks a expression under an environment
-%% it is used whenever we don't have a type but want to have a type
-%%
-%% @todo: Get rid of this since it is probably better embedded in
-%% the other flow.
--spec check_directives(Context :: ctx(), Exp :: expr()) -> {ok, expr()}.
-check_directives(Ctx, {directives, OpType, Dirs}) ->
-     NamedDirectives = [{graphql_ast:name(ID), D}
-                        || #directive { id = ID } = D <- Dirs],
-     case graphql_ast:uniq(NamedDirectives) of
-         ok ->
-             {ok, [begin
-                       {ok, Ty} = infer(Ctx, D),
-                       {ok, CDir} = check(Ctx, {OpType, D}, Ty),
-                       CDir
-                   end || D <- Dirs]};
-         {not_unique, X} ->
-             err(Ctx, {directives_not_unique, X})
-     end.
-
 %% Check arguments. Follows the general scheme
--spec check_args(Context :: ctx(), Exp :: expr(), Ty :: ty()) -> {ok, expr()}.
+-spec check_args(Context :: ctx(), [Exp :: expr()], Ty :: map()) -> {ok, any()}.
 check_args(Ctx, Args, Ty) ->
     %% Check uniqueness
     NamedArgs = [{graphql_ast:name(K), V} || {K, V} <- Args],
@@ -264,12 +241,38 @@ check_args_(Ctx, Args, [{N, #schema_arg { ty = SigmaTy }} = SArg | Next], Acc) -
           end,
     check_args_(Ctx, NextArgs, Next, [Res|Acc]).
 
+check_directive(Ctx, Context, #directive{ args = Args, id = ID} = D,
+                #directive_type { args = SArgs, locations = Locations } = Ty) ->
+    CtxP = add_path(Ctx, D),
+    case lists:member(Context, Locations) of
+        true ->
+            {ok, CArgs} = check_args(CtxP, Args, SArgs),
+            {ok, D#directive { args = CArgs, schema = Ty }};
+        false ->
+            Name = graphql_ast:name(ID),
+            err(Ctx, {invalid_directive_location, Name, Context})
+    end.
+
+%% @todo this might be an inference
+check_directives(Ctx, OpType, Dirs) ->
+     NamedDirectives = [{graphql_ast:name(ID), D}
+                        || #directive { id = ID } = D <- Dirs],
+     case graphql_ast:uniq(NamedDirectives) of
+         ok ->
+             {ok, [begin
+                       {ok, Ty} = infer(Ctx, D),
+                       {ok, CDir} = check_directive(Ctx, OpType, D, Ty),
+                       CDir
+                   end || D <- Dirs]};
+         {not_unique, X} ->
+             err(Ctx, {directives_not_unique, X})
+     end.
+
 %% Check values against a type:
 %%
 %% Judge a type and a value. Used to verify a type judgement of the
 %% form 'G |- v <= T,e'' for a value 'v' and a type 'T'. Analysis has shown that
 %% it is most efficient to make the case analysis follow 'v' over 'T'.
-
 check_value(Ctx, {name, _, N}, Sigma) ->
     check_value(Ctx, N, Sigma);
 check_value(Ctx, null, {non_null, _} = Sigma) ->
@@ -394,7 +397,7 @@ check_sset_(Ctx, [#frag_spread { directives = Dirs } = FragSpread | Fs], Sigma) 
     {ok, #frag { schema = Tau }} = infer(Ctx, FragSpread),
     ok = sub_frag(CtxP, Tau, Sigma),
 
-    {ok, CDirectives} = check_directives(CtxP, {directive, frag_spread, Dirs}),
+    {ok, CDirectives} = check_directives(CtxP, frag_spread, Dirs),
     %% @todo: Consider just expanding #frag{} here
     {ok, [FragSpread#frag_spread { directives = CDirectives }
           | Rest]};
@@ -409,7 +412,7 @@ check_sset_(Ctx, [#field{ args = Args, directives = Dirs,
     CtxP = add_path(Ctx, F),
     {ok, FieldTypes} = fields(CtxP, Sigma),
     {ok, Rest} = check_sset_(Ctx, Fs, Sigma),
-    {ok, CDirectives} = check_directives(CtxP, {directive, field, Dirs}),
+    {ok, CDirectives} = check_directives(CtxP, field, Dirs),
     case infer_field(Ctx, F, FieldTypes) of
         {ok, {introspection, typename} = Ty} ->
             {ok, [F#field { schema = Ty,
@@ -435,7 +438,6 @@ check_sset_(Ctx, [#field{ args = Args, directives = Dirs,
 %%
 %% We derive an expression in which we have annotated types into
 %% the AST. This helps the later execution stage.
--spec check(Context :: ctx(), Exp :: expr(), Ty :: ty()) -> {ok, expr()}.
 check(Ctx, {var, ID}, Sigma) ->
     {ok, Tau} = infer(Ctx, {var, ID}),
     case sub(Tau, Sigma) of
@@ -445,25 +447,13 @@ check(Ctx, {var, ID}, Sigma) ->
                       #{ document => {var, ID, Tau},
                          schema => Sigma }})
     end;
-check(Ctx, {Context,
-            #directive{ args = Args, id = ID} = D},
-      #directive_type { args = SArgs, locations = Locations } = Ty) ->
-    CtxP = add_path(Ctx, D),
-    case lists:member(Context, Locations) of
-        true ->
-            {ok, CArgs} = check_args(CtxP, Args, SArgs),
-            {ok, D#directive { args = CArgs, schema = Ty }};
-        false ->
-            Name = graphql_ast:name(ID),
-            err(Ctx, {invalid_directive_location, Name, Context})
-    end;
 check(Ctx, #frag { directives = Dirs,
                    selection_set = SSet } = F, Sigma) ->
     CtxP = add_path(Ctx, F),
     {ok, Fields} = fields(CtxP, Sigma),
     {ok, Tau} = infer(Ctx, F),
     ok = sub_frag(CtxP, Tau, Sigma),
-    {ok, CDirectives} = check_directives(CtxP, {directive, fragment, Dirs}),
+    {ok, CDirectives} = check_directives(CtxP, fragment, Dirs),
     {ok, CSSet} = check_sset(CtxP, SSet, Fields),
     {ok, F#frag { schema = Tau,
                   directives = CDirectives,
@@ -473,7 +463,7 @@ check(Ctx, #op { vardefs = VDefs, directives = Dirs, selection_set = SSet } = Op
     CtxP = add_path(Ctx, Op),
     {ok, Ty} = infer(Ctx, Op),
     OperationType = operation_context(Op),
-    {ok, CDirectives} = check_directives(CtxP, {directive, OperationType, Dirs}),
+    {ok, CDirectives} = check_directives(CtxP, OperationType, Dirs),
     {ok, CSSet} = check_sset(CtxP, SSet, Fields),
     {ok, VarDefs} = var_defs(CtxP, {var_def, VDefs}),
     {ok, Op#op {
@@ -916,9 +906,6 @@ err_report(Term, Cl, Err) ->
      Term,
      {error, Cl, Err}
     ]).
-
--endif.
-
 
 %% Add a path component to the context
 -spec add_path(ctx(), Component :: term()) -> ctx().
