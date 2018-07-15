@@ -314,19 +314,19 @@ check_value(Ctx, {input_object, _} = InputObj, Sigma) ->
                       #{ document => InputObj,
                          schema => Sigma }})
     end;
-check_value(Ctx, Value, #scalar_type{} = Sigma) ->
-    coerce(Ctx, Value, Sigma);
+check_value(Ctx, Val, #scalar_type{} = Sigma) ->
+    coerce(Ctx, Val, Sigma);
 check_value(Ctx, String, #enum_type{}) when is_binary(String) ->
     %% The spec (Jun2018, section 3.9 - Input Coercion) says that this
     %% is not allowed, unless given as a parameter. In this case, it
     %% is not given as a parameter, but is expanded in as a string in
     %% a query document. Reject.
     err(Ctx, enum_string_literal);
-check_value(Ctx, Value, #enum_type{} = Sigma) ->
-    coerce(Ctx, Value, Sigma);
-check_value(Ctx, Value, Sigma) ->
+check_value(Ctx, Val, #enum_type{} = Sigma) ->
+    coerce(Ctx, Val, Sigma);
+check_value(Ctx, Val, Sigma) ->
     err(Ctx, {type_mismatch,
-              #{ document => Value,
+              #{ document => Val,
                  schmema => Sigma }}).
 
 check_input_obj(Ctx, {input_object, Obj},
@@ -524,10 +524,10 @@ check_params(FunEnv, OpName, Params) ->
 check_params_(#ctx { vars = VE } = Ctx, OrigParams) ->
     F = fun
             (Key, Tau, Parameters) ->
-                {ok, Value} = check_param(add_path(Ctx, Key),
+                {ok, Val} = check_param(add_path(Ctx, Key),
                                           maps:get(Key, Parameters, not_found),
                                           Tau),
-                Parameters#{ Key => Value }
+                Parameters#{ Key => Val }
         end,
     maps:fold(F, OrigParams, VE).
 
@@ -542,19 +542,19 @@ check_param(Ctx, not_found, Tau) ->
         #vardef { default = Default, ty = Ty } ->
             coerce_default_param(Ctx, Default, Ty)
     end;
-check_param(Ctx, Value, #vardef { ty = TyName }) ->
+check_param(Ctx, Val, #vardef { ty = TyName }) ->
     case infer_type(Ctx, TyName) of
         {ok, {'+', Ty}} ->
-            check_param_(Ctx, Value, Ty);
+            check_param_(Ctx, Val, Ty);
         {ok, {_, Ty}} ->
             err(Ctx, {not_input_type, Ty, TyName})
     end.
 
 check_param_(Ctx, null, {not_null, _}) ->
     err(Ctx, non_null);
-check_param_(Ctx, Value, {non_null, Tau}) ->
+check_param_(Ctx, Val, {non_null, Tau}) ->
     %% Here, the value cannot be null due to the preceeding clauses
-    check_param_(Ctx, Value, Tau);
+    check_param_(Ctx, Val, Tau);
 check_param_(_Ctx, null, _Tau) ->
     {ok, null};
 check_param_(Ctx, Lst, {list, Tau}) when is_list(Lst) ->
@@ -563,17 +563,17 @@ check_param_(Ctx, Lst, {list, Tau}) when is_list(Lst) ->
     %%
     %% @todo: Track the index here
     {ok, [check_param_(Ctx, X, Tau) || X <- Lst]};
-check_param_(Ctx, Value, #scalar_type{} = Tau) ->
-    coerce(Ctx, Value, Tau);
-check_param_(Ctx, {enum, Value}, #enum_type{} = Tau) when is_binary(Value) ->
-    check_param_(Ctx, Value, Tau);
-check_param_(Ctx, Value, #enum_type { id = Ty } = Tau) when is_binary(Value) ->
+check_param_(Ctx, Val, #scalar_type{} = Tau) ->
+    coerce(Ctx, Val, Tau);
+check_param_(Ctx, {enum, Val}, #enum_type{} = Tau) when is_binary(Val) ->
+    check_param_(Ctx, Val, Tau);
+check_param_(Ctx, Val, #enum_type { id = Ty } = Tau) when is_binary(Val) ->
     %% Determine the type of any enum term, and then coerce it
-    case graphql_schema:validate_enum(Ty, Value) of
+    case graphql_schema:validate_enum(Ty, Val) of
         ok ->
-            coerce(Ctx, Value, Tau);
+            coerce(Ctx, Val, Tau);
         not_found ->
-            err(Ctx, {enum_not_found, Ty, Value});
+            err(Ctx, {enum_not_found, Ty, Val});
         {other_enums, OtherTys} ->
             err(Ctx, {param_mismatch, {enum, Ty, OtherTys}})
     end;
@@ -587,8 +587,8 @@ check_param_(Ctx, Obj, #input_object_type{} = Tau) when is_map(Obj) ->
 check_param_(Ctx, {input_object, KVPairs}, #input_object_type{} = Tau) ->
     check_input_obj(Ctx, {input_object, KVPairs}, Tau);
     %% Everything else are errors
-check_param_(Ctx, Value, Tau) ->
-    err(Ctx, {param_mismatch, Value, Tau}).    
+check_param_(Ctx, Val, Tau) ->
+    err(Ctx, {param_mismatch, Val, Tau}).    
 
 %% Subsumption relation over types:
 %%
@@ -745,27 +745,27 @@ sub_frag(Ctx, #union_type { id = SpreadID, types = SpreadMembers },
 coerce_name(B) when is_binary(B) -> B;
 coerce_name(Name) -> graphql_ast:name(Name).
 
-coerce(Ctx, Value, #enum_type { id = ID,
+coerce(Ctx, Val, #enum_type { id = ID,
                                 resolve_module = ResolveMod }) ->
     case ResolveMod of
         undefined ->
-            {ok, Value};
+            {ok, Val};
         Mod ->
-            resolve_input(Ctx, ID, Value, Mod)
+            resolve_input(Ctx, ID, Val, Mod)
     end;
-coerce(Ctx, Value, #scalar_type { id = ID,
+coerce(Ctx, Val, #scalar_type { id = ID,
                                   resolve_module = Mod }) ->
     true = Mod /= undefined,
-    resolve_input(Ctx, ID, Value, Mod).
+    resolve_input(Ctx, ID, Val, Mod).
 
-resolve_input(Ctx, ID, Value, Mod) ->
-    try Mod:input(ID, Value) of
+resolve_input(Ctx, ID, Val, Mod) ->
+    try Mod:input(ID, Val) of
         {ok, NewVal} -> {ok, NewVal};
         {error, Reason} ->
-            err(Ctx, {input_coercion, ID, Value, Reason})
+            err(Ctx, {input_coercion, ID, Val, Reason})
     catch
         Cl:Err ->
-            err_report({input_coercer, ID, Value}, Cl, Err),
+            err_report({input_coercer, ID, Val}, Cl, Err),
             err(Ctx, {input_coerce_abort, {Cl, Err}})
     end.
 
