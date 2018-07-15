@@ -75,6 +75,14 @@
 
 %% Elaborate a type and also determine its polarity. This is used for
 %% input and output types
+infer_type(Ctx, Tau) ->
+    case infer_type(Tau) of
+        {error, Reason} ->
+            err(Ctx, Reason);
+        {Polarity, TauPrime} ->
+            {ok, {Polarity, TauPrime}}
+    end.
+
 infer_type({non_null, Ty}) ->
     case infer_type(Ty) of
         {error, Reason} -> {error, Reason};
@@ -151,29 +159,20 @@ infer(#ctx { vars = Vars } = Ctx, {var, ID}) ->
         #vardef {} = VDef ->
             {ok, VDef}
     end;
-infer(Ctx, {input_type, Name}) when is_binary(Name) ->
-    case graphql_schema:lookup(Ty) of
-        #scalar_type {} = T -> {ok, T};
-        #input_object_type {} = T -> {ok, T};
-        #enum_type {} = T -> {ok, T};
-        _ ->
-            err(Ctx, {not_input_type, Ty, V})
-    end;
 infer(_Ctx, _) ->
     {error, not_implemented}.
 
 %% The infer/3 is a variant of infer where we have a context of some sort
 %% from which to run the derivation of the type (list of argument types,
 %% or the fields of a selection set for instance).
-
-infer_arg(Ctx, K, ArgTypes) ->
-    Name = graphql_ast:name(K),
-    case maps:get(Name, ArgTypes, not_found) of
-        not_found ->
-            err(Ctx, {unknown_argument, Name});
-        #schema_arg{ ty = Ty } ->
-            input_type(Ty)
-    end.
+%% infer_arg(Ctx, K, ArgTypes) ->
+%%     Name = graphql_ast:name(K),
+%%     case maps:get(Name, ArgTypes, not_found) of
+%%         not_found ->
+%%             err(Ctx, {unknown_argument, Name});
+%%         #schema_arg{ ty = Ty } ->
+%%             input_type(Ty)
+%%     end.
 
 -spec infer(Context :: ctx(), Exp :: expr(), TyMap :: ty()) -> {ok, ty()}.
 infer(Ctx, #field { id = ID } = F, FieldTypes) ->
@@ -243,7 +242,7 @@ check_args(Ctx, Args, Ty) ->
             ArgTys = maps:to_list(Ty),
             check_args_(Ctx, NamedArgs, ArgTys, []);
         {not_unique, X} ->
-            err(Path, {not_unique, X})
+            err(Ctx, {not_unique, X})
     end.
 
 %% Meat of the argument checker:
@@ -260,10 +259,10 @@ check_args_(Ctx, Args, [{N, #schema_arg { ty = SigmaTy }} = SArg | Next], Acc) -
     CtxP = add_path(Ctx, N),
     {ok, {_, #{ type := Tau, value := Val}} = A, NextArgs} =
         take_arg(CtxP, SArg, Args),
-    {ok, {_Polarity, Sigma}} = infer_type(SigmaTy),
+    {ok, {_Polarity, Sigma}} = infer_type(Ctx, SigmaTy),
     Res = case check_value(CtxP, Val, Sigma) of
               {ok, Val} -> A;
-              {ok, RVal} -> {Name, {Tau, RVal}}
+              {ok, RVal} -> {N, {Tau, RVal}}
           end,
     check_args_(Ctx, NextArgs, Next, [Res|Acc]).
 
@@ -273,15 +272,15 @@ check_args_(Ctx, Args, [{N, #schema_arg { ty = SigmaTy }} = SArg | Next], Acc) -
 %% form 'G |- v <= T,e'' for a value 'v' and a type 'T'. Analysis has shown that
 %% it is most efficient to make the case analysis follow 'v' over 'T'.
 
-check_value(Ctx, {name, _, N} Sigma) ->
+check_value(Ctx, {name, _, N}, Sigma) ->
     check_value(Ctx, N, Sigma);
-check_value(Ctx, null, {non_null, Sigma} = STy) ->
+check_value(Ctx, null, {non_null, _} = Sigma) ->
     err(Ctx, {type_mismatch,
-              #{ document => Value,
-                 schema => STy }});
-check_value(Ctx, Val, {non_null, Sigma} = STy) ->
-    check_value(Ctx, Value, Sigma);
-check_value(Ctx, null, Sigma) ->
+              #{ document => null,
+                 schema => Sigma }});
+check_value(Ctx, Val, {non_null, Sigma}) ->
+    check_value(Ctx, Val, Sigma);
+check_value(_Ctx, null, _Sigma) ->
     %% Null values are accepted in every other context
     {ok, null};
 check_value(Ctx, Vals, {list, Sigma}) when is_list(Vals) ->
@@ -295,21 +294,21 @@ check_value(Ctx, Val, {list, Sigma}) ->
     %% should be treated as if it were wrapped in a singleton type
     %% if we are in list-context
     check_value(Ctx, [Val], {list, Sigma});
-check_value(Ctx, {enum, N} #enum_type { id = ID } = Sigma) ->
+check_value(Ctx, {enum, N}, #enum_type { id = ID } = Sigma) ->
     case graphql_schema:validate_enum(ID, N) of
         not_found ->
             err(Ctx, {unknown_enum, N});
         ok ->
             coerce(Ctx, N, Sigma);
         {other_enums, Others} ->
-            err(Path, {type_mismatch,
+            err(Ctx, {type_mismatch,
                        #{ document => Others,
-                          schema => SType }})
+                          schema => Sigma }})
     end;
 check_value(Ctx, {input_object, _} = InputObj, Sigma) ->
     case Sigma of
-        #input_object_type{} = IOType ->
-            check_input_object(Ctx, Sigma, InputObj);
+        #input_object_type{} ->
+            check_input_obj(Ctx, InputObj, Sigma);
         _OtherType ->
             err(Ctx, {type_mismatch,
                       #{ document => InputObj,
@@ -331,7 +330,7 @@ check_value(Ctx, Value, Sigma) ->
                  schmema => Sigma }}).
 
 check_input_obj(Ctx, {input_object, Obj},
-                #input_object_type{ fields = Fields } = Tau) ->
+                #input_object_type{ fields = Fields }) ->
     AssocList = [{coerce_name(K), V} || {K, V} <- Obj],
     case graphql_ast:uniq(AssocList) of
         {not_unique, Key} ->
@@ -340,7 +339,7 @@ check_input_obj(Ctx, {input_object, Obj},
             {ok, 
              check_input_obj_(Ctx, maps:from_list(AssocList),
                               maps:to_list(Fields))}
-    end;
+    end.
 
 %% Input objects are in positive polarity, so the schema's fields are used
 %% to verify that every field is present, and that there are no excess fields
@@ -371,7 +370,7 @@ check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
 %% type checking on the default values in the schema type checker.
 %% There is absolutely no reason to do something like this then since
 %% it can never fail like this.
-coerce_default_param(Ctx, Default, Ty) ->
+coerce_default_param(#ctx { path = Path } = Ctx, Default, Ty) ->
     try check_param(Ctx, Default, Ty) of
         Result -> Result
     catch
@@ -396,7 +395,7 @@ check_sset(Ctx, [], Ty) ->
     end;
 check_sset(Ctx, [_|_], #scalar_type{}) ->
     err(Ctx, selection_on_scalar);
-check(Ctx, [_|_], #enum_type{}) ->
+check_sset(Ctx, [_|_], #enum_type{}) ->
     err(Ctx, selection_on_enum);
 check_sset(Ctx, SSet, Ty) ->
     check_sset_(Ctx, SSet, Ty).
@@ -509,12 +508,12 @@ check(Ctx, #op { vardefs = VDefs, directives = Dirs, selection_set = SSet } = Op
 %% type checked and internalized query. It serves to verify that a requested
 %% operation and its parameters matches the types in the operation referenced
 check_params(FunEnv, OpName, Params) ->
-    case operation(FunEnv, Opname, Params) of
+    case operation(FunEnv, OpName, Params) of
         undefined -> #{};
         not_found ->
-            err(Ctx, {operation_not_found, OpName});
+            err(#ctx{}, {operation_not_found, OpName});
         VarEnv ->
-            Ctx = #ctx { varenv = VarEnv,
+            Ctx = #ctx { vars = VarEnv,
                          path = [OpName] },
             check_params_(Ctx, Params)
     end.
@@ -522,7 +521,7 @@ check_params(FunEnv, OpName, Params) ->
 %% Parameter checking has positive polarity, so we fold over
 %% the type var environment from the schema and verify that each
 %% type is valid.
-check_params_(#ctx { varenv = VE } = Ctx, OrigParams) ->
+check_params_(#ctx { vars = VE } = Ctx, OrigParams) ->
     F = fun
             (Key, Tau, Parameters) ->
                 {ok, Value} = check_param(add_path(Ctx, Key),
@@ -541,10 +540,14 @@ check_param(Ctx, not_found, Tau) ->
         #vardef { ty = {non_null, _}, default = null } ->
             err(Ctx, missing_non_null_param);
         #vardef { default = Default, ty = Ty } ->
-            coerce_default_param(Ctx, Default, Ty);
-        #vardef { ty = TyName } ->
-            {ok, Sigma} = infer(Ctx, TyName),
-            check_param_(Ctx, Val, Ty)
+            coerce_default_param(Ctx, Default, Ty)
+    end;
+check_param(Ctx, Value, #vardef { ty = TyName }) ->
+    case infer_type(Ctx, TyName) of
+        {ok, {'+', Ty}} ->
+            check_param_(Ctx, Value, Ty);
+        {ok, {_, Ty}} ->
+            err(Ctx, {not_input_type, Ty, TyName})
     end.
 
 check_param_(Ctx, null, {not_null, _}) ->
@@ -552,7 +555,7 @@ check_param_(Ctx, null, {not_null, _}) ->
 check_param_(Ctx, Value, {non_null, Tau}) ->
     %% Here, the value cannot be null due to the preceeding clauses
     check_param_(Ctx, Value, Tau);
-check_param_(Ctx, null, _Tau) ->
+check_param_(_Ctx, null, _Tau) ->
     {ok, null};
 check_param_(Ctx, Lst, {list, Tau}) when is_list(Lst) ->
     %% Build a dummy structure to match the recursor. Unwrap this
@@ -561,16 +564,16 @@ check_param_(Ctx, Lst, {list, Tau}) when is_list(Lst) ->
     %% @todo: Track the index here
     {ok, [check_param_(Ctx, X, Tau) || X <- Lst]};
 check_param_(Ctx, Value, #scalar_type{} = Tau) ->
-    coerce(Ctx, Value, Tau));
+    coerce(Ctx, Value, Tau);
 check_param_(Ctx, {enum, Value}, #enum_type{} = Tau) when is_binary(Value) ->
-    check_param_(Ctx, Value, ETy);
+    check_param_(Ctx, Value, Tau);
 check_param_(Ctx, Value, #enum_type { id = Ty } = Tau) when is_binary(Value) ->
     %% Determine the type of any enum term, and then coerce it
-    case graphql_schema:validate_enum(Ty, V) of
+    case graphql_schema:validate_enum(Ty, Value) of
         ok ->
-            coerce(Ctx, V, Tau);
+            coerce(Ctx, Value, Tau);
         not_found ->
-            err(Ctx, {enum_not_found, Ty, V});
+            err(Ctx, {enum_not_found, Ty, Value});
         {other_enums, OtherTys} ->
             err(Ctx, {param_mismatch, {enum, Ty, OtherTys}})
     end;
@@ -582,9 +585,9 @@ check_param_(Ctx, Obj, #input_object_type{} = Tau) when is_map(Obj) ->
     %% uniqueness-checked.
     check_param_(Ctx, {input_object, maps:to_list(Obj)}, Tau);
 check_param_(Ctx, {input_object, KVPairs}, #input_object_type{} = Tau) ->
-    check_input_object(Ctx, {input_object, KVPairs}, Tau);
+    check_input_obj(Ctx, {input_object, KVPairs}, Tau);
     %% Everything else are errors
-check_param(Ctx, Value, Tau) ->
+check_param_(Ctx, Value, Tau) ->
     err(Ctx, {param_mismatch, Value, Tau}).    
 
 %% Subsumption relation over types:
@@ -742,14 +745,16 @@ sub_frag(Ctx, #union_type { id = SpreadID, types = SpreadMembers },
 coerce_name(B) when is_binary(B) -> B;
 coerce_name(Name) -> graphql_ast:name(Name).
 
-coerce(Ctx, Value, #enum_type { resolve_module = ResolveMod }) ->
+coerce(Ctx, Value, #enum_type { id = ID,
+                                resolve_module = ResolveMod }) ->
     case ResolveMod of
         undefined ->
             {ok, Value};
         Mod ->
             resolve_input(Ctx, ID, Value, Mod)
     end;
-coerce(Ctx, Value, #scalar_type { resolve_module = Mod }) ->
+coerce(Ctx, Value, #scalar_type { id = ID,
+                                  resolve_module = Mod }) ->
     true = Mod /= undefined,
     resolve_input(Ctx, ID, Value, Mod).
 
@@ -840,7 +845,7 @@ take_arg(Ctx, {Key, #schema_arg { ty = Tau,
     case lists:keytake(Key, 1, Args) of
         {value, Arg, NextArgs} ->
             %% Argument found, use it
-            {ok, Arg, NextArgs}
+            {ok, Arg, NextArgs};
         false ->
             %% Argument was not given. Resolve default value if any
             case {Tau, Default} of
@@ -848,7 +853,7 @@ take_arg(Ctx, {Key, #schema_arg { ty = Tau,
                     err(Ctx, missing_non_null_param);
                 _ ->
                     {ok, {Key, #{ type => Tau, value => Default}}, Args}
-            end;
+            end
     end.
 
 %% Determine the operation whih the call wants to run
