@@ -301,8 +301,7 @@ check_value(Ctx, {enum, N} #enum_type { id = ID } = Sigma) ->
 check_value(Ctx, {input_object, _} = InputObj, Sigma) ->
     case Sigma of
         #input_object_type{} = IOType ->
-            {ok, Coerced} = coerce_input_object(Ctx, InputObj),
-            check_input_object(Ctx, Sigma, Coerced);
+            check_input_object(Ctx, Sigma, InputObj);
         _OtherType ->
             err(Ctx, {type_mismatch,
                       #{ document => InputObj,
@@ -323,11 +322,122 @@ check_value(Ctx, Value, Sigma) ->
               #{ document => Value,
                  schmema => Sigma }}).
 
+check_input_obj(Ctx, {input_object, Obj},
+                #input_object_type{ fields = Fields } = Tau) ->
+    AssocList = [{coerce_name(K), V} || {K, V} <- Obj],
+    case graphql_ast:uniq(AssocList) of
+        {not_unique, Key} ->
+            err(Ctx, {input_object_not_unique, Key});
+        ok ->
+            {ok, 
+             check_input_obj_(Ctx, maps:from_list(AssocList),
+                              maps:to_list(Fields))}
+    end;
 
+%% Input objects are in positive polarity, so the schema's fields are used
+%% to verify that every field is present, and that there are no excess fields
+%% As we process fields in the object, we remove them so we can check that
+%% there are no more fields in the end.
+check_input_obj_(Ctx, Obj, []) ->
+    case maps:size(Obj) of
+        0 -> [];
+        K when K > 0 -> err(Ctx, {excess_fields_in_object, Obj})
+    end;
+%% @todo: Clearly this has to change because Ty isn't known at this
+check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
+                                                 default = Default }} | Next]) -> 
+    Result = case maps:get(Name, Obj, not_found) of
+                 not_found ->
+                     case Ty of
+                         {non_null, _} when Default == null ->
+                             err(add_path(Ctx, Name), missing_non_null_param);
+                         _ ->
+                             coerce_default_param(Ctx, Default, Ty)
+                     end;
+                 V ->
+                     check_param(add_path(Ctx, Name), V, Ty)
+             end,
+    [Result | check_input_obj_(Ctx, maps:remove(Name, Obj), Next)].
 
+%% This is a function which must go as soon as we have proper
+%% type checking on the default values in the schema type checker.
+%% There is absolutely no reason to do something like this then since
+%% it can never fail like this.
+coerce_default_param(Path, VarEnv, Ty, Default) ->
+    try check_param(Path, VarEnv, Ty, Default) of
+        Result -> Result
+    catch
+        Class:Err ->
+            error_logger:error_report(
+              [{path, graphql_err:path(lists:reverse(Path))},
+               {default_value, Default},
+               {type, graphql_err:format_ty(Ty)},
+               {default_coercer_error, Class, Err}]),
+            err(Path, non_coercible_default)
+    end.
 
+-spec check_sset(Ctx :: ctx(),
+                 Exprs :: [any()],
+                 Ty :: ty()) ->
+                        {ok, Result :: [term()]}.
+check_sset(Ctx, [], Ty) ->
+    case Ty of
+        #object_type{} -> err(Ctx, fieldless_object);
+        #interface_type{} -> err(Ctx, fieldless_interface);
+        _ -> {ok, []}
+    end;
+check_sset(Ctx, [_|_], #scalar_type{}) ->
+    err(Ctx, selection_on_scalar);
+check(Ctx, [_|_], #enum_type{}) ->
+    err(Ctx, selection_on_enum);
+check_sset(Ctx, SSet, Ty) ->
+    check_sset_(Ctx, SSet, Ty).
 
+check_sset_(_Ctx, [], _Ty) ->
+    {ok, []};
+check_sset_(Ctx, [#frag { id = '...' } = Frag | Fs], Sigma) ->
+    {ok, Rest} = check_sset_(Ctx, Fs, Sigma),
+    {ok, FragTy} = infer(Ctx, Frag),
+    {ok, CFrag} = check(Ctx, Frag, FragTy),
+    {ok, [CFrag | Rest]};
+check_sset_(Ctx, [#frag_spread { directives = Dirs } = FragSpread | Fs], Sigma) ->
+    CtxP = add_path(Ctx, FragSpread),
+    {ok, Rest} = check_sset_(Ctx, Fs, Sigma),
+    {ok, #frag { schema = Tau }} = infer(Ctx, FragSpread),
+    ok = sub_frag(CtxP, Tau, Sigma),
 
+    {ok, CDirectives} = check_directives(CtxP, {directive, frag_spread, Dirs}),
+    %% @todo: Consider just expanding #frag{} here
+    {ok, [FragSpread#frag_spread { directives = CDirectives }
+          | Rest]};
+check_sset_(Ctx, [#field{} = F|Fs], {non_null, Ty}) ->
+    check_sset_(Ctx, [F|Fs], Ty);
+check_sset_(Ctx, [#field{} = F|Fs], {list, Ty}) ->
+    check_sset_(Ctx, [F|Fs], Ty);
+check_sset_(Ctx, [#field{}|_], not_found) ->
+    exit({broken_invariant, Ctx});
+check_sset_(Ctx, [#field{ args = Args, directives = Dirs,
+                          selection_set = SSet } = F | Fs], Sigma) ->
+    CtxP = add_path(Ctx, F),
+    {ok, FieldTypes} = fields(CtxP, Sigma),
+    {ok, Rest} = check_sset_(Ctx, Fs, Sigma),
+    {ok, CDirectives} = check_directives(CtxP, {directive, field, Dirs}),
+    case infer(Ctx, F, FieldTypes) of
+        {ok, {introspection, typename} = Ty} ->
+            {ok, [F#field { schema = Ty,
+                            directives = CDirectives }
+                  |Rest]};
+        {ok, #schema_field { ty = Ty, args = TArgs } = SF} ->
+            {ok, Type} = output_type(Ty),
+            {ok, CSSet} = check_sset(CtxP, SSet, Type),
+            {ok, CArgs} = check_args(CtxP, Args, TArgs),
+            {ok, [F#field {
+                    args = CArgs,
+                    schema = SF#schema_field { ty = Type },
+                    directives = CDirectives,
+                    selection_set = CSSet }
+                  | Rest]}
+    end.
 
 -spec check(Context :: ctx(), Exp :: expr(), Ty :: ty()) -> {ok, expr()}.
 check(Ctx, {var, ID}, Sigma) ->
@@ -351,59 +461,6 @@ check(Ctx, {Context,
             Name = graphql_ast:name(ID),
             err(Ctx, {invalid_directive_location, Name, Context})
     end;
-check(Ctx, {sset, []}, Ty) ->
-    case Ty of
-        #object_type{} -> err(Ctx, fieldless_object);
-        #interface_type{} -> err(Ctx, fieldless_interface);
-        _ ->
-            {ok, []}
-    end;
-check(Ctx, {sset, SSet}, Ty) ->
-    check(Ctx, SSet, Ty);
-check(_Ctx, [], _Ty) ->
-    {ok, []};
-check(Ctx, [#frag { id = '...' } = Frag | Fs], Sigma) ->
-    {ok, Rest} = check(Ctx, Fs, Sigma),
-    {ok, FragTy} = infer(Ctx, Frag),
-    {ok, CFrag} = check(Ctx, Frag, FragTy),
-    {ok, [CFrag | Rest]};
-check(Ctx, [#frag_spread { directives = Dirs } = FragSpread | Fs], Sigma) ->
-    CtxP = add_path(Ctx, FragSpread),
-    {ok, Rest} = check(Ctx, Fs, Sigma),
-    {ok, #frag { schema = Tau }} = infer(Ctx, FragSpread),
-    ok = sub_frag(CtxP, Tau, Sigma),
-
-    {ok, CDirectives} = check_directives(CtxP, {directive, frag_spread, Dirs}),
-    %% @todo: Consider just expanding #frag{} here
-    {ok, [FragSpread#frag_spread { directives = CDirectives }
-          | Rest]};
-check(Ctx, [#field{} = F|Fs], {non_null, Ty}) -> check(Ctx, [F|Fs], Ty);
-check(Ctx, [#field{} = F|Fs], {list, Ty}) -> check(Ctx, [F|Fs], Ty);
-check(Ctx, [#field{}|_], not_found) -> exit({broken_invariant, Ctx});
-check(Ctx, [#field{}|_], #scalar_type{}) -> err(Ctx, selection_on_scalar);
-check(Ctx, [#field{}|_], #enum_type{}) -> err(Ctx, selection_on_enum);
-check(Ctx, [#field{ args = Args, directives = Dirs,
-                    selection_set = SSet } = F | Fs], Sigma) ->
-    CtxP = add_path(Ctx, F),
-    {ok, FieldTypes} = fields(CtxP, Sigma),
-    {ok, Rest} = check(Ctx, Fs, Sigma),
-    {ok, CDirectives} = check_directives(CtxP, {directive, field, Dirs}),
-    case infer(Ctx, F, FieldTypes) of
-        {ok, {introspection, typename} = Ty} ->
-            {ok, [F#field { schema = Ty,
-                            directives = CDirectives }
-                  |Rest]};
-        {ok, #schema_field { ty = Ty, args = TArgs } = SF} ->
-            {ok, Type} = output_type(Ty),
-            {ok, CSSet} = check(CtxP, {sset, SSet}, Type),
-            {ok, CArgs} = check_args(CtxP, Args, TArgs),
-            {ok, [F#field {
-                    args = CArgs,
-                    schema = SF#schema_field { ty = Type },
-                    directives = CDirectives,
-                    selection_set = CSSet }
-                  | Rest]}
-    end;
 check(Ctx, #frag { directives = Dirs,
                    selection_set = SSet } = F, Sigma) ->
     CtxP = add_path(Ctx, F),
@@ -411,7 +468,7 @@ check(Ctx, #frag { directives = Dirs,
     {ok, Tau} = infer(Ctx, F),
     ok = sub_frag(CtxP, Tau, Sigma),
     {ok, CDirectives} = check_directives(CtxP, {directive, fragment, Dirs}),
-    {ok, CSSet} = check(CtxP, {sset, SSet}, Fields),
+    {ok, CSSet} = check_sset(CtxP, SSet, Fields),
     {ok, F#frag { schema = Tau,
                   directives = CDirectives,
                   selection_set = CSSet }};
@@ -421,7 +478,7 @@ check(Ctx, #op { vardefs = VDefs, directives = Dirs, selection_set = SSet } = Op
     {ok, Ty} = infer(Ctx, Op),
     OperationType = operation_context(Op),
     {ok, CDirectives} = check_directives(CtxP, {directive, OperationType, Dirs}),
-    {ok, CSSet} = check(CtxP, {sset, SSet}, Fields),
+    {ok, CSSet} = check_sset(CtxP, SSet, Fields),
     {ok, VarDefs} = var_defs(CtxP, {var_def, VDefs}),
     {ok, Op#op {
            schema = Ty,
@@ -581,6 +638,8 @@ sub_frag(Ctx, #union_type { id = SpreadID, types = SpreadMembers },
             err(Ctx, {no_common_object, SpreadID, ScopeID})
     end.
 
+coerce_name(B) when is_binary(B) -> B;
+coerce_name(Name) -> graphql_ast:name(Name).
 
 coerce(Ctx, Value, #enum_type { resolve_module = ResolveMod }) ->
     case ResolveMod of
@@ -690,8 +749,6 @@ take_arg(Ctx, {Key, #schema_arg { ty = Tau,
                     {ok, {Key, #{ type => Tau, value => Default}}, Args}
             end;
     end.
-
-
 
 %% Tell the error logger that something is off
 err_report(Term, Cl, Err) ->
