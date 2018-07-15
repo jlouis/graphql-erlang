@@ -117,3 +117,7 @@
         object_type() | interface_type() | scalar_type()
       | input_object_type() | union_type() | enum_type()
       | root_schema().
+
+-record(document,
+        { definitions :: [any()]
+        }).

@@ -44,7 +44,7 @@ x(Ctx, X) ->
     Canon = canon_context(Ctx),
     execute_request(Canon, X).
 
-execute_request(InitialCtx, {document, Operations}) ->
+execute_request(InitialCtx, #document { definitions = Operations }) ->
     {Frags, Ops} = lists:partition(fun (#frag {}) -> true;(_) -> false end, Operations),
     Ctx = InitialCtx#{ fragments => fragments(Frags),
                        defer_request_id => make_ref() },

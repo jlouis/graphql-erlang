@@ -1,7 +1,9 @@
 -module(graphql).
 
--include("graphql_internal.hrl").
+
 -include_lib("graphql/include/graphql.hrl").
+-include("graphql_internal.hrl").
+-include("graphql_schema.hrl").
 
 %% GraphQL Documents
 -export([
@@ -42,17 +44,16 @@
 
 -type schema_definition() :: {atom(), #{ atom() => term() }}.
 
--export_type([ast/0, json/0, param_context/0]).
+-export_type([json/0, param_context/0]).
 
 -type token() :: {'$graphql_token', pid(), reference()}.
--export_type([token/0]).
-
--type schema_field() :: #{ atom() => any() }.
--export_type([schema_field/0]).
-
 -type name() :: {name, pos_integer(), binary()} | binary().
+-type document() :: #document{}.
 -type directive() :: #directive{}.
--export_type([directive/0]).
+-export_type([directive/0,
+
+              token/0,
+              schema_field/0]).
 
 -define(DEFAULT_TIMEOUT, 750).
 
@@ -84,7 +85,7 @@ format_errors(Ctx, Errs) ->
 
 %% --------------------------------------------------------------------------
 -spec parse( binary() | string()) ->
-                   {ok, ast()} | {error, {scanner_error | parser_error, term()}}.
+                   {ok, document()} | {error, {scanner_error | parser_error, term()}}.
 parse(Input) when is_binary(Input) -> parse(binary_to_list(Input));
 parse(Input) when is_list(Input) ->
     case graphql_scanner:string(Input) of
@@ -114,15 +115,15 @@ load_schema(Mapping, Input) when is_list(Input) ->
             {error, Err}
     end.
 
--spec validate(ast()) -> ok | {error, term()}.
+-spec validate(document()) -> ok | {error, term()}.
 validate(AST) ->
     graphql_validate:x(AST).
 
--spec type_check(ast()) -> {ok, #{ atom() => term() }}.
+-spec type_check(document()) -> {ok, #{ atom() => term() }}.
 type_check(AST) ->
     graphql_type_check:x(AST).
 
--spec elaborate(ast()) -> ast().
+-spec elaborate(document()) -> document().
 elaborate(AST) ->
    graphql_elaborate:x(AST).
 
@@ -130,12 +131,12 @@ elaborate(AST) ->
 type_check_params(FunEnv, OpName, Vars) ->
     graphql_type_check:x_params(FunEnv, OpName, Vars).
 
--spec execute(ast()) -> #{ atom() => json() }.
+-spec execute(document()) -> #{ atom() => json() }.
 execute(AST) ->
     Ctx = #{ params => #{}, default_timeout => ?DEFAULT_TIMEOUT },
     execute(Ctx, AST).
 
--spec execute(context(), ast()) -> #{ atom() => json() }.
+-spec execute(context(), document()) -> #{ atom() => json() }.
 execute(#{default_timeout := _DT } = Ctx, AST) ->
     graphql_execute:x(Ctx, AST);
 execute(Ctx, AST) ->
