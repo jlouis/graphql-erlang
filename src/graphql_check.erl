@@ -54,8 +54,10 @@
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
--export([check/1, check_params/3]).
--export([funenv/1]).
+%%-export([check/1, check_params/3]).
+%%-export([funenv/1]).
+-export([infer_type/2]).
+-export([infer/2, infer_field/3]).
 
 -record(ctx,
         {
@@ -63,8 +65,11 @@
          vars = #{} :: #{ binary() => term() },
          frags = #{} :: #{ binary() =>  #frag{} }
         }).
+-type ctx() :: #ctx{}.
+-type polarity() :: '+' | '-' | '*'.
+
 -type expr() :: any().
--type ty() :: any().
+-type ty() :: schema_type().
 
 %% This is a bidirectional type checker. It proceeds by running three
 %% kinds of functions: synth(Gamma, E) -> {ok, T} | {error, Reason}
@@ -73,8 +78,14 @@
 %% given term E has type T and sub(S, T) which forms a relation S <: T
 %% of subsumption between types.
 
+%% -- INFERENCE ------------------------------------------------------------
+%%
+%%
+
 %% Elaborate a type and also determine its polarity. This is used for
 %% input and output types
+-spec infer_type(Context :: ctx(), Type :: ty()) ->
+                        {error, Reason :: term()} | {ok, {polarity(), ty()}}.
 infer_type(Ctx, Tau) ->
     case infer_type(Tau) of
         {error, Reason} ->
@@ -116,12 +127,14 @@ infer_type(N) when is_binary(N) ->
         #union_type{} = Union -> {'-', Union}
     end.
 
+
+
 %% Main inference judgement
 %%
 %% Given a context and some graphql expression, we derive
 %% a valid type for that expression. This is mostly handled by
 %% a lookup into the environment.
--spec infer(Context :: ctx(), Exp :: expr()) -> {ok, ty()}.
+-spec infer(Context :: ctx(), Exp :: expr()) -> {ok, schema_object()}.
 infer(Ctx, #directive { id = ID }) ->
     case graphql_ast:name(ID) of
         <<"include">> -> {ok, graphql_directives:include()};
@@ -138,8 +151,8 @@ infer(Ctx, #op { ty = Ty } = Op) ->
             case graphql_schema:lookup(Root) of
                 not_found ->
                     err(CtxP, {type_not_found, Root});
-                #object_type{} = Ty ->
-                    {ok, Ty}
+                #object_type{} = Tau ->
+                    {ok, Tau}
             end
     end;
 infer(#ctx { frags = FragEnv } = Ctx, #frag_spread { id = ID }) ->
@@ -160,7 +173,9 @@ infer(#ctx { vars = Vars } = Ctx, {var, ID}) ->
             {ok, VDef}
     end;
 infer(_Ctx, _) ->
-    {error, not_implemented}.
+    exit(not_implemente).
+
+
 
 %% The infer/3 is a variant of infer where we have a context of some sort
 %% from which to run the derivation of the type (list of argument types,
@@ -174,8 +189,10 @@ infer(_Ctx, _) ->
 %%             input_type(Ty)
 %%     end.
 
--spec infer(Context :: ctx(), Exp :: expr(), TyMap :: ty()) -> {ok, ty()}.
-infer(Ctx, #field { id = ID } = F, FieldTypes) ->
+-spec infer_field(Context :: ctx(), Exp :: expr(),
+                  Map :: #{ binary() => #schema_field{} }) ->
+                         {ok, schema_field() | {introspection, typename}}.
+infer_field(Ctx, #field { id = ID } = F, FieldTypes) ->
     CtxP = add_path(Ctx, F),
     Name = graphql_ast:name(ID),
     case maps:get(Name, FieldTypes, not_found) of
@@ -187,21 +204,11 @@ infer(Ctx, #field { id = ID } = F, FieldTypes) ->
             {ok, Ty}
     end.
 
-%% To check a document, establish a default context and
-%% check the document.
-check(#document{ definitions = Defs } = Doc) ->
-    {Fragments, Ops} = lists:partition(
-                         fun(#frag{}) -> true; (_) -> false end,
-                         Defs),
-    FragEnv = fragenv(Fragments),
-    CtxP = add_path(#ctx{}, document),
-    Ctx = CtxP#ctx { frags = FragEnv },
-    {ok, COps} = [begin
-                      {ok, Type} = infer(Ctx, Op),
-                      {ok, COp} = check(Ctx, Op, Type),
-                      COp
-                  end || Op <- Ops],
-    {ok, Doc#document { definitions = COps }}.
+-ifdef(NO).
+
+%% -- TYPE CHECKING --------------------------------------------------------
+%%
+%%
 
 %% The check/2 relation checks a expression under an environment
 %% it is used whenever we don't have a type but want to have a type
@@ -222,15 +229,6 @@ check_directives(Ctx, {directives, OpType, Dirs}) ->
          {not_unique, X} ->
              err(Ctx, {directives_not_unique, X})
      end.
-
-%% Main check relations:
-%%
-%% Given a Context of environments
-%% An expression to check
-%% A type to check it against
-%%
-%% We derive an expression in which we have annotated types into
-%% the AST. This helps the later execution stage.
 
 %% Check arguments. Follows the general scheme
 -spec check_args(Context :: ctx(), Exp :: expr(), Ty :: ty()) -> {ok, expr()}.
@@ -366,23 +364,6 @@ check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
              end,
     [Result | check_input_obj_(Ctx, maps:remove(Name, Obj), Next)].
 
-%% This is a function which must go as soon as we have proper
-%% type checking on the default values in the schema type checker.
-%% There is absolutely no reason to do something like this then since
-%% it can never fail like this.
-coerce_default_param(#ctx { path = Path } = Ctx, Default, Ty) ->
-    try check_param(Ctx, Default, Ty) of
-        Result -> Result
-    catch
-        Class:Err ->
-            error_logger:error_report(
-              [{path, graphql_err:path(lists:reverse(Path))},
-               {default_value, Default},
-               {type, graphql_err:format_ty(Ty)},
-               {default_coercer_error, Class, Err}]),
-            err(Path, non_coercible_default)
-    end.
-
 -spec check_sset(Ctx :: ctx(),
                  Exprs :: [any()],
                  Ty :: ty()) ->
@@ -429,7 +410,7 @@ check_sset_(Ctx, [#field{ args = Args, directives = Dirs,
     {ok, FieldTypes} = fields(CtxP, Sigma),
     {ok, Rest} = check_sset_(Ctx, Fs, Sigma),
     {ok, CDirectives} = check_directives(CtxP, {directive, field, Dirs}),
-    case infer(Ctx, F, FieldTypes) of
+    case infer_field(Ctx, F, FieldTypes) of
         {ok, {introspection, typename} = Ty} ->
             {ok, [F#field { schema = Ty,
                             directives = CDirectives }
@@ -446,6 +427,14 @@ check_sset_(Ctx, [#field{ args = Args, directives = Dirs,
                   | Rest]}
     end.
 
+%% Main check relation:
+%%
+%% Given a Context of environments
+%% An expression to check
+%% A type to check it against
+%%
+%% We derive an expression in which we have annotated types into
+%% the AST. This helps the later execution stage.
 -spec check(Context :: ctx(), Exp :: expr(), Ty :: ty()) -> {ok, expr()}.
 check(Ctx, {var, ID}, Sigma) ->
     {ok, Tau} = infer(Ctx, {var, ID}),
@@ -492,6 +481,22 @@ check(Ctx, #op { vardefs = VDefs, directives = Dirs, selection_set = SSet } = Op
            directives = CDirectives,
            selection_set = CSSet,
            vardefs = VarDefs}}.
+
+%% To check a document, establish a default context and
+%% check the document.
+check(#document{ definitions = Defs } = Doc) ->
+    {Fragments, Ops} = lists:partition(
+                         fun(#frag{}) -> true; (_) -> false end,
+                         Defs),
+    FragEnv = fragenv(Fragments),
+    CtxP = add_path(#ctx{}, document),
+    Ctx = CtxP#ctx { frags = FragEnv },
+    {ok, COps} = [begin
+                      {ok, Type} = infer(Ctx, Op),
+                      {ok, COp} = check(Ctx, Op, Type),
+                      COp
+                  end || Op <- Ops],
+    {ok, Doc#document { definitions = COps }}.
 
 %% GraphQL queries are really given in two stages. One stage is the
 %% query document containing (static) queries which take parameters.
@@ -589,6 +594,10 @@ check_param_(Ctx, {input_object, KVPairs}, #input_object_type{} = Tau) ->
     %% Everything else are errors
 check_param_(Ctx, Val, Tau) ->
     err(Ctx, {param_mismatch, Val, Tau}).    
+
+%% -- SUBTYPE/SUBSUMPTION ------------------------------------------------------
+%%
+%%
 
 %% Subsumption relation over types:
 %%
@@ -742,8 +751,28 @@ sub_frag(Ctx, #union_type { id = SpreadID, types = SpreadMembers },
             err(Ctx, {no_common_object, SpreadID, ScopeID})
     end.
 
+%% -- COERCION OF INPUTS ---------------------------------------------------
+%%
+%%
 coerce_name(B) when is_binary(B) -> B;
 coerce_name(Name) -> graphql_ast:name(Name).
+
+%% This is a function which must go as soon as we have proper
+%% type checking on the default values in the schema type checker.
+%% There is absolutely no reason to do something like this then since
+%% it can never fail like this.
+coerce_default_param(#ctx { path = Path } = Ctx, Default, Ty) ->
+    try check_param(Ctx, Default, Ty) of
+        Result -> Result
+    catch
+        Class:Err ->
+            error_logger:error_report(
+              [{path, graphql_err:path(lists:reverse(Path))},
+               {default_value, Default},
+               {type, graphql_err:format_ty(Ty)},
+               {default_coercer_error, Class, Err}]),
+            err(Path, non_coercible_default)
+    end.
 
 coerce(Ctx, Val, #enum_type { id = ID,
                                 resolve_module = ResolveMod }) ->
@@ -769,7 +798,7 @@ resolve_input(Ctx, ID, Val, Mod) ->
             err(Ctx, {input_coerce_abort, {Cl, Err}})
     end.
 
-%% -- INTERNAL FUNCTIONS ------------------------------------------------------------
+%% -- INTERNAL FUNCTIONS ------------------------------------------------------
 
 %% Assert a type is an input type
 input_type(Ty) ->
@@ -806,15 +835,17 @@ var_defs(Ctx, VDefs) ->
             err(add_path(Ctx, Var), {param_not_unique, Var})
     end.
 
-%% Extract fields from a type
+%% Extract fields from a type, where the type has fields
 fields(_Ctx, #object_type { fields = Fields }) -> {ok, Fields};
 fields(_Ctx, #interface_type { fields = Fields }) -> {ok, Fields};
 fields(_Ctx, #union_type {}) -> {ok, #{}}.
 
+%% Build a varenv
 varenv(VDefs) ->
     L = [{graphql_ast:name(Var), Def} || #vardef { id = Var } = Def <- VDefs],
     maps:from_list(L).
 
+%% Build a funenv
 funenv(Ops) ->
     F = fun
         (#frag{}, FE) -> FE;
@@ -825,10 +856,12 @@ funenv(Ops) ->
     end,
     lists:foldl(F, #{}, Ops).
 
+%% Build a fragenv
 fragenv(Frags) ->
     maps:from_list(
       [{graphql_ast:name(ID), Frg} || #frag { id = ID } = Frg <- Frags]).
 
+%% Figure out what kind of operation context we have
 operation_context(#op { ty = Ty }) ->
     case Ty of
         undefined -> query;
@@ -837,9 +870,9 @@ operation_context(#op { ty = Ty }) ->
         {subscription, _} -> subscription
     end.
 
-add_path(#ctx { path = P } = Ctx, C) ->
-    Ctx#ctx { path = [C|P] }.
-
+%% Pull out a value from a list of arguments. This is used to check
+%% we eventually cover all arguments properly since we can check if there
+%% are excess arguments in the end.
 take_arg(Ctx, {Key, #schema_arg { ty = Tau,
                                   default = Default }}, Args) ->
     case lists:keytake(Key, 1, Args) of
@@ -876,7 +909,6 @@ operation(FunEnv, undefined, Params) ->
 operation(FunEnv, OpName, _Params) ->
     maps:get(OpName, FunEnv, not_found).
 
-
 %% Tell the error logger that something is off
 err_report(Term, Cl, Err) ->
   error_logger:error_report(
@@ -885,5 +917,17 @@ err_report(Term, Cl, Err) ->
      {error, Cl, Err}
     ]).
 
+-endif.
+
+
+%% Add a path component to the context
+-spec add_path(ctx(), Component :: term()) -> ctx().
+add_path(#ctx { path = P } = Ctx, C) ->
+    Ctx#ctx { path = [C|P] }.
+
+%% Report an error relative to a context
+-spec err(ctx(), Term :: term()) -> no_return().
 err(#ctx{ path = Path }, Msg) ->
     throw({error, Path, Msg}).
+
+

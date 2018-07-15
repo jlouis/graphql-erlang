@@ -11,7 +11,6 @@
       | schema_base_type().
 
 -type resolver_args() :: #{ binary() => term() }.
--type ctx() :: #{ atom() => term() }.
 -type location() :: query | mutation | field
                   | fragment_definition | fragment_spread | inline_fragment.
 
@@ -116,6 +115,7 @@
 -type schema_object() ::
         object_type() | interface_type() | scalar_type()
       | input_object_type() | union_type() | enum_type()
+      | directive_type()
       | root_schema().
 
 -record(document,
