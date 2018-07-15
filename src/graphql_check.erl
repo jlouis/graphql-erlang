@@ -450,22 +450,21 @@ check(Ctx, {var, ID}, Sigma) ->
 check(Ctx, #frag { directives = Dirs,
                    selection_set = SSet } = F, Sigma) ->
     CtxP = add_path(Ctx, F),
-    {ok, Fields} = fields(CtxP, Sigma),
     {ok, Tau} = infer(Ctx, F),
     ok = sub_frag(CtxP, Tau, Sigma),
     {ok, CDirectives} = check_directives(CtxP, fragment, Dirs),
-    {ok, CSSet} = check_sset(CtxP, SSet, Fields),
+    {ok, CSSet} = check_sset(CtxP, SSet, Sigma),
     {ok, F#frag { schema = Tau,
                   directives = CDirectives,
                   selection_set = CSSet }};
 check(Ctx, #op { vardefs = VDefs, directives = Dirs, selection_set = SSet } = Op,
-           #object_type { fields = Fields }) ->
+           #object_type {} = Sigma) ->
     CtxP = add_path(Ctx, Op),
     {ok, Ty} = infer(Ctx, Op),
     OperationType = operation_context(Op),
     {ok, CDirectives} = check_directives(CtxP, OperationType, Dirs),
-    {ok, CSSet} = check_sset(CtxP, SSet, Fields),
-    {ok, VarDefs} = var_defs(CtxP, {var_def, VDefs}),
+    {ok, CSSet} = check_sset(CtxP, SSet, Sigma),
+    {ok, VarDefs} = var_defs(CtxP, VDefs),
     {ok, Op#op {
            schema = Ty,
            directives = CDirectives,
