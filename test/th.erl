@@ -21,13 +21,10 @@ x(Config, Input, OpName, Params) ->
             ct:log(info, ?LOW_IMPORTANCE, "AST: ~p", [AST]),
             ct:log(info, ?LOW_IMPORTANCE, "Params: ~p", [Params]),
             try
-                Elaborated = graphql:elaborate(AST),
-                ct:log(info, ?LOW_IMPORTANCE, "Elaborated: ~p", [Elaborated]),
-                Track2 = track(elaborate, Track1),
                 {ok, #{
                    ast := AST2,
-                   fun_env := FunEnv }} = graphql:type_check(Elaborated),
-                Track3 = track(type_check, Track2),
+                   fun_env := FunEnv }} = graphql:type_check(AST),
+                Track3 = track(type_check, Track1),
                 CoercedParams = graphql:type_check_params(FunEnv, OpName, Params),
                 Track4 = track(type_check_params, Track3),
                 Ctx = #{ params => CoercedParams },

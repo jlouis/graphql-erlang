@@ -8,7 +8,6 @@
 %% GraphQL Documents
 -export([
          parse/1,
-         elaborate/1,
          type_check/1, type_check_params/3,
          insert_root/1,
          validate/1,
@@ -121,15 +120,11 @@ validate(AST) ->
 
 -spec type_check(document()) -> {ok, #{ atom() => term() }}.
 type_check(AST) ->
-    graphql_type_check:x(AST).
-
--spec elaborate(document()) -> document().
-elaborate(AST) ->
-   graphql_elaborate:x(AST).
+    graphql_check:check(AST).
 
 -spec type_check_params(any(), any(), any()) -> param_context().
 type_check_params(FunEnv, OpName, Vars) ->
-    graphql_type_check:x_params(FunEnv, OpName, Vars).
+    graphql_check:check_params(FunEnv, OpName, Vars).
 
 -spec execute(document()) -> #{ atom() => json() }.
 execute(AST) ->
