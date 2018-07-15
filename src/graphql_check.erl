@@ -868,9 +868,9 @@ operation_context(#op { ty = Ty }) ->
 take_arg(Ctx, {Key, #schema_arg { ty = Tau,
                                   default = Default }}, Args) ->
     case lists:keytake(Key, 1, Args) of
-        {value, Arg, NextArgs} ->
+        {value, {_, Val}, NextArgs} ->
             %% Argument found, use it
-            {ok, Arg, NextArgs};
+            {ok, {Key, #{ type => Tau, value => Val}}, NextArgs};
         false ->
             %% Argument was not given. Resolve default value if any
             case {Tau, Default} of
