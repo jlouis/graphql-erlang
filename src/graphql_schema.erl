@@ -104,7 +104,8 @@ get(ID) ->
        _ -> exit(schema_not_found)
     end.
 
-%% Check if given enum value matches the given type id, other enums, or nothing at all.
+%% Check if given enum value matches the given type id, other enums,
+%% or nothing at all.
 -spec validate_enum(binary(), binary()) -> ok | not_found | {other_enums, [#enum_type{}]}.
 validate_enum(EnumID, EnumValue) ->
     try ets:lookup_element(?ENUMS, EnumValue, 2) of

@@ -157,15 +157,17 @@ infer(_Ctx, _) ->
 %% The infer/3 is a variant of infer where we have a context of some sort
 %% from which to run the derivation of the type (list of argument types,
 %% or the fields of a selection set for instance).
--spec infer(Context :: ctx(), Exp :: expr(), TyMap :: ty()) -> {ok, ty()}.
-infer(Ctx, {arg, K}, ArgTypes) ->
+
+infer_arg(Ctx, K, ArgTypes) ->
     Name = graphql_ast:name(K),
     case maps:get(Name, ArgTypes, not_found) of
         not_found ->
             err(Ctx, {unknown_argument, Name});
         #schema_arg{ ty = Ty } ->
             input_type(Ty)
-    end;
+    end.
+
+-spec infer(Context :: ctx(), Exp :: expr(), TyMap :: ty()) -> {ok, ty()}.
 infer(Ctx, #field { id = ID } = F, FieldTypes) ->
     CtxP = add_path(Ctx, F),
     Name = graphql_ast:name(ID),
@@ -208,7 +210,7 @@ check_directives(Ctx, {directives, OpType, Dirs}) ->
              {ok, [begin
                        {ok, Ty} = infer(Ctx, D),
                        {ok, CDir} = check(Ctx, {OpType, D}, Ty),
-                       CDir 
+                       CDir
                    end || D <- Dirs]};
          {not_unique, X} ->
              err(Ctx, {directives_not_unique, X})
@@ -222,6 +224,111 @@ check_directives(Ctx, {directives, OpType, Dirs}) ->
 %%
 %% We derive an expression in which we have annotated types into
 %% the AST. This helps the later execution stage.
+
+%% Check arguments. Follows the general scheme
+-spec check_args(Context :: ctx(), Exp :: expr(), Ty :: ty()) -> {ok, expr()}.
+check_args(Ctx, Args, Ty) ->
+    %% Check uniqueness
+    NamedArgs = [{graphql_ast:name(K), V} || {K, V} <- Args],
+    case graphql_ast:uniq(NamedArgs) of
+        ok ->
+            ArgTys = maps:to_list(Ty),
+            check_args_(Ctx, NamedArgs, ArgTys, []);
+        {not_unique, X} ->
+            err(Path, {not_unique, X})
+    end.
+
+%% Meat of the argument checker:
+%%
+%% Since arguments have positive polarity, they are checked according
+%% to the schema arguments.
+%% The meat of the argument checker. Walk over each schema arg and
+%% verify it type checks according to the type checking rules.
+check_args_(_Ctx, [], [], Acc) ->
+    {ok, Acc};
+check_args_(Ctx, [_|_] = Args, [], _Acc) ->
+    err(Ctx, {excess_args, Args});
+check_args_(Ctx, Args, [{N, #schema_arg { ty = SigmaTy }} = SArg | Next], Acc) ->
+    CtxP = add_path(Ctx, N),
+    {ok, {_, #{ type := Tau, value := Val}} = A, NextArgs} =
+        take_arg(CtxP, SArg, Args),
+    {ok, {_Polarity, Sigma}} = infer_type(SigmaTy),
+    Res = case check_value(CtxP, Val, Sigma) of
+              {ok, Val} -> A;
+              {ok, RVal} -> {Name, {Tau, RVal}}
+          end,
+    check_args_(Ctx, NextArgs, Next, [Res|Acc]).
+
+%% Check values against a type:
+%%
+%% Judge a type and a value. Used to verify a type judgement of the
+%% form 'G |- v <= T,e'' for a value 'v' and a type 'T'. Analysis has shown that
+%% it is most efficient to make the case analysis follow 'v' over 'T'.
+
+check_value(Ctx, {name, _, N} Sigma) ->
+    check_value(Ctx, N, Sigma);
+check_value(Ctx, null, {non_null, Sigma} = STy) ->
+    err(Ctx, {type_mismatch,
+              #{ document => Value,
+                 schema => STy }});
+check_value(Ctx, Val, {non_null, Sigma} = STy) ->
+    check_value(Ctx, Value, Sigma);
+check_value(Ctx, null, Sigma) ->
+    %% Null values are accepted in every other context
+    {ok, null};
+check_value(Ctx, Vals, {list, Sigma}) when is_list(Vals) ->
+    {ok, [begin
+              %% TODO: Fold and keep an iterator
+              {ok, R} = check_value(Ctx, V, Sigma),
+              R
+          end || V <- Vals]};
+check_value(Ctx, Val, {list, Sigma}) ->
+    %% The Jun2018 specification says that a singleton value
+    %% should be treated as if it were wrapped in a singleton type
+    %% if we are in list-context
+    check_value(Ctx, [Val], {list, Sigma});
+check_value(Ctx, {enum, N} #enum_type { id = ID } = Sigma) ->
+    case graphql_schema:validate_enum(ID, N) of
+        not_found ->
+            err(Ctx, {unknown_enum, N});
+        ok ->
+            coerce(Ctx, N, Sigma);
+        {other_enums, Others} ->
+            err(Path, {type_mismatch,
+                       #{ document => Others,
+                          schema => SType }})
+    end;
+check_value(Ctx, {input_object, _} = InputObj, Sigma) ->
+    case Sigma of
+        #input_object_type{} = IOType ->
+            {ok, Coerced} = coerce_input_object(Ctx, InputObj),
+            check_input_object(Ctx, Sigma, Coerced);
+        _OtherType ->
+            err(Ctx, {type_mismatch,
+                      #{ document => InputObj,
+                         schema => Sigma }})
+    end;
+check_value(Ctx, Value, #scalar_type{} = Sigma) ->
+    coerce(Ctx, Value, Sigma);
+check_value(Ctx, String, #enum_type{}) when is_binary(String) ->
+    %% The spec (Jun2018, section 3.9 - Input Coercion) says that this
+    %% is not allowed, unless given as a parameter. In this case, it
+    %% is not given as a parameter, but is expanded in as a string in
+    %% a query document. Reject.
+    err(Ctx, enum_string_literal);
+check_value(Ctx, Value, #enum_type{} = Sigma) ->
+    coerce(Ctx, Value, Sigma);
+check_value(Ctx, Value, Sigma) ->
+    err(Ctx, {type_mismatch,
+              #{ document => Value,
+                 schmema => Sigma }}).
+
+
+
+
+
+
+
 -spec check(Context :: ctx(), Exp :: expr(), Ty :: ty()) -> {ok, expr()}.
 check(Ctx, {var, ID}, Sigma) ->
     {ok, Tau} = infer(Ctx, {var, ID}),
@@ -232,20 +339,13 @@ check(Ctx, {var, ID}, Sigma) ->
                       #{ document => {var, ID, Tau},
                          schema => Sigma }})
     end;
-check(_Ctx, {args, []}, _Ty) ->
-    {ok, []};
-check(Ctx, {args, [{K, V}|Args]}, Ty) ->
-    {ok, Rest} = check(Ctx, {args, Args}, Ty),
-    {ok, CTy} = infer(Ctx, {arg, K}, Ty),
-    {ok, [{K, #{ type => CTy,
-                 value => V }}|Rest]};
 check(Ctx, {Context,
             #directive{ args = Args, id = ID} = D},
       #directive_type { args = SArgs, locations = Locations } = Ty) ->
     CtxP = add_path(Ctx, D),
     case lists:member(Context, Locations) of
         true ->
-            {ok, CArgs} = check(CtxP, {args, Args}, SArgs),
+            {ok, CArgs} = check_args(CtxP, Args, SArgs),
             {ok, D#directive { args = CArgs, schema = Ty }};
         false ->
             Name = graphql_ast:name(ID),
@@ -265,14 +365,14 @@ check(_Ctx, [], _Ty) ->
 check(Ctx, [#frag { id = '...' } = Frag | Fs], Sigma) ->
     {ok, Rest} = check(Ctx, Fs, Sigma),
     {ok, FragTy} = infer(Ctx, Frag),
-    {ok, CFrag} = check(Ctx, Frag, FragTy), 
+    {ok, CFrag} = check(Ctx, Frag, FragTy),
     {ok, [CFrag | Rest]};
 check(Ctx, [#frag_spread { directives = Dirs } = FragSpread | Fs], Sigma) ->
     CtxP = add_path(Ctx, FragSpread),
     {ok, Rest} = check(Ctx, Fs, Sigma),
     {ok, #frag { schema = Tau }} = infer(Ctx, FragSpread),
     ok = sub_frag(CtxP, Tau, Sigma),
-    
+
     {ok, CDirectives} = check_directives(CtxP, {directive, frag_spread, Dirs}),
     %% @todo: Consider just expanding #frag{} here
     {ok, [FragSpread#frag_spread { directives = CDirectives }
@@ -296,7 +396,7 @@ check(Ctx, [#field{ args = Args, directives = Dirs,
         {ok, #schema_field { ty = Ty, args = TArgs } = SF} ->
             {ok, Type} = output_type(Ty),
             {ok, CSSet} = check(CtxP, {sset, SSet}, Type),
-            {ok, CArgs} = check(CtxP, {args, Args}, TArgs),
+            {ok, CArgs} = check_args(CtxP, Args, TArgs),
             {ok, [F#field {
                     args = CArgs,
                     schema = SF#schema_field { ty = Type },
@@ -328,7 +428,7 @@ check(Ctx, #op { vardefs = VDefs, directives = Dirs, selection_set = SSet } = Op
            directives = CDirectives,
            selection_set = CSSet,
            vardefs = VarDefs}}.
-    
+
 %% Subsumption relation over types:
 %%
 %% Decide if a type is an valid subsumption of another type. We assume
@@ -481,6 +581,29 @@ sub_frag(Ctx, #union_type { id = SpreadID, types = SpreadMembers },
             err(Ctx, {no_common_object, SpreadID, ScopeID})
     end.
 
+
+coerce(Ctx, Value, #enum_type { resolve_module = ResolveMod }) ->
+    case ResolveMod of
+        undefined ->
+            {ok, Value};
+        Mod ->
+            resolve_input(Ctx, ID, Value, Mod)
+    end;
+coerce(Ctx, Value, #scalar_type { resolve_module = Mod }) ->
+    true = Mod /= undefined,
+    resolve_input(Ctx, ID, Value, Mod).
+
+resolve_input(Ctx, ID, Value, Mod) ->
+    try Mod:input(ID, Value) of
+        {ok, NewVal} -> {ok, NewVal};
+        {error, Reason} ->
+            err(Ctx, {input_coercion, ID, Value, Reason})
+    catch
+        Cl:Err ->
+            err_report({input_coercer, ID, Value}, Cl, Err),
+            err(Ctx, {input_coerce_abort, {Cl, Err}})
+    end.
+
 %% -- INTERNAL FUNCTIONS ------------------------------------------------------------
 
 %% Assert a type is an input type
@@ -503,7 +626,7 @@ output_type(Ty) ->
 
 %% Handle a list of vardefs by elaboration of their types
 var_defs(Ctx, VDefs) ->
-    VDefs = 
+    VDefs =
         [case input_type(V#vardef.ty) of
              {ok, Ty} -> V#vardef { ty = Ty };
              {error, not_found} -> err(Ctx, {type_not_found, graphql_ast:id(V)});
@@ -552,6 +675,31 @@ operation_context(#op { ty = Ty }) ->
 add_path(#ctx { path = P } = Ctx, C) ->
     Ctx#ctx { path = [C|P] }.
 
+take_arg(Ctx, {Key, #schema_arg { ty = Tau,
+                                  default = Default }}, Args) ->
+    case lists:keytake(Key, 1, Args) of
+        {value, Arg, NextArgs} ->
+            %% Argument found, use it
+            {ok, Arg, NextArgs}
+        false ->
+            %% Argument was not given. Resolve default value if any
+            case {Tau, Default} of
+                {{non_null, _}, null} ->
+                    err(Ctx, missing_non_null_param);
+                _ ->
+                    {ok, {Key, #{ type => Tau, value => Default}}, Args}
+            end;
+    end.
+
+
+
+%% Tell the error logger that something is off
+err_report(Term, Cl, Err) ->
+  error_logger:error_report(
+    [
+     Term,
+     {error, Cl, Err}
+    ]).
+
 err(#ctx{ path = Path }, Msg) ->
     throw({error, Path, Msg}).
-
