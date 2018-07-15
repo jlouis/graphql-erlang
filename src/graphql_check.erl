@@ -54,7 +54,7 @@
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
--export([check/1]).
+-export([check/1, check_params/3]).
 -export([funenv/1]).
 
 -record(ctx,
@@ -150,6 +150,14 @@ infer(#ctx { vars = Vars } = Ctx, {var, ID}) ->
             err(Ctx, {unbound_variable, Var});
         #vardef {} = VDef ->
             {ok, VDef}
+    end;
+infer(Ctx, {input_type, Name}) when is_binary(Name) ->
+    case graphql_schema:lookup(Ty) of
+        #scalar_type {} = T -> {ok, T};
+        #input_object_type {} = T -> {ok, T};
+        #enum_type {} = T -> {ok, T};
+        _ ->
+            err(Ctx, {not_input_type, Ty, V})
     end;
 infer(_Ctx, _) ->
     {error, not_implemented}.
@@ -363,8 +371,8 @@ check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
 %% type checking on the default values in the schema type checker.
 %% There is absolutely no reason to do something like this then since
 %% it can never fail like this.
-coerce_default_param(Path, VarEnv, Ty, Default) ->
-    try check_param(Path, VarEnv, Ty, Default) of
+coerce_default_param(Ctx, Default, Ty) ->
+    try check_param(Ctx, Default, Ty) of
         Result -> Result
     catch
         Class:Err ->
@@ -485,6 +493,99 @@ check(Ctx, #op { vardefs = VDefs, directives = Dirs, selection_set = SSet } = Op
            directives = CDirectives,
            selection_set = CSSet,
            vardefs = VarDefs}}.
+
+%% GraphQL queries are really given in two stages. One stage is the
+%% query document containing (static) queries which take parameters.
+%% These queries can be seen as functions (stored procedures) you can
+%% call.
+%%
+%% If called, we get a function name, and a set of parameters for that
+%% function. So we have to go through the concrete parameters and type
+%% check them against the function environment type schema. If the
+%% input parameters can not be coerced into the parameters expected by
+%% the function scheme, and error occurs.
+
+%% This is the entry-point when checking parameters for an already parsed,
+%% type checked and internalized query. It serves to verify that a requested
+%% operation and its parameters matches the types in the operation referenced
+check_params(FunEnv, OpName, Params) ->
+    case operation(FunEnv, Opname, Params) of
+        undefined -> #{};
+        not_found ->
+            err(Ctx, {operation_not_found, OpName});
+        VarEnv ->
+            Ctx = #ctx { varenv = VarEnv,
+                         path = [OpName] },
+            check_params_(Ctx, Params)
+    end.
+
+%% Parameter checking has positive polarity, so we fold over
+%% the type var environment from the schema and verify that each
+%% type is valid.
+check_params_(#ctx { varenv = VE } = Ctx, OrigParams) ->
+    F = fun
+            (Key, Tau, Parameters) ->
+                {ok, Value} = check_param(add_path(Ctx, Key),
+                                          maps:get(Key, Parameters, not_found),
+                                          Tau),
+                Parameters#{ Key => Value }
+        end,
+    maps:fold(F, OrigParams, VE).
+
+%% When checking parameters, we must consider the case of default values.
+%% If a given parameter is not given, and there is a default, we can supply
+%% the default value in some cases. The spec requires special handling of
+%% null values, which are handled here.
+check_param(Ctx, not_found, Tau) ->
+    case Tau of
+        #vardef { ty = {non_null, _}, default = null } ->
+            err(Ctx, missing_non_null_param);
+        #vardef { default = Default, ty = Ty } ->
+            coerce_default_param(Ctx, Default, Ty);
+        #vardef { ty = TyName } ->
+            {ok, Sigma} = infer(Ctx, TyName),
+            check_param_(Ctx, Val, Ty)
+    end.
+
+check_param_(Ctx, null, {not_null, _}) ->
+    err(Ctx, non_null);
+check_param_(Ctx, Value, {non_null, Tau}) ->
+    %% Here, the value cannot be null due to the preceeding clauses
+    check_param_(Ctx, Value, Tau);
+check_param_(Ctx, null, _Tau) ->
+    {ok, null};
+check_param_(Ctx, Lst, {list, Tau}) when is_list(Lst) ->
+    %% Build a dummy structure to match the recursor. Unwrap this
+    %% structure before replacing the list parameter.
+    %%
+    %% @todo: Track the index here
+    {ok, [check_param_(Ctx, X, Tau) || X <- Lst]};
+check_param_(Ctx, Value, #scalar_type{} = Tau) ->
+    coerce(Ctx, Value, Tau));
+check_param_(Ctx, {enum, Value}, #enum_type{} = Tau) when is_binary(Value) ->
+    check_param_(Ctx, Value, ETy);
+check_param_(Ctx, Value, #enum_type { id = Ty } = Tau) when is_binary(Value) ->
+    %% Determine the type of any enum term, and then coerce it
+    case graphql_schema:validate_enum(Ty, V) of
+        ok ->
+            coerce(Ctx, V, Tau);
+        not_found ->
+            err(Ctx, {enum_not_found, Ty, V});
+        {other_enums, OtherTys} ->
+            err(Ctx, {param_mismatch, {enum, Ty, OtherTys}})
+    end;
+check_param_(Ctx, Obj, #input_object_type{} = Tau) when is_map(Obj) ->
+    %% When an object comes in through JSON for example, then the input object
+    %% will be a map which is already unique in its fields. To handle this, turn
+    %% the object into the same form as the one we use on query documents and pass
+    %% it on. Note that the code will create a map later on once the input has been
+    %% uniqueness-checked.
+    check_param_(Ctx, {input_object, maps:to_list(Obj)}, Tau);
+check_param_(Ctx, {input_object, KVPairs}, #input_object_type{} = Tau) ->
+    check_input_object(Ctx, {input_object, KVPairs}, Tau);
+    %% Everything else are errors
+check_param(Ctx, Value, Tau) ->
+    err(Ctx, {param_mismatch, Value, Tau}).    
 
 %% Subsumption relation over types:
 %%
@@ -749,6 +850,27 @@ take_arg(Ctx, {Key, #schema_arg { ty = Tau,
                     {ok, {Key, #{ type => Tau, value => Default}}, Args}
             end;
     end.
+
+%% Determine the operation whih the call wants to run
+operation(FunEnv, <<>>, Params) ->
+    %% Supplying an empty string is the same as not supplying anything at all
+    %% This should solve problems where we have empty requests
+    operation(FunEnv, undefined, Params);
+operation(FunEnv, undefined, Params) ->
+    case maps:to_list(FunEnv) of
+        [] when Params == #{} ->
+            undefined;
+        [] when Params /= #{} ->
+            err([], unnamed_operation_params);
+        [{_, VarEnv}] ->
+            VarEnv;
+        _ ->
+            %% The error here should happen in the execute phase
+            undefined
+    end;
+operation(FunEnv, OpName, _Params) ->
+    maps:get(OpName, FunEnv, not_found).
+
 
 %% Tell the error logger that something is off
 err_report(Term, Cl, Err) ->
