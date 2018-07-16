@@ -436,9 +436,9 @@ check_sset_(Ctx, [#field{}|_], not_found) ->
 check_sset_(Ctx, [#field{ args = Args, directives = Dirs,
                           selection_set = SSet } = F | Fs], Sigma) ->
     CtxP = add_path(Ctx, F),
-    {ok, FieldTypes} = fields(CtxP, Sigma),
     {ok, Rest} = check_sset_(Ctx, Fs, Sigma),
     {ok, CDirectives} = check_directives(CtxP, field, Dirs),
+    {ok, FieldTypes} = fields(CtxP, Sigma),
     case infer_field(Ctx, F, FieldTypes) of
         {ok, {introspection, typename} = Ty} ->
             {ok, [F#field { schema = Ty,
@@ -483,20 +483,25 @@ check(Ctx, #frag { directives = Dirs,
 check(Ctx, #op { vardefs = VDefs, directives = Dirs, selection_set = SSet } = Op,
            #object_type {} = Sigma) ->
     CtxP = add_path(Ctx, Op),
-    {ok, Ty} = infer(Ctx, Op),
     OperationType = operation_context(Op),
     {ok, VarDefs} = var_defs(CtxP, VDefs),
     {ok, CDirectives} = check_directives(CtxP, OperationType, Dirs),
     {ok, CSSet} = check_sset(CtxP#ctx { vars = VarDefs }, SSet, Sigma),
     {ok, Op#op {
-           schema = Ty,
+           schema = Sigma,
            directives = CDirectives,
            selection_set = CSSet,
            vardefs = VarDefs}}.
 
 %% To check a document, establish a default context and
 %% check the document.
-check(#document{ definitions = Defs } = Doc) ->
+check(#document{} = Doc) ->
+    try check_(Doc) of Res -> Res
+    catch throw:{error, Path, Msg} ->
+            graphql_err:abort(Path, type_check, Msg)
+    end.
+
+check_(#document{ definitions = Defs } = Doc) ->
     {Fragments, Ops} = lists:partition(
                          fun(#frag{}) -> true; (_) -> false end,
                          Defs),
