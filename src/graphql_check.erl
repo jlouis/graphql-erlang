@@ -557,14 +557,34 @@ check_param(Ctx, not_found, Tau) ->
         #vardef { default = Default, ty = Ty } ->
             coerce_default_param(Ctx, Default, Ty)
     end;
-check_param(Ctx, Val, #vardef { ty = TyName }) ->
-    case infer_type(Ctx, TyName) of
-        {ok, {'+', Ty}} ->
-            check_param_(Ctx, Val, Ty);
-        {ok, {_, Ty}} ->
-            err(Ctx, {not_input_type, Ty, TyName})
-    end.
+check_param(Ctx, Val, #vardef { ty = Ty }) ->
+    case infer_type(Ctx, Ty) of
+        {ok, {'-', Tau}} ->
+            err(Ctx, {not_input_type, Tau, Ty});
+        {ok, {_, Tau}} ->
+            check_param_(Ctx, Val, Tau)
+    end;
+check_param(Ctx, Val, Tau) ->
+    check_param_(Ctx, Val, Tau).
 
+%% Lift types up if needed
+check_param_(Ctx, Val, Ty) when is_binary(Ty) ->
+    case infer_type(Ctx, Ty) of
+        {ok, {'-', _}} ->
+            err(Ctx, output_type_in_parameter);
+        {ok, {_, Tau}} ->
+            check_param_(Ctx, Val, Tau)
+    end;
+check_param_(Ctx, {var, ID}, Sigma) ->
+    {ok, #vardef { ty = Tau}} = infer(Ctx, {var, ID}),
+    case sub(Tau, Sigma) of
+        yes ->
+            {ok, {var, ID}};
+        no ->
+            err(Ctx, {type_mismatch,
+                      #{ document => {var, ID, Tau},
+                         schema => Sigma }})
+    end;
 check_param_(Ctx, null, {not_null, _}) ->
     err(Ctx, non_null);
 check_param_(Ctx, Val, {non_null, Tau}) ->
@@ -851,9 +871,9 @@ fields(_Ctx, #interface_type { fields = Fields }) -> {ok, Fields};
 fields(_Ctx, #union_type {}) -> {ok, #{}}.
 
 %% Build a varenv
-varenv(VDefs) ->
-    L = [{graphql_ast:name(Var), Def} || #vardef { id = Var } = Def <- VDefs],
-    maps:from_list(L).
+varenv(VarList) ->
+    maps:from_list(
+      [{graphql_ast:name(Var), Def} || #vardef { id = Var } = Def <- VarList]).
 
 %% Build a funenv
 funenv(Ops) ->
@@ -861,7 +881,7 @@ funenv(Ops) ->
         (#frag{}, FE) -> FE;
         (#op { id = ID, vardefs = VDefs }, FE) ->
             Name = graphql_ast:name(ID),
-            VarEnv = varenv(VDefs),
+            VarEnv = varenv(maps:values(VDefs)),
             FE#{ Name => VarEnv }
     end,
     lists:foldl(F, #{}, Ops).
