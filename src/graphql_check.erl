@@ -447,12 +447,12 @@ check_sset_(Ctx, [#field{ args = Args, directives = Dirs,
                             directives = CDirectives }
                   |Rest]};
         {ok, #schema_field { ty = Ty, args = TArgs } = SF} ->
-            {ok, Type} = output_type(Ty),
-            {ok, CSSet} = check_sset(CtxP, SSet, Type),
+            {ok, Tau} = output_type(Ty),
+            {ok, CSSet} = check_sset(CtxP, SSet, Tau),
             {ok, CArgs} = check_args(CtxP, Args, TArgs),
             {ok, [F#field {
                     args = CArgs,
-                    schema = SF#schema_field { ty = Type },
+                    schema = SF#schema_field { ty = Tau },
                     directives = CDirectives,
                     selection_set = CSSet }
                   | Rest]}
