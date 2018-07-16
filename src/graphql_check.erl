@@ -498,14 +498,14 @@ check(#document{ definitions = Defs } = Doc) ->
     FragEnv = fragenv(Fragments),
     CtxP = add_path(#ctx{}, document),
     Ctx = CtxP#ctx { frags = FragEnv },
-    {ok, COps} = [begin
-                      {ok, Type} = infer(Ctx, Op),
-                      {ok, COp} = check(Ctx, Op, Type),
-                      COp
-                  end || Op <- Ops],
+    COps = [begin
+                {ok, Type} = infer(Ctx, Op),
+                {ok, COp} = check(Ctx, Op, Type),
+                COp
+            end || Op <- Ops],
     {ok, #{
            ast => Doc#document { definitions = COps },
-           funenv => funenv(COps) }}.
+           fun_env => funenv(COps) }}.
 
 
 %% GraphQL queries are really given in two stages. One stage is the
