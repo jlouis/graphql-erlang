@@ -400,16 +400,15 @@ check_sset_(_Ctx, [], _Ty) ->
     {ok, []};
 check_sset_(Ctx, [#frag { id = '...' } = Frag | Fs], Sigma) ->
     {ok, Rest} = check_sset_(Ctx, Fs, Sigma),
-    {ok, FragTy} = infer(Ctx, Frag),
-    {ok, CFrag} = check(Ctx, Frag, FragTy),
+    {ok, CFrag} = check(Ctx, Frag, Sigma),
     {ok, [CFrag | Rest]};
 check_sset_(Ctx, [#frag_spread { directives = Dirs } = FragSpread | Fs], Sigma) ->
     CtxP = add_path(Ctx, FragSpread),
-    {ok, Rest} = check_sset_(Ctx, Fs, Sigma),
     {ok, #frag { schema = Tau }} = infer(Ctx, FragSpread),
+    {ok, Rest} = check_sset_(Ctx, Fs, Tau),
     ok = sub_frag(CtxP, Tau, Sigma),
 
-    {ok, CDirectives} = check_directives(CtxP, frag_spread, Dirs),
+    {ok, CDirectives} = check_directives(CtxP, fragment_spread, Dirs),
     %% @todo: Consider just expanding #frag{} here
     {ok, [FragSpread#frag_spread { directives = CDirectives }
           | Rest]};
@@ -450,13 +449,19 @@ check_sset_(Ctx, [#field{ args = Args, directives = Dirs,
 %%
 %% We derive an expression in which we have annotated types into
 %% the AST. This helps the later execution stage.
+check(Ctx, #frag { ty = undefined } = Frag, Sigma) ->
+    %% The specification has a rule in which if you omit the
+    %% type of a fragment, it "picks up" the type of the context
+    %% because this can be used in the case where you want to include
+    %% or slip a block of information
+    check(Ctx, Frag#frag { ty = Sigma }, Sigma);
 check(Ctx, #frag { directives = Dirs,
                    selection_set = SSet } = F, Sigma) ->
     CtxP = add_path(Ctx, F),
-    {ok, Tau} = infer(Ctx, F),
+    {ok, {'-', Tau}} = infer(Ctx, F),
     ok = sub_frag(CtxP, Tau, Sigma),
-    {ok, CDirectives} = check_directives(CtxP, fragment, Dirs),
-    {ok, CSSet} = check_sset(CtxP, SSet, Sigma),
+    {ok, CDirectives} = check_directives(CtxP, inline_fragment, Dirs),
+    {ok, CSSet} = check_sset(CtxP, SSet, Tau),
     {ok, F#frag { schema = Tau,
                   directives = CDirectives,
                   selection_set = CSSet }};
@@ -851,10 +856,14 @@ funenv(Ops) ->
     end,
     lists:foldl(F, #{}, Ops).
 
+annotate_frag(#frag { ty = Ty } = Frag) ->
+    {'-', Tau} = infer_type(Ty),
+    Frag#frag { schema = Tau }.
+
 %% Build a fragenv
 fragenv(Frags) ->
     maps:from_list(
-      [{graphql_ast:name(ID), Frg} || #frag { id = ID } = Frg <- Frags]).
+      [{graphql_ast:name(ID), annotate_frag(Frg)} || #frag { id = ID } = Frg <- Frags]).
 
 %% Figure out what kind of operation context we have
 operation_context(#op { ty = Ty }) ->
