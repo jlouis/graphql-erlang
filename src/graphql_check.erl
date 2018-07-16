@@ -179,7 +179,7 @@ infer(#ctx { vars = Vars } = Ctx, {var, ID}) ->
     Var = graphql_ast:name(ID),
     case maps:get(Var, Vars, not_found) of
         not_found ->
-            err(add_path(Ctx, Var), unbound_variable);
+            err(Ctx, {unbound_variable, Var});
         #vardef {} = VDef ->
             {ok, VDef}
     end;
