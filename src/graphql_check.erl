@@ -170,8 +170,8 @@ infer(#ctx { vars = Vars } = Ctx, {var, ID}) ->
         #vardef {} = VDef ->
             {ok, VDef}
     end;
-infer(_Ctx, _) ->
-    exit(not_implemente).
+infer(Ctx, X) ->
+    exit({not_implemented, Ctx, X}).
 
 
 
