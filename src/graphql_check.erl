@@ -154,6 +154,8 @@ infer(Ctx, #op { ty = Ty } = Op) ->
                     {ok, Tau}
             end
     end;
+infer(Ctx, #frag { ty = Ty } ) ->
+    infer_type(Ctx, Ty);
 infer(#ctx { frags = FragEnv } = Ctx, #frag_spread { id = ID }) ->
     Name = graphql_ast:name(ID),
     case maps:get(Name, FragEnv, not_found) of
