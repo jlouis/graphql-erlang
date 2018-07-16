@@ -186,20 +186,6 @@ infer(#ctx { vars = Vars } = Ctx, {var, ID}) ->
 infer(Ctx, X) ->
     exit({not_implemented, Ctx, X}).
 
-
-
-%% The infer/3 is a variant of infer where we have a context of some sort
-%% from which to run the derivation of the type (list of argument types,
-%% or the fields of a selection set for instance).
-%% infer_arg(Ctx, K, ArgTypes) ->
-%%     Name = graphql_ast:name(K),
-%%     case maps:get(Name, ArgTypes, not_found) of
-%%         not_found ->
-%%             err(Ctx, {unknown_argument, Name});
-%%         #schema_arg{ ty = Ty } ->
-%%             input_type(Ty)
-%%     end.
-
 -spec infer_field(Context :: ctx(), Exp :: expr(),
                   Map :: #{ binary() => #schema_field{} }) ->
                          {ok, schema_field() | {introspection, typename}}.
@@ -243,14 +229,13 @@ check_args_(_Ctx, [], [], Acc) ->
     {ok, Acc};
 check_args_(Ctx, [_|_] = Args, [], _Acc) ->
     err(Ctx, {excess_args, Args});
-check_args_(Ctx, Args, [{N, #schema_arg { ty = SigmaTy }} = SArg | Next], Acc) ->
+check_args_(Ctx, Args, [{N, #schema_arg { ty = TyName }} = SArg | Next], Acc) ->
     CtxP = add_path(Ctx, N),
-    {ok, {_, #{ type := Tau, value := Val}} = A, NextArgs} =
+    {ok, {_, #{ type := Tau, value := Val}}, NextArgs} =
         take_arg(CtxP, SArg, Args),
-    {ok, {_Polarity, Sigma}} = infer_type(Ctx, SigmaTy),
+    {ok, {_Polarity, Sigma}} = infer_type(Ctx, TyName),
     Res = case check_value(CtxP, Val, Sigma) of
-              {ok, Val} -> A;
-              {ok, RVal} -> {N, {Tau, RVal}}
+              {ok, RVal} -> {N, #{ type => Tau, value => RVal}}
           end,
     check_args_(Ctx, NextArgs, Next, [Res|Acc]).
 
@@ -361,21 +346,22 @@ check_input_obj(Ctx, {input_object, Obj},
         ok ->
             {ok, 
              check_input_obj_(Ctx, maps:from_list(AssocList),
-                              maps:to_list(Fields))}
+                              maps:to_list(Fields), #{})}
     end.
 
 %% Input objects are in positive polarity, so the schema's fields are used
 %% to verify that every field is present, and that there are no excess fields
 %% As we process fields in the object, we remove them so we can check that
 %% there are no more fields in the end.
-check_input_obj_(Ctx, Obj, []) ->
+check_input_obj_(Ctx, Obj, [], Acc) ->
     case maps:size(Obj) of
-        0 -> [];
+        0 -> Acc;
         K when K > 0 -> err(Ctx, {excess_fields_in_object, Obj})
     end;
 %% @todo: Clearly this has to change because Ty isn't known at this
 check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
-                                                 default = Default }} | Next]) -> 
+                                                 default = Default }} | Next],
+                 Acc) -> 
     Result = case maps:get(Name, Obj, not_found) of
                  not_found ->
                      case Ty of
@@ -394,7 +380,10 @@ check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
                              R
                      end
              end,
-    [Result | check_input_obj_(Ctx, maps:remove(Name, Obj), Next)].
+    check_input_obj_(Ctx,
+                     maps:remove(Name, Obj),
+                     Next,
+                     Acc#{ Name => Result }).
 
 -spec check_sset(Ctx :: ctx(),
                  Exprs :: [any()],
