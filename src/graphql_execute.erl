@@ -884,6 +884,8 @@ var_coerce(S, T, V) when is_binary(T)   ->
     X = graphql_schema:lookup(T),
     var_coerce(S, X, V);
 var_coerce(Tau, Tau, Value)             -> Value;
+var_coerce({non_null, Tau}, {non_null, Sigma}, Value) ->
+    var_coerce(Tau, Sigma, Value);
 var_coerce({non_null, Tau}, Tau, Value) -> Value;
 var_coerce(Tau, {list, SType}, Value)   -> [var_coerce(Tau, SType, Value)].
 
