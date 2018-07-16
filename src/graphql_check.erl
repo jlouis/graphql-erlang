@@ -155,7 +155,12 @@ infer(Ctx, #op { ty = Ty } = Op) ->
             end
     end;
 infer(Ctx, #frag { ty = Ty } ) ->
-    infer_type(Ctx, Ty);
+    case infer_type(Ctx, Ty) of
+        {ok, {'-', Tau}} ->
+            {ok, Tau};
+        Res ->
+            err(Ctx, {invariant_broken, Res})
+    end;
 infer(#ctx { frags = FragEnv } = Ctx, #frag_spread { id = ID }) ->
     Name = graphql_ast:name(ID),
     case maps:get(Name, FragEnv, not_found) of
@@ -458,7 +463,7 @@ check(Ctx, #frag { ty = undefined } = Frag, Sigma) ->
 check(Ctx, #frag { directives = Dirs,
                    selection_set = SSet } = F, Sigma) ->
     CtxP = add_path(Ctx, F),
-    {ok, {'-', Tau}} = infer(Ctx, F),
+    {ok, Tau} = infer(Ctx, F),
     ok = sub_frag(CtxP, Tau, Sigma),
     {ok, CDirectives} = check_directives(CtxP, inline_fragment, Dirs),
     {ok, CSSet} = check_sset(CtxP, SSet, Tau),
