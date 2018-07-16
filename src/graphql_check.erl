@@ -504,9 +504,9 @@ check(#document{} = Doc) ->
     end.
 
 check_(#document{ definitions = Defs } = Doc) ->
-    {Fragments, Ops} = lists:partition(
-                         fun(#frag{}) -> true; (_) -> false end,
-                         Defs),
+    Fragments = lists:filter(
+                  fun(#frag{}) -> true; (_) -> false end,
+                  Defs),
     FragEnv = fragenv(Fragments),
     CtxP = add_path(#ctx{}, document),
     Ctx = CtxP#ctx { frags = FragEnv },
@@ -514,7 +514,7 @@ check_(#document{ definitions = Defs } = Doc) ->
                 {ok, Type} = infer(Ctx, Op),
                 {ok, COp} = check(Ctx, Op, Type),
                 COp
-            end || Op <- Ops],
+            end || Op <- Defs],
     {ok, #{
            ast => Doc#document { definitions = COps },
            fun_env => funenv(COps) }}.
