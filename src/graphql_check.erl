@@ -108,6 +108,9 @@ infer_type({scalar, Name}) ->
 infer_type(#scalar_type{} = Ty) -> {'*', Ty};
 infer_type({enum, _} = E) -> {'*', E};
 infer_type(#enum_type{} = Ty) -> {'*', Ty};
+infer_type(#object_type{} = Ty) -> {'-', Ty};
+infer_type(#interface_type{} = Ty) -> {'-', Ty};
+infer_type(#union_type{} = Ty) -> {'-', Ty};
 infer_type({name, _, N}) -> infer_type(N);
 infer_type(N) when is_binary(N) ->
     case graphql_schema:lookup(N) of
@@ -124,8 +127,6 @@ infer_type(N) when is_binary(N) ->
         #interface_type{} = IFace -> {'-', IFace};
         #union_type{} = Union -> {'-', Union}
     end.
-
-
 
 %% Main inference judgement
 %%
