@@ -380,7 +380,12 @@ check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
                              coerce_default_param(Ctx, Default, Ty)
                      end;
                  V ->
-                     check_param(add_path(Ctx, Name), V, Ty)
+                     case infer_type(Ctx, Ty) of
+                         {ok, {'-', _Tau}} ->
+                             err(Ctx, {output_type_in_input_object, Ty});
+                         {ok, {_, Tau}} ->
+                             check_param(add_path(Ctx, Name), V, Tau)
+                     end
              end,
     [Result | check_input_obj_(Ctx, maps:remove(Name, Obj), Next)].
 
