@@ -382,14 +382,16 @@ check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
                          {non_null, _} when Default == null ->
                              err(add_path(Ctx, Name), missing_non_null_param);
                          _ ->
-                             coerce_default_param(Ctx, Default, Ty)
+                             {ok, R} = coerce_default_param(Ctx, Default, Ty),
+                             R
                      end;
                  V ->
                      case infer_type(Ctx, Ty) of
                          {ok, {'-', _Tau}} ->
                              err(Ctx, {output_type_in_input_object, Ty});
                          {ok, {_, Tau}} ->
-                             check_param(add_path(Ctx, Name), V, Tau)
+                             {ok, R} = check_param(add_path(Ctx, Name), V, Tau),
+                             R
                      end
              end,
     [Result | check_input_obj_(Ctx, maps:remove(Name, Obj), Next)].
@@ -607,7 +609,10 @@ check_param_(Ctx, Lst, {list, Tau}) when is_list(Lst) ->
     %% structure before replacing the list parameter.
     %%
     %% @todo: Track the index here
-    {ok, [check_param_(Ctx, X, Tau) || X <- Lst]};
+    {ok, [begin
+              {ok, V} = check_param_(Ctx, X, Tau),
+              V
+          end || X <- Lst]};
 check_param_(Ctx, Val, #scalar_type{} = Tau) ->
     coerce(Ctx, Val, Tau);
 check_param_(Ctx, {enum, Val}, #enum_type{} = Tau) when is_binary(Val) ->
@@ -814,16 +819,14 @@ coerce_default_param(#ctx { path = Path } = Ctx, Default, Ty) ->
             err(Path, non_coercible_default)
     end.
 
-coerce(Ctx, Val, #enum_type { id = ID,
-                                resolve_module = ResolveMod }) ->
+coerce(Ctx, Val, #enum_type { id = ID, resolve_module = ResolveMod }) ->
     case ResolveMod of
         undefined ->
             {ok, Val};
         Mod ->
             resolve_input(Ctx, ID, Val, Mod)
     end;
-coerce(Ctx, Val, #scalar_type { id = ID,
-                                  resolve_module = Mod }) ->
+coerce(Ctx, Val, #scalar_type { id = ID, resolve_module = Mod }) ->
     true = Mod /= undefined,
     resolve_input(Ctx, ID, Val, Mod).
 

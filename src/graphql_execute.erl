@@ -877,17 +877,17 @@ resolve_args_(Ctx, [{ID, Val} | As], Acc) ->
 %%
 %% For a discussion about the Pet -> [Pet] coercion in the
 %% specification, see (Oct2016 Section 3.1.7)
-var_coerce(S, T, V) when is_binary(S)   ->
+var_coerce(S, T, V) when is_binary(S)                 ->
     X = graphql_schema:lookup(S),
     var_coerce(X, T, V);
-var_coerce(S, T, V) when is_binary(T)   ->
+var_coerce(S, T, V) when is_binary(T)                 ->
     X = graphql_schema:lookup(T),
     var_coerce(S, X, V);
-var_coerce(Tau, Tau, Value)             -> Value;
+var_coerce(Tau, Tau, Value)                           -> Value;
 var_coerce({non_null, Tau}, {non_null, Sigma}, Value) ->
     var_coerce(Tau, Sigma, Value);
-var_coerce({non_null, Tau}, Tau, Value) -> Value;
-var_coerce(Tau, {list, SType}, Value)   -> [var_coerce(Tau, SType, Value)].
+var_coerce({non_null, Tau}, Tau, Value)               -> Value;
+var_coerce(Tau, {list, SType}, Value)                 -> [var_coerce(Tau, SType, Value)].
 
 %% Produce a valid value for an argument.
 value(Ctx, {Ty, Val})                     -> value(Ctx, Ty, Val);
@@ -1078,8 +1078,6 @@ defer_handle_cancel(#defer_state { work = WorkMap,
 
 
 %% -- ERROR HANDLING --
-
-
 null(Path, Reason) ->
     null(Path, Reason, []).
 
