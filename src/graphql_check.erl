@@ -420,25 +420,20 @@ check_sset_(Ctx, [#frag { id = '...' } = Frag | Fs], Sigma) ->
     {ok, CFrag} = check(Ctx, Frag, Sigma),
     {ok, [CFrag | Rest]};
 check_sset_(Ctx, [#frag_spread { directives = Dirs } = FragSpread | Fs], Sigma) ->
+    {ok, Rest} = check_sset_(Ctx, Fs, Sigma),
     CtxP = add_path(Ctx, FragSpread),
     {ok, #frag { schema = Tau }} = infer(Ctx, FragSpread),
-    {ok, Rest} = check_sset_(Ctx, Fs, Tau),
     ok = sub_frag(CtxP, Tau, Sigma),
-
     {ok, CDirectives} = check_directives(CtxP, fragment_spread, Dirs),
-    %% @todo: Consider just expanding #frag{} here
-    {ok, [FragSpread#frag_spread { directives = CDirectives }
-          | Rest]};
+    {ok, [FragSpread#frag_spread { directives = CDirectives } | Rest]};
 check_sset_(Ctx, [#field{} = F|Fs], {non_null, Ty}) ->
     check_sset_(Ctx, [F|Fs], Ty);
 check_sset_(Ctx, [#field{} = F|Fs], {list, Ty}) ->
     check_sset_(Ctx, [F|Fs], Ty);
-check_sset_(Ctx, [#field{}|_], not_found) ->
-    exit({broken_invariant, Ctx});
 check_sset_(Ctx, [#field{ args = Args, directives = Dirs,
                           selection_set = SSet } = F | Fs], Sigma) ->
-    CtxP = add_path(Ctx, F),
     {ok, Rest} = check_sset_(Ctx, Fs, Sigma),
+    CtxP = add_path(Ctx, F),
     {ok, CDirectives} = check_directives(CtxP, field, Dirs),
     {ok, FieldTypes} = fields(CtxP, Sigma),
     case infer_field(Ctx, F, FieldTypes) of
