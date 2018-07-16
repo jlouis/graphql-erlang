@@ -275,6 +275,15 @@ check_directives(Ctx, OpType, Dirs) ->
 %% it is most efficient to make the case analysis follow 'v' over 'T'.
 check_value(Ctx, {name, _, N}, Sigma) ->
     check_value(Ctx, N, Sigma);
+check_value(Ctx, {var, ID}, Sigma) ->
+    {ok, #vardef { ty = Tau}} = infer(Ctx, {var, ID}),
+    case sub(Tau, Sigma) of
+        yes -> {ok, {var, ID, Tau}};
+        no ->
+            err(Ctx, {type_mismatch,
+                      #{ document => {var, ID, Tau},
+                         schema => Sigma }})
+    end;
 check_value(Ctx, null, {non_null, _} = Sigma) ->
     err(Ctx, {type_mismatch,
               #{ document => null,
@@ -438,15 +447,6 @@ check_sset_(Ctx, [#field{ args = Args, directives = Dirs,
 %%
 %% We derive an expression in which we have annotated types into
 %% the AST. This helps the later execution stage.
-check(Ctx, {var, ID}, Sigma) ->
-    {ok, Tau} = infer(Ctx, {var, ID}),
-    case sub(Tau, Sigma) of
-        yes -> {ok, {var, ID, Tau}};
-        no ->
-            err(Ctx, {type_mismatch,
-                      #{ document => {var, ID, Tau},
-                         schema => Sigma }})
-    end;
 check(Ctx, #frag { directives = Dirs,
                    selection_set = SSet } = F, Sigma) ->
     CtxP = add_path(Ctx, F),
@@ -462,9 +462,9 @@ check(Ctx, #op { vardefs = VDefs, directives = Dirs, selection_set = SSet } = Op
     CtxP = add_path(Ctx, Op),
     {ok, Ty} = infer(Ctx, Op),
     OperationType = operation_context(Op),
-    {ok, CDirectives} = check_directives(CtxP, OperationType, Dirs),
-    {ok, CSSet} = check_sset(CtxP, SSet, Sigma),
     {ok, VarDefs} = var_defs(CtxP, VDefs),
+    {ok, CDirectives} = check_directives(CtxP, OperationType, Dirs),
+    {ok, CSSet} = check_sset(CtxP#ctx { vars = VarDefs }, SSet, Sigma),
     {ok, Op#op {
            schema = Ty,
            directives = CDirectives,
@@ -811,13 +811,13 @@ output_type(Ty) ->
     end.
 
 %% Handle a list of vardefs by elaboration of their types
-var_defs(Ctx, VDefs) ->
+var_defs(Ctx, Input) ->
     VDefs =
         [case input_type(V#vardef.ty) of
              {ok, Ty} -> V#vardef { ty = Ty };
              {error, not_found} -> err(Ctx, {type_not_found, graphql_ast:id(V)});
              {error, {invalid_input_type, T}} -> err(Ctx, {not_input_type, T})
-         end || V <- VDefs],
+         end || V <- Input],
     NamedVars = [{graphql_ast:name(K), V}
                  || #vardef { id = K } = V <- VDefs],
     case graphql_ast:uniq(NamedVars) of
