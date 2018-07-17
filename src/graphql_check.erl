@@ -586,7 +586,7 @@ check_param_(Ctx, {var, ID}, Sigma) ->
     {ok, #vardef { ty = Tau}} = infer(Ctx, {var, ID}),
     case sub(Tau, Sigma) of
         yes ->
-            {ok, {var, ID}};
+            {ok, {var, ID, Tau}};
         no ->
             err(Ctx, {type_mismatch,
                       #{ document => {var, ID, Tau},
