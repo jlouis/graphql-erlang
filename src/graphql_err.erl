@@ -141,7 +141,10 @@ format_ty(Ty) when is_binary(Ty) ->
     Ty;
 format_ty({name, _, N}) -> N;
 format_ty(Ty) when is_atom(Ty) ->
-    atom_to_binary(Ty, utf8).
+    atom_to_binary(Ty, utf8);
+format_ty(I) when is_integer(I) ->
+    integer_to_binary(I).
+
 
 format_fields(Xs) ->
     F = fun({{name, Name, _}, {Ty, Val, _}}) ->
