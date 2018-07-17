@@ -231,10 +231,12 @@ check_args_(Ctx, [_|_] = Args, [], _Acc) ->
     err(Ctx, {excess_args, Args});
 check_args_(Ctx, Args, [{N, #schema_arg { ty = TyName }} = SArg | Next], Acc) ->
     CtxP = add_path(Ctx, N),
-    {ok, {_, #{ type := Tau, value := Val}}, NextArgs} =
-        take_arg(CtxP, SArg, Args),
     {ok, {_Polarity, Sigma}} = infer_type(Ctx, TyName),
-    Res = case check_value(CtxP, Val, Sigma) of
+    {ok, {_, #{ type := ArgTy, value := Val}}, NextArgs} =
+        take_arg(CtxP, SArg, Args),
+    {ok, {_, Tau}} = infer_type(Ctx, ArgTy),
+    yes = sub(Tau, Sigma),
+    Res = case check_value(CtxP, Val, Tau) of
               {ok, RVal} -> {N, #{ type => Tau, value => RVal}}
           end,
     check_args_(Ctx, NextArgs, Next, [Res|Acc]).
@@ -276,7 +278,8 @@ check_value(Ctx, {name, _, N}, Sigma) ->
 check_value(Ctx, {var, ID}, Sigma) ->
     {ok, #vardef { ty = Tau}} = infer(Ctx, {var, ID}),
     case sub(Tau, Sigma) of
-        yes -> {ok, {var, ID, Tau}};
+        yes ->
+            {ok, {var, ID, Tau}};
         no ->
             err(Ctx, {type_mismatch,
                       #{ document => {var, ID, Tau},
@@ -564,13 +567,8 @@ check_param(Ctx, not_found, Tau) ->
         #vardef { default = Default, ty = Ty } ->
             coerce_default_param(Ctx, Default, Ty)
     end;
-check_param(Ctx, Val, #vardef { ty = Ty }) ->
-    case infer_type(Ctx, Ty) of
-        {ok, {'-', Tau}} ->
-            err(Ctx, {not_input_type, Tau, Ty});
-        {ok, {_, Tau}} ->
-            check_param_(Ctx, Val, Tau)
-    end;
+check_param(Ctx, Val, #vardef { ty = Tau } = VarDef) ->
+    check_param_(Ctx, Val, Tau);
 check_param(Ctx, Val, Tau) ->
     check_param_(Ctx, Val, Tau).
 
@@ -889,7 +887,7 @@ funenv(Ops) ->
         (#frag{}, FE) -> FE;
         (#op { id = ID, vardefs = VDefs }, FE) ->
             Name = graphql_ast:name(ID),
-            VarEnv = varenv(maps:values(VDefs)),
+            {ok, VarEnv} = var_defs(#ctx{}, maps:values(VDefs)),
             FE#{ Name => VarEnv }
     end,
     lists:foldl(F, #{}, Ops).
