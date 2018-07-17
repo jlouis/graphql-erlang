@@ -63,10 +63,9 @@ v(Q) ->
     case graphql:parse(Q) of
         {ok, AST} ->
             try
-               Elab = graphql:elaborate(AST),
                {ok, #{
                    ast := _AST2,
-                   fun_env := _FunEnv }} = graphql:type_check(Elab),
+                   fun_env := _FunEnv }} = graphql:type_check(AST),
                ok = graphql:validate(AST),
                true
             catch
