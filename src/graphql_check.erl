@@ -404,9 +404,15 @@ check_sset(Ctx, SSet, Ty) ->
 
 check_sset_(_Ctx, [], _Ty) ->
     {ok, []};
-check_sset_(Ctx, [#frag { id = '...' } = Frag | Fs], Sigma) ->
+check_sset_(Ctx, [#frag { id = '...', ty = undefined } = Frag | Fs], Sigma) ->
     {ok, Rest} = check_sset_(Ctx, Fs, Sigma),
     {ok, CFrag} = check(Ctx, Frag, Sigma),
+    {ok, [CFrag | Rest]};
+check_sset_(Ctx, [#frag { id = '...' } = Frag | Fs], Sigma) ->
+    {ok, Rest} = check_sset_(Ctx, Fs, Sigma),
+    {ok, Tau} = infer(Ctx, Frag),
+    {ok, CFrag} = check(Ctx, Frag, Tau),
+    ok = sub_frag(Ctx, Tau, Sigma),
     {ok, [CFrag | Rest]};
 check_sset_(Ctx, [#frag_spread { directives = Dirs } = FragSpread | Fs], Sigma) ->
     {ok, Rest} = check_sset_(Ctx, Fs, Sigma),
