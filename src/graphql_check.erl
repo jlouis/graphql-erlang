@@ -525,15 +525,20 @@ check_(#document{ definitions = Defs } = Doc) ->
 %% type checked and internalized query. It serves to verify that a requested
 %% operation and its parameters matches the types in the operation referenced
 check_params(FunEnv, OpName, Params) ->
-    case operation(FunEnv, OpName, Params) of
-        undefined -> #{};
-        not_found ->
-            err(#ctx{}, {operation_not_found, OpName});
-        VarEnv ->
-            Ctx = #ctx { vars = VarEnv,
-                         path = [OpName] },
-            check_params_(Ctx, Params)
+    try
+        case operation(FunEnv, OpName, Params) of
+            undefined -> #{};
+            not_found ->
+                err(#ctx{}, {operation_not_found, OpName});
+            VarEnv ->
+                Ctx = #ctx { vars = VarEnv,
+                             path = [OpName] },
+                check_params_(Ctx, Params)
+        end
+    catch throw:{error, Path, Msg} ->
+            graphql_err:abort(Path, type_check, Msg)
     end.
+
 
 %% Parameter checking has positive polarity, so we fold over
 %% the type var environment from the schema and verify that each
