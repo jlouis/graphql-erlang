@@ -60,7 +60,7 @@
 -record(op,
         { ty :: undefined | operation_type(),
           id = 'ROOT' :: graphql:name() | 'ROOT',
-          vardefs = [] :: [#vardef{}],
+          vardefs = [] :: [#vardef{}] | #{ binary() => #vardef{} },
           directives = [] :: [graphql:directive()],
           selection_set = [] :: [#field{} | #frag_spread{}],
           schema = undefined :: 'undefined' | any()

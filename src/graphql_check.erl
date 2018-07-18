@@ -82,8 +82,6 @@
 
 %% Elaborate a type and also determine its polarity. This is used for
 %% input and output types
--spec infer_type(Context :: ctx(), Type :: ty()) ->
-                        {error, Reason :: term()} | {ok, {polarity(), ty()}}.
 infer_type(Ctx, Tau) ->
     case infer_type(Tau) of
         {error, Reason} ->
@@ -138,7 +136,6 @@ infer_type(N) when is_binary(N) ->
 %% Given a context and some graphql expression, we derive
 %% a valid type for that expression. This is mostly handled by
 %% a lookup into the environment.
--spec infer(Context :: ctx(), Exp :: expr()) -> {ok, schema_object()}.
 infer(Ctx, #directive { id = ID }) ->
     case graphql_ast:name(ID) of
         <<"include">> -> {ok, graphql_directives:include()};
@@ -186,9 +183,6 @@ infer(#ctx { vars = Vars } = Ctx, {var, ID}) ->
 infer(Ctx, X) ->
     exit({not_implemented, Ctx, X}).
 
--spec infer_field(Context :: ctx(), Exp :: expr(),
-                  Map :: #{ binary() => #schema_field{} }) ->
-                         {ok, schema_field() | {introspection, typename}}.
 infer_field(Ctx, #field { id = ID } = F, FieldTypes) ->
     CtxP = add_path(Ctx, F),
     Name = graphql_ast:name(ID),
@@ -207,7 +201,6 @@ infer_field(Ctx, #field { id = ID } = F, FieldTypes) ->
 %%
 
 %% Check arguments. Follows the general scheme
--spec check_args(Context :: ctx(), [Exp :: expr()], Ty :: map()) -> {ok, any()}.
 check_args(Ctx, Args, Ty) ->
     %% Check uniqueness
     NamedArgs = [{graphql_ast:name(K), V} || {K, V} <- Args],
@@ -383,10 +376,6 @@ check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
                      Next,
                      Acc#{ Name => Result }).
 
--spec check_sset(Ctx :: ctx(),
-                 Exprs :: [any()],
-                 Ty :: ty()) ->
-                        {ok, Result :: [term()]}.
 check_sset(Ctx, [], Ty) ->
     case Ty of
         #object_type{} -> err(Ctx, fieldless_object);
@@ -410,13 +399,13 @@ check_sset_(Ctx, [#frag { id = '...' } = Frag | Fs], Sigma) ->
     {ok, Rest} = check_sset_(Ctx, Fs, Sigma),
     {ok, Tau} = infer(Ctx, Frag),
     {ok, CFrag} = check(Ctx, Frag, Tau),
-    ok = sub_frag(Ctx, Tau, Sigma),
+    ok = sub_output(Ctx, Tau, Sigma),
     {ok, [CFrag | Rest]};
 check_sset_(Ctx, [#frag_spread { directives = Dirs } = FragSpread | Fs], Sigma) ->
     {ok, Rest} = check_sset_(Ctx, Fs, Sigma),
     CtxP = add_path(Ctx, FragSpread),
     {ok, #frag { schema = Tau }} = infer(Ctx, FragSpread),
-    ok = sub_frag(CtxP, Tau, Sigma),
+    ok = sub_output(CtxP, Tau, Sigma),
     {ok, CDirectives} = check_directives(CtxP, fragment_spread, Dirs),
     {ok, [FragSpread#frag_spread { directives = CDirectives } | Rest]};
 check_sset_(Ctx, [#field{} = F|Fs], {non_null, Ty}) ->
@@ -464,7 +453,7 @@ check(Ctx, #frag { directives = Dirs,
                    selection_set = SSet } = F, Sigma) ->
     CtxP = add_path(Ctx, F),
     {ok, Tau} = infer(Ctx, F),
-    ok = sub_frag(CtxP, Tau, Sigma),
+    ok = sub_output(CtxP, Tau, Sigma),
     {ok, CDirectives} = check_directives(CtxP, inline_fragment, Dirs),
     {ok, CSSet} = check_sset(CtxP, SSet, Tau),
     {ok, F#frag { schema = Tau,
@@ -627,9 +616,9 @@ check_param_(Ctx, Val, Tau) ->
 %%
 %%
 
-%% Subsumption relation over types:
+%% Subsumption relation over input types:
 %%
-%% Decide if a type is an valid subsumption of another type. We assume
+%% Decide if an input type is an valid subsumption of another type. We assume
 %% that the first parameter is the 'Tau' type and the second parameter
 %% is the 'Sigma' type.
 %%
@@ -671,7 +660,7 @@ sub_input_(_Tau, _Sigma) ->
     %% Any other type combination are invalid
     no.
 
-%% Subsumption relation over fragment types
+%% Subsumption relation over output (fragment) types
 %% Decide is a fragment can be embedded in a given scope
 %% We proceed by computing the valid set of the Scope and also the
 %% Valid set of the fragment. The intersection type between these two,
@@ -682,31 +671,30 @@ sub_input_(_Tau, _Sigma) ->
 %% than running an intersection computation. This trades off computation
 %% for code size when you have a match that can be optimized in any way.
 %%
-
 %% First a series of congruence checks. We essentially ignore
 %% The list and non-null modifiers and check if the given fragment
 %% can be expanded in the given scope by recursing.
 %%
 %% Fragments doesn't care if they sit inside lists or if the scope
 %% type is non-null:
-sub_frag(Ctx, Tau, {list, Sigma}) ->
-    sub_frag(Ctx, Tau, Sigma);
-sub_frag(Ctx, Tau, {non_null, Sigma}) ->
-    sub_frag(Ctx, Tau, Sigma);
-sub_frag(Ctx, {non_null, Tau}, Sigma) ->
-    sub_frag(Ctx, Tau, Sigma);
+sub_output(Ctx, Tau, {list, Sigma}) ->
+    sub_output(Ctx, Tau, Sigma);
+sub_output(Ctx, Tau, {non_null, Sigma}) ->
+    sub_output(Ctx, Tau, Sigma);
+sub_output(Ctx, {non_null, Tau}, Sigma) ->
+    sub_output(Ctx, Tau, Sigma);
 %% Reflexivity:
-sub_frag(_Ctx, #object_type { id = Ty },
+sub_output(_Ctx, #object_type { id = Ty },
                       #object_type { id = Ty }) ->
     %% Object spread in Object scope requires a perfect match
     ok;
-sub_frag(Ctx, #object_type { id = Tau },
+sub_output(Ctx, #object_type { id = Tau },
                      #object_type { id = Sigma  }) ->
     %% If not a perfect match, this is an error:
     err(Ctx, {fragment_spread, Tau, Sigma});
 %% An object subsumes a union scope if the object is member of
 %% Said union type
-sub_frag(Ctx, #object_type { id = ID },
+sub_output(Ctx, #object_type { id = ID },
                      #union_type { id = UID,
                                    types = Sigmas }) ->
     case lists:member(ID, Sigmas) of
@@ -715,7 +703,7 @@ sub_frag(Ctx, #object_type { id = ID },
     end;
 %% Likewise an object is subsumed by an interface if the object
 %% is member of said interface:
-sub_frag(Ctx, #object_type { id = ID,
+sub_output(Ctx, #object_type { id = ID,
                                     interfaces = IFaces },
                      #interface_type { id = IID }) ->
     case lists:member(IID, IFaces) of
@@ -723,7 +711,7 @@ sub_frag(Ctx, #object_type { id = ID,
         false -> err(Ctx, {not_interface_member, ID, IID})
     end;
 %% Otherwise, this is an error:
-sub_frag(Ctx, #interface_type { id = IID },
+sub_output(Ctx, #interface_type { id = IID },
                      #object_type { id = OID, interfaces = IFaces }) ->
     case lists:member(IID, IFaces) of
         true -> ok;
@@ -732,7 +720,7 @@ sub_frag(Ctx, #interface_type { id = IID },
 %% Interface Tau subsumes interface Sigma if they have concrete
 %% objects in common. This means there is at least one valid expansion,
 %% so this should be allowed.
-sub_frag(Ctx, #interface_type { id = SpreadID },
+sub_output(Ctx, #interface_type { id = SpreadID },
                      #interface_type { id = ScopeID }) ->
     Taus = graphql_schema:lookup_interface_implementors(SpreadID),
     Sigmas = graphql_schema:lookup_interface_implementors(ScopeID),
@@ -746,7 +734,7 @@ sub_frag(Ctx, #interface_type { id = SpreadID },
     end;
 %% Interfaces subsume unions, if the union has at least one member
 %% who implements the interface.
-sub_frag(Ctx, #interface_type { id = SpreadID },
+sub_output(Ctx, #interface_type { id = SpreadID },
                      #union_type{ id = ScopeID, types = ScopeMembers }) ->
     Taus = graphql_schema:lookup_interface_implementors(SpreadID),
     case ordsets:intersection(
@@ -758,7 +746,7 @@ sub_frag(Ctx, #interface_type { id = SpreadID },
             err(Ctx, {no_common_object, SpreadID, ScopeID})
     end;
 %% Unions subsume objects if they are members
-sub_frag(Ctx, #union_type { id = UID, types = UMembers },
+sub_output(Ctx, #union_type { id = UID, types = UMembers },
                      #object_type { id = OID }) ->
     case lists:member(OID, UMembers) of
         true -> ok;
@@ -767,7 +755,7 @@ sub_frag(Ctx, #union_type { id = UID, types = UMembers },
 %% Unions subsume interfaces iff there is an intersection between
 %% what members the union has and what the implementors of the interface
 %% are.
-sub_frag(Ctx, #union_type { id = SpreadID, types = SpreadMembers },
+sub_output(Ctx, #union_type { id = SpreadID, types = SpreadMembers },
                      #interface_type { id = ScopeID }) ->
     Sigmas = graphql_schema:lookup_interface_implementors(ScopeID),
     case ordsets:intersection(
@@ -779,7 +767,7 @@ sub_frag(Ctx, #union_type { id = SpreadID, types = SpreadMembers },
             err(Ctx, {no_common_object, SpreadID, ScopeID})
     end;
 %% Unions subsume if there are common members
-sub_frag(Ctx, #union_type { id = SpreadID, types = SpreadMembers },
+sub_output(Ctx, #union_type { id = SpreadID, types = SpreadMembers },
                      #union_type { id = ScopeID,  types = ScopeMembers }) ->
     case ordsets:intersection(
            ordsets:from_list(SpreadMembers),
