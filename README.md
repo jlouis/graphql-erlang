@@ -366,9 +366,8 @@ run(Doc, OpName, Vars, Req, State) ->
   case graphql:parse(Doc) of
     {ok, AST} ->
       try
-          Elaborated = graphql:elaborate(AST),
           {ok, #{fun_env := FunEnv,
-                ast := AST2 }} = graphql:type_check(Elaborated),
+                ast := AST2 }} = graphql:type_check(AST),
           ok = graphql:validate(AST2),
           Coerced = graphql:type_check_params(FunEnv, OpName, Vars),
           Ctx = #{ params => Coerced, operation_name => OpName },

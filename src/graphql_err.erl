@@ -77,7 +77,6 @@ err_msg({validate, Reason})      -> validate_err_msg(Reason);
 err_msg({uncategorized, Reason}) ->
     io_lib:format("General uncategorized error: ~p", [Reason]).
 
-err_key(elaborate, Key)     -> simplify(Key);
 err_key(execute, {type_resolver_error, _}) -> type_resolver_error;
 err_key(execute, {resolver_crash, _}) -> resolver_crash;
 err_key(execute, {resolver_error, _}) -> resolver_error;
