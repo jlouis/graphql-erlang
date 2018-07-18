@@ -15,6 +15,11 @@ the compatibility issues you are likely to encounter.
 To run this version of GraphQL, you have to carry out the following
 changes:
 
+- The pass `graphql:elaborate/1` is now gone. The pass is folded into
+  the Type Check phase, so you have to update the code base to follow
+  this new setup. In the short-term we'd like to support a
+  `graphql:run/1` style command which simplifies this API to the
+  caller.
 - Use the GraphQL official type specification language and not the one
   we defined. In particular, there are no more annotations (They are
   now handled as directives). And docstrings are optional entries on
@@ -28,7 +33,7 @@ changes:
 - Calls to `graphql:validate_schema()` can be removed.
 - Optional: Embed the root definition inside the graphql schema
   specification:
-  
+
 ```
 schema {
   query : MyQueryType
@@ -44,6 +49,13 @@ schema {
 
 ### Changed
 
+- The type checker has been rewritten from scratch. The new type
+  checker uses a bidirectional checking algorithm which tail-calls
+  between inference/elaboration and checking in a ping-pong fashion.
+  Not only does this shave off a pass over the code, it is also far
+  cleaner from a code perspective. The primary reason for this change
+  is to support the remaining validations and type specification parts
+  of the GraphQL language on a clean basis.
 - Directives are now exported as a directive record included in
   `graphql/include/graphql.hrl`.
 - Support schema definitions in GraphQL specs
