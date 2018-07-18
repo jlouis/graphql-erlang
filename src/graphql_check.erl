@@ -235,7 +235,7 @@ check_args_(Ctx, Args, [{N, #schema_arg { ty = TyName }} = SArg | Next], Acc) ->
     {ok, {_, #{ type := ArgTy, value := Val}}, NextArgs} =
         take_arg(CtxP, SArg, Args),
     {ok, {_, Tau}} = infer_type(Ctx, ArgTy),
-    yes = sub(Tau, Sigma),
+    ok =  sub_input(CtxP, Tau, Sigma),
     Res = case check_value(CtxP, Val, Tau) of
               {ok, RVal} -> {N, #{ type => Tau, value => RVal}}
           end,
@@ -276,15 +276,10 @@ check_directives(Ctx, OpType, Dirs) ->
 check_value(Ctx, {name, _, N}, Sigma) ->
     check_value(Ctx, N, Sigma);
 check_value(Ctx, {var, ID}, Sigma) ->
+    CtxP = add_path(Ctx, {var, ID}),
     {ok, #vardef { ty = Tau}} = infer(Ctx, {var, ID}),
-    case sub(Tau, Sigma) of
-        yes ->
-            {ok, {var, ID, Tau}};
-        no ->
-            err(Ctx, {type_mismatch,
-                      #{ document => {var, ID, Tau},
-                         schema => Sigma }})
-    end;
+    ok = sub_input(CtxP, Tau, Sigma),
+    {ok, {var, ID, Tau}};
 check_value(Ctx, null, {non_null, _} = Sigma) ->
     err(Ctx, {type_mismatch,
               #{ document => null,
@@ -567,7 +562,7 @@ check_param(Ctx, not_found, Tau) ->
         #vardef { default = Default, ty = Ty } ->
             coerce_default_param(Ctx, Default, Ty)
     end;
-check_param(Ctx, Val, #vardef { ty = Tau } = VarDef) ->
+check_param(Ctx, Val, #vardef { ty = Tau }) ->
     check_param_(Ctx, Val, Tau);
 check_param(Ctx, Val, Tau) ->
     check_param_(Ctx, Val, Tau).
@@ -581,15 +576,10 @@ check_param_(Ctx, Val, Ty) when is_binary(Ty) ->
             check_param_(Ctx, Val, Tau)
     end;
 check_param_(Ctx, {var, ID}, Sigma) ->
+    CtxP = add_path(Ctx, {var, ID}),
     {ok, #vardef { ty = Tau}} = infer(Ctx, {var, ID}),
-    case sub(Tau, Sigma) of
-        yes ->
-            {ok, {var, ID, Tau}};
-        no ->
-            err(Ctx, {type_mismatch,
-                      #{ document => {var, ID, Tau},
-                         schema => Sigma }})
-    end;
+    ok = sub_input(CtxP, Tau, Sigma),
+    {ok, {var, ID, Tau}};
 check_param_(Ctx, null, {not_null, _}) ->
     err(Ctx, non_null);
 check_param_(Ctx, Val, {non_null, Tau}) ->
@@ -646,27 +636,38 @@ check_param_(Ctx, Val, Tau) ->
 %% Some of the cases are reflexivity. Some of the cases are congruences.
 %% And some are special handling explicitly.
 %%
-sub(#scalar_type { id = ID }, #scalar_type { id = ID }) -> yes;
-sub(#enum_type { id = ID }, #enum_type { id = ID }) -> yes;
-sub(#input_object_type { id = ID }, #input_object_type { id = ID }) -> yes;
-sub({non_null, DTy}, {non_null, STy}) ->
-    sub(DTy, STy);
-sub({non_null, DTy}, STy) ->
+
+sub_input(Ctx, Tau, Sigma) ->
+    case sub_input_(Tau, Sigma) of
+        yes ->
+            ok;
+        no ->
+            err(Ctx, {type_mismatch,
+                      #{ document => Tau,
+                         schema => Sigma }})
+    end.
+
+sub_input_(#scalar_type { id = ID }, #scalar_type { id = ID }) -> yes;
+sub_input_(#enum_type { id = ID }, #enum_type { id = ID }) -> yes;
+sub_input_(#input_object_type { id = ID }, #input_object_type { id = ID }) -> yes;
+sub_input_({non_null, Tau}, {non_null, Sigma}) ->
+    sub_input_(Tau, Sigma);
+sub_input_({non_null, Tau}, Sigma) ->
     %% A more strict document type of non-null is always allowed since
     %% it can't be null in the schema then
-    sub(DTy, STy);
-sub(_DTy, {non_null, _STy}) ->
+    sub_input_(Tau, Sigma);
+sub_input_(_Tau, {non_null, _Sigma}) ->
     %% If the schema requires a non-null type but the document doesn't
     %% supply that, it is an error
     no;
-sub({list, DTy}, {list, STy}) ->
+sub_input_({list, Tau}, {list, Sigma}) ->
     %% Lists are decided by means of a congruence
-    sub(DTy, STy);
-sub(DTy, {list, STy}) ->
+    sub_input_(Tau, Sigma);
+sub_input_(Tau, {list, Sigma}) ->
     %% A singleton type is allowed to be embedded in a list according to the
     %% specification (Oct 2016)
-    sub(DTy, STy);
-sub(_DTy, _STy) ->
+    sub_input_(Tau, Sigma);
+sub_input_(_Tau, _Sigma) ->
     %% Any other type combination are invalid
     no.
 

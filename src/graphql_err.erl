@@ -109,6 +109,7 @@ path(Path) ->
            F(#union_type { id = ID }) -> name(ID);
            F(#object_type { id = ID }) -> name(ID);
            F({name, _, _} = Name) -> name(Name);
+           F({var, Name}) -> name(Name);
            F(I) when is_integer(I) -> I;
            F(B) when is_binary(B) -> B;
            F(L) when is_list(L) ->
@@ -222,6 +223,9 @@ type_check_err_msg({excess_fields_in_object, Fields}) ->
     io_lib:format("The object contains unknown fields and values: ~p", [Fields]);
 type_check_err_msg({excess_args, Args}) ->
     io_lib:format("The argument list contains unknown arguments ~p", [Args]);
+type_check_err_msg({type_mismatch, #{ document := Doc, schema := Sch }}) ->
+    ["Type mismatch. Teh query document has a value/variable of type (",
+     graphql_err:format_ty(Doc), ") but the schema expectes type (", graphql_err:format_ty(Sch), ")"];
 type_check_err_msg({type_mismatch, #{ id := ID, document := Doc, schema := Sch }}) ->
     ["Type mismatch on (", ID, "). The query document has a value/variable of type (",
       graphql_err:format_ty(Doc), ") but the schema expects type (", graphql_err:format_ty(Sch), ")"];
