@@ -384,8 +384,9 @@ check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
                              R
                      end;
                  V ->
-                     {ok, Tau} = infer_input_type(Ctx, Ty),
-                     {ok, R} = check_param(add_path(Ctx, Name), V, Tau),
+                     CtxP = add_path(Ctx, Name),
+                     {ok, Tau} = infer_input_type(CtxP, Ty),
+                     {ok, R} = check_param(CtxP, V, Tau),
                      R
              end,
     check_input_obj_(Ctx,
