@@ -176,13 +176,8 @@ infer(Ctx, #op { ty = Ty } = Op) ->
                     {ok, Tau}
             end
     end;
-infer(Ctx, #frag { ty = Ty } ) ->
-    case infer_type(Ctx, Ty) of
-        {ok, {'-', Tau}} ->
-            {ok, Tau};
-        Res ->
-            err(Ctx, {invariant_broken, Res})
-    end;
+infer(Ctx, #frag { ty = Ty } = F) ->
+    infer_output_type(add_path(Ctx, F), Ty);
 infer(#ctx { frags = FragEnv } = Ctx, #frag_spread { id = ID }) ->
     Name = graphql_ast:name(ID),
     case maps:get(Name, FragEnv, not_found) of
@@ -220,7 +215,8 @@ infer_field(Ctx, #field { id = ID } = F, FieldTypes) ->
 %%
 %%
 
-%% Check arguments. Follows the general scheme
+%% Check arguments. Follows the general scheme of checking for uniqueness and
+%% then check each argument.
 check_args(Ctx, Args, Ty) ->
     %% Check uniqueness
     NamedArgs = [{graphql_ast:name(K), V} || {K, V} <- Args],
@@ -235,7 +231,9 @@ check_args(Ctx, Args, Ty) ->
 %% Meat of the argument checker:
 %%
 %% Since arguments have positive polarity, they are checked according
-%% to the schema arguments.
+%% to the schema arguments. We don't trust the client here as it can
+%% omit args and it can put in the wrong values for args as well
+%%
 %% The meat of the argument checker. Walk over each schema arg and
 %% verify it type checks according to the type checking rules.
 check_args_(_Ctx, [], [], Acc) ->
@@ -244,10 +242,13 @@ check_args_(Ctx, [_|_] = Args, [], _Acc) ->
     err(Ctx, {excess_args, Args});
 check_args_(Ctx, Args, [{N, #schema_arg { ty = TyName }} = SArg | Next], Acc) ->
     CtxP = add_path(Ctx, N),
-    {ok, {_Polarity, Sigma}} = infer_type(Ctx, TyName),
+    {ok, Sigma} = infer_input_type(Ctx, TyName),
+
     {ok, {_, #{ type := ArgTy, value := Val}}, NextArgs} =
         take_arg(CtxP, SArg, Args),
-    {ok, {_, Tau}} = infer_type(Ctx, ArgTy),
+    {ok, Tau} = infer_input_type(Ctx, ArgTy),
+
+    %% Verify type compabitility
     ok =  sub_input(CtxP, Tau, Sigma),
     Res = case check_value(CtxP, Val, Tau) of
               {ok, RVal} -> {N, #{ type => Tau, value => RVal}}
@@ -383,13 +384,9 @@ check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
                              R
                      end;
                  V ->
-                     case infer_type(Ctx, Ty) of
-                         {ok, {'-', _Tau}} ->
-                             err(Ctx, {output_type_in_input_object, Ty});
-                         {ok, {_, Tau}} ->
-                             {ok, R} = check_param(add_path(Ctx, Name), V, Tau),
-                             R
-                     end
+                     {ok, Tau} = infer_input_type(Ctx, Ty),
+                     {ok, R} = check_param(add_path(Ctx, Name), V, Tau),
+                     R
              end,
     check_input_obj_(Ctx,
                      maps:remove(Name, Obj),
@@ -578,12 +575,8 @@ check_param(Ctx, Val, Tau) ->
 
 %% Lift types up if needed
 check_param_(Ctx, Val, Ty) when is_binary(Ty) ->
-    case infer_type(Ctx, Ty) of
-        {ok, {'-', _}} ->
-            err(Ctx, output_type_in_parameter);
-        {ok, {_, Tau}} ->
-            check_param_(Ctx, Val, Tau)
-    end;
+    {ok, Tau} = infer_input_type(Ctx, Ty),
+    check_param_(Ctx, Val, Tau);
 check_param_(Ctx, {var, ID}, Sigma) ->
     CtxP = add_path(Ctx, {var, ID}),
     {ok, #vardef { ty = Tau}} = infer(Ctx, {var, ID}),
@@ -882,7 +875,7 @@ funenv(Ops) ->
     lists:foldl(F, #{}, Ops).
 
 annotate_frag(#frag { ty = Ty } = Frag) ->
-    {'-', Tau} = infer_type(Ty),
+    {ok, Tau} = infer_output_type(#ctx{}, Ty),
     Frag#frag { schema = Tau }.
 
 %% Build a fragenv
