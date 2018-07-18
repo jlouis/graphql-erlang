@@ -59,16 +59,16 @@
 
 -record(ctx,
         {
-         path = [] :: any(),
-         vars = #{} :: #{ binary() => term() },
+         path = [] :: [any()],
+         vars = #{} :: #{ binary() => #vardef{} },
          frags = #{} :: #{ binary() =>  #frag{} }
         }).
 -type ctx() :: #ctx{}.
 -type polarity() :: '+' | '-' | '*'.
 
--type expr() :: any().
--type ty() :: schema_type().
-
+-type ty() :: schema_type() | schema_object().
+-type ty_name() :: binary().
+%% -type clause() :: op() | frag_spread() | frag().
 %% This is a bidirectional type checker. It proceeds by running three
 %% kinds of functions: synth(Gamma, E) -> {ok, T} | {error, Reason}
 %% which synthesizes a given type out of its constituent parts.
@@ -82,6 +82,7 @@
 
 %% Elaborate a type and also determine its polarity. This is used for
 %% input and output types
+-spec infer_type(ctx(), ty_name() | ty()) -> {ok, {polarity(), ty()}}.
 infer_type(Ctx, Tau) ->
     case infer_type(Tau) of
         {error, Reason} ->
@@ -90,6 +91,7 @@ infer_type(Ctx, Tau) ->
             {ok, {Polarity, TauPrime}}
     end.
 
+-spec infer_type(ty_name() | ty()) -> {polarity(), ty()} | {error, Reason :: term()}.
 infer_type({non_null, Ty}) ->
     case infer_type(Ty) of
         {error, Reason} -> {error, Reason};
@@ -130,6 +132,24 @@ infer_type(N) when is_binary(N) ->
         #interface_type{} = IFace -> {'-', IFace};
         #union_type{} = Union -> {'-', Union}
     end.
+
+%% Infer a type and assert it is valid in input context
+infer_input_type(Ctx, Ty) ->
+    case infer_type(Ctx, Ty) of
+        {ok, {'*', Tau}} -> {ok, Tau};
+        {ok, {'+', Tau}} -> {ok, Tau};
+        {ok, {'-', _}} -> err(Ctx, {invalid_input_type, Ty})
+    end.
+
+%% Infer a type and assert it is valid in output context
+infer_output_type(Ctx, Ty) ->
+    case infer_type(Ctx, Ty) of
+        {ok, {'*', Tau}} -> {ok, Tau};
+        {ok, {'-', Tau}} -> {ok, Tau};
+        {ok, {'+', _}} -> err(Ctx, {invalid_output_type, Ty})
+    end.
+
+
 
 %% Main inference judgement
 %%
@@ -424,7 +444,7 @@ check_sset_(Ctx, [#field{ args = Args, directives = Dirs,
                             directives = CDirectives }
                   |Rest]};
         {ok, #schema_field { ty = Ty, args = TArgs } = SF} ->
-            {ok, Tau} = output_type(Ty),
+            {ok, Tau} = infer_output_type(Ctx, Ty),
             {ok, CSSet} = check_sset(CtxP, SSet, Tau),
             {ok, CArgs} = check_args(CtxP, Args, TArgs),
             {ok, [F#field {
@@ -825,31 +845,11 @@ resolve_input(Ctx, ID, Val, Mod) ->
 
 %% -- INTERNAL FUNCTIONS ------------------------------------------------------
 
-%% Assert a type is an input type
-input_type(Ty) ->
-    case infer_type(Ty) of
-        {error, Reason} -> {error, Reason};
-        {'*', V} -> {ok, V};
-        {'+', V} -> {ok, V};
-        {'-', _} -> {error, {invalid_input_type, Ty}}
-    end.
-
-%% Assert a type is an output type
-output_type(Ty) ->
-    case infer_type(Ty) of
-        {error, Reason} -> {error, Reason};
-        {'*', V} -> {ok, V};
-        {'-', V} -> {ok, V};
-        {'+', _} -> {error, {invalid_output_type, Ty}}
-    end.
-
 %% Handle a list of vardefs by elaboration of their types
 var_defs(Ctx, Input) ->
     VDefs =
-        [case input_type(V#vardef.ty) of
-             {ok, Ty} -> V#vardef { ty = Ty };
-             {error, not_found} -> err(Ctx, {type_not_found, graphql_ast:id(V)});
-             {error, {invalid_input_type, T}} -> err(Ctx, {not_input_type, T})
+        [case infer_input_type(Ctx, V#vardef.ty) of
+             {ok, Tau} -> V#vardef { ty = Tau }
          end || V <- Input],
     NamedVars = [{graphql_ast:name(K), V}
                  || #vardef { id = K } = V <- VDefs],
