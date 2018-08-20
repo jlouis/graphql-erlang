@@ -223,7 +223,7 @@ type_check_err_msg({excess_fields_in_object, Fields}) ->
 type_check_err_msg({excess_args, Args}) ->
     io_lib:format("The argument list contains unknown arguments ~p", [Args]);
 type_check_err_msg({type_mismatch, #{ document := Doc, schema := Sch }}) ->
-    ["Type mismatch. Teh query document has a value/variable of type (",
+    ["Type mismatch. The query document has a value/variable of type (",
      graphql_err:format_ty(Doc), ") but the schema expectes type (", graphql_err:format_ty(Sch), ")"];
 type_check_err_msg({type_mismatch, #{ id := ID, document := Doc, schema := Sch }}) ->
     ["Type mismatch on (", ID, "). The query document has a value/variable of type (",
