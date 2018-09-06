@@ -207,6 +207,8 @@ type_check_err_msg(missing_non_null_param) ->
     ["The parameter is non-null, but was undefined in parameter list"];
 type_check_err_msg(non_null) ->
     ["The value is null in a non-null context"];
+type_check_err_msg({not_found, Ty}) ->
+    iolib:format("The type ~p was not found in the schema", [Ty]);
 type_check_err_msg({enum_not_found, Ty, Val}) ->
     X = io_lib:format("The value ~p is not a valid enum value for type ", [Val]),
     [X, graphql_err:format_ty(Ty)];

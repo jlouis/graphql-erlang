@@ -119,7 +119,7 @@ infer_type(#union_type{} = Ty) -> {'-', Ty};
 infer_type({name, _, N}) -> infer_type(N);
 infer_type(N) when is_binary(N) ->
     case graphql_schema:lookup(N) of
-        not_found -> {error, not_found};
+        not_found -> {error, {not_found, N}};
         %% Non-polar types
         #enum_type{} = Enum -> {'*', Enum};
         #scalar_type{} = Scalar -> {'*', Scalar};

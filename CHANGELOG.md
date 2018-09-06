@@ -46,6 +46,8 @@ schema {
 - (#167) Fix unions to be more consistent: disallow empty unions
   (already covered but now tested), and force unique names on unions
   (by means of a validation).
+- Fix unknown types being reported to the caller and not resulting in
+  a crash.
 
 ### Changed
 
