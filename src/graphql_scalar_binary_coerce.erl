@@ -10,6 +10,13 @@ input(_, X) -> {ok, X}.
 output(_,B) when is_binary(B) ->
     %% Standard case where the code provided a String value
     {ok, B};
+output(_, []) ->
+    %% Output an empty list as "[]". This is a choice for the reason
+    %% of convenience. We could have chosen something differently,
+    %% but in general, users ought to use <<>> for the empty string
+    %% in the binarized GraphQL-Erlang world.
+    %%
+    {ok, <<"[]">>};
 output(_, [{ok, _V}|_] = Lst) ->
     %% Assume we have a list of output values we can turn into strings
     %% Then collect them as a string. This happens when you have a
@@ -20,7 +27,7 @@ output(_, [{ok, _V}|_] = Lst) ->
                            "]"])};
 output(_,X) when is_list(X) ->
     %% Literal string values in erlang are lists, so treat the data
-    %% as iodata() and output it
+    %% as iodata() and output it if it doesn't follow the above schema
     try iolist_to_binary(X) of
         Val -> {ok, Val}
     catch _:_ -> {error, not_coercible}
