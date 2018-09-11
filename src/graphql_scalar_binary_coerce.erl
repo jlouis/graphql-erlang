@@ -16,7 +16,7 @@ output(_, [{ok, _V}|_] = Lst) ->
     %% default value which is a list of enum values for instance
     Res = [output(<<"String">>, S) || {ok, S} <- Lst],
     {ok, iolist_to_binary(["[",
-                           lists:join(",", Res),
+                           lists:join(",", [V || {ok, V} <- Res]),
                            "]"])};
 output(_,X) when is_list(X) ->
     %% Literal string values in erlang are lists, so treat the data
