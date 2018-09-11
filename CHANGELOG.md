@@ -43,6 +43,8 @@ schema {
 
 ### Fixed
 
+- Default values are now returned correctly in introspection queries
+  on args.
 - (#167) Fix unions to be more consistent: disallow empty unions
   (already covered but now tested), and force unique names on unions
   (by means of a validation).

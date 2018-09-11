@@ -174,12 +174,14 @@ render_field({Name, #schema_field {
         <<"deprecationReason">> => DeprecationReason
       }}.
 
-render_input_value({K, #schema_arg { ty = Ty, description = Desc }}) ->
+render_input_value({K, #schema_arg { ty = Ty,
+                                     description = Desc,
+                                     default = Default }}) ->
     {ok, #{
         <<"name">> => K,
         <<"description">> => Desc,
         <<"type">> => ?LAZY(render_type(Ty)),
-        <<"defaultValue">> => null
+        <<"defaultValue">> => Default
     }}.
 
 interface_implementors(ID) ->

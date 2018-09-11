@@ -248,6 +248,18 @@ query TestNestedFieldMerge($id: Id!) {
   }
 }
 
+query IntrospectionDefault {
+    __type(name: "Monster") {
+        fields {
+            name
+            args {
+                name
+                defaultValue
+            }
+        }
+    }
+}
+
 fragment MonsterFragmentNested1 on Monster {
     hitpoints
     stats { attack }

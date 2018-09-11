@@ -84,6 +84,7 @@ groups() ->
          , find_monster
          , find_monster_singleton
          , invalid_scalar_int_input
+         , introspect_default_value
          ]},
     Errors =
         {errors, [],
@@ -754,6 +755,22 @@ inline_fragment(Config) ->
             <<"hitpoints">> => 10 }
     }},
     Expected = run(Config, <<"InlineFragmentTest">>, #{ <<"id">> => ID }),
+    ok.
+
+introspect_default_value(Config) ->
+    #{data :=
+          #{<<"__type">> :=
+                #{<<"fields">> := Fields }}} =
+        run(Config, <<"IntrospectionDefault">>, #{}),
+    %% Check the two relevant entries in the monster
+    [Color] = [F || F <- Fields, maps:get(<<"name">>, F) == <<"color">>],
+    [Mood]  = [F || F <- Fields, maps:get(<<"name">>, F) == <<"mood">>],
+    #{<<"args">> := [#{<<"defaultValue">> := <<"rgb">>,
+                       <<"name">> := <<"colorType">>}],
+      <<"name">> := <<"color">>} = Color,
+    #{<<"args">> := [#{<<"defaultValue">> := null,
+                       <<"name">> := <<"fail">>}],
+      <<"name">> := <<"mood">>} = Mood,
     ok.
 
 fragment_over_union_interface(Config) ->
