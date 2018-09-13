@@ -43,6 +43,7 @@ schema {
 
 ### Fixed
 
+- Far more strict null-input handling.
 - Default values are now returned correctly in introspection queries
   on args.
 - (#167) Fix unions to be more consistent: disallow empty unions

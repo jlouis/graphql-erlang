@@ -1,0 +1,6 @@
+query TestNullInput {
+    room(id: null) {
+        id
+        description
+    }
+}

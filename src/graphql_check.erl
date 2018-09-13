@@ -899,6 +899,9 @@ operation_context(#op { ty = Ty }) ->
 take_arg(Ctx, {Key, #schema_arg { ty = Tau,
                                   default = Default }}, Args) ->
     case lists:keytake(Key, 1, Args) of
+        {value, {_, null}, _NextArgs} ->
+            %% You are currently not allowed to input null values
+            err(Ctx, {null_input, Key});
         {value, {_, Val}, NextArgs} ->
             %% Argument found, use it
             {ok, {Key, #{ type => Tau, value => Val}}, NextArgs};

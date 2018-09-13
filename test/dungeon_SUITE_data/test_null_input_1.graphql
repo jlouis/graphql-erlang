@@ -1,0 +1,6 @@
+query TestNullInput {
+    monster(id: null) {
+        id
+        name
+    }
+}

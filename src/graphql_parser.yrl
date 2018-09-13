@@ -213,7 +213,6 @@ KeywordName -> 'scalar' : keyword('$1').
 KeywordName -> 'enum' : keyword('$1').
 KeywordName -> 'input' : keyword('$1').
 KeywordName -> 'extend' : keyword('$1').
-KeywordName -> 'null' : keyword('$1').
 
 FragmentName -> name : '$1'.
 FragmentName -> KeywordName : '$1'.
@@ -227,6 +226,8 @@ Value -> int : g_integer('$1').
 Value -> float : g_float('$1').
 Value -> bstring : g_string('$1').
 Value -> bool : g_bool('$1').
+Value -> null : g_null('$1').
+
 Value -> EnumValue : {enum, '$1'}.
 Value -> ListValue : g_list('$1').
 Value -> InputObjectValue : g_input_object('$1').
@@ -444,6 +445,7 @@ g_integer({int, _, I}) -> I.
 g_float({float, _, F}) -> F.
 g_string({bstring, _, S}) -> S.
 g_bool({bool, _, B}) -> B.
+g_null({null, _}) -> null.
 
 g_list(L) when is_list(L) -> L.
 g_input_object(KVPairs) ->

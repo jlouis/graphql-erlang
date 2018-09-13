@@ -89,6 +89,7 @@ groups() ->
     Errors =
         {errors, [],
          [ unknown_variable
+         , null_input
          , missing_fragment
          , quoted_input_error
          , input_coerce_error_exception
@@ -924,9 +925,22 @@ missing_fragment(Config) ->
             #{ <<"id">> => ID }),
     ok.
 
+null_input(Config) ->
+    #{errors := [_]} =
+        run(Config, <<"test_null_input_1.graphql">>, <<"TestNullInput">>, #{}),
+    #{errors :=
+          [#{key := null_input,
+             message :=
+                 <<"The arg id is given a null, which is not allowed in the input path">>,
+             path :=
+                 [<<"document">>,<<"TestNullInput">>,<<"room">>,
+                  <<"id">>]}]} = run(Config, <<"test_null_input_2.graphql">>, <<"TestNullInput">>, #{}),
+    ok.
+
 quoted_input_error(Config) ->
     {error, {parser_error, {_Line, graphql_parser, _}}} =
         run(Config, "quoted_input.graphql", <<"IMonster">>, #{}).
+
 
 invalid_type_resolution(Config) ->
     Input = #{

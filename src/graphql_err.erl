@@ -207,6 +207,8 @@ type_check_err_msg(missing_non_null_param) ->
     ["The parameter is non-null, but was undefined in parameter list"];
 type_check_err_msg(non_null) ->
     ["The value is null in a non-null context"];
+type_check_err_msg({null_input, N}) ->
+    ["The arg ", N, " is given a null, which is not allowed in the input path"];
 type_check_err_msg({not_found, Ty}) ->
     iolib:format("The type ~p was not found in the schema", [Ty]);
 type_check_err_msg({enum_not_found, Ty, Val}) ->

@@ -17,7 +17,7 @@ inject() ->
                        type => 'Episode',
                        description =>
                            "Returns the hero of a particular episode "
-                       "or the whole saga if omitted" } },
+                           "or the whole saga if omitted" } },
                    resolve => fun(Ctx, _Cur, Args) -> get_hero(Ctx, Args) end },
                  human => #{
                    type => 'Human',

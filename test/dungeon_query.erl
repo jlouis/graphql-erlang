@@ -6,7 +6,7 @@
 
 -export([execute/4]).
 
-execute(_Ctx, _, <<"monster">>, #{ <<"id">> := InputID }) ->
+execute(_Ctx, _, <<"monster">>, #{ <<"id">> := InputID }) when is_binary(InputID) ->
     case dungeon:unwrap(InputID) of
         {monster, _ID} = OID ->
             dungeon:dirty_load(OID)
@@ -33,7 +33,7 @@ execute(_Ctx, _, <<"things">>, #{ <<"ids">> := Inputs }) ->
               {item, _ID} = OID -> dungeon:dirty_load(OID);
               {kraken, _ID} = _OID -> {ok, kraken}
           end || I <- Inputs]};
-execute(_Ctx, _, <<"room">>, #{ <<"id">> := InputID }) ->
+execute(_Ctx, _, <<"room">>, #{ <<"id">> := InputID }) when is_binary(InputID) ->
     case dungeon:unwrap(InputID) of
         {room, _ID} = OID -> dungeon:dirty_load(OID)
     end;
