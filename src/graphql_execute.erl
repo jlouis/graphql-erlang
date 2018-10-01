@@ -6,6 +6,7 @@
 
 -export([x/1, x/2]).
 -export([builtin_input_coercer/1]).
+-export([renderer/1, null_predicate/1]).
 
 -type source() :: reference().
 -type demonitor() :: {reference(), pid()} .
@@ -43,6 +44,20 @@ x(X) -> x(#{ params => #{} }, X).
 x(Ctx, X) ->
     Canon = canon_context(Ctx),
     execute_request(Canon, X).
+
+% renderer/1 and null_predicate/1 is part of an effort to make the
+% null representation customizable, so we can support other null
+% values than the atom null. This will hopefully help us support
+% Elixir and protobufs in the future.
+%
+% This should get moved into a behaviour at some point.
+renderer(A) -> A.
+
+null_predicate(null) ->
+    true;
+null_predicate(_) ->
+    false.
+% - - -
 
 execute_request(InitialCtx, #document { definitions = Operations }) ->
     {Frags, Ops} = lists:partition(fun (#frag {}) -> true;(_) -> false end, Operations),
@@ -133,6 +148,7 @@ execute_sset(Path, #{ defer_target := DeferTarget } = Ctx, SSet, Type, Value) ->
     end.
 
 obj_closure(Upstream, Self, Missing, Map, Errors) ->
+    Mod = ?MODULE,
     fun
         (cancel) ->
             #done {
@@ -155,7 +171,7 @@ obj_closure(Upstream, Self, Missing, Map, Errors) ->
             #done {
                upstream = Upstream,
                key = Self,
-               result = {ok, null, Errs ++ Errors},
+               result = {ok, Mod:renderer(null), Errs ++ Errors},
                demonitor = undefined,
                cancel = maps:keys(Missing)
               };
@@ -171,7 +187,7 @@ obj_closure(Upstream, Self, Missing, Map, Errors) ->
                                key = Self,
                                cancel = [],
                                demonitor = undefined,
-                               result = {ok, NewMap, NewErrors}
+                               result = {ok, Mod:renderer(NewMap), NewErrors}
                               };
                         _ ->
                             #work { items = [{Self,
@@ -455,7 +471,7 @@ resolve_field_value(Ctx, #object_type { id = OID,
         is_function(Fun, 4) -> Fun(CtxAnnot, Value, Name, Args);
         is_function(Fun, 3) -> Fun(CtxAnnot, Value, Args)
     end) of
-        V -> 
+        V ->
             case handle_resolver_result(V) of
                 wrong ->
                     Obj = graphql_schema:id(ObjectType),
@@ -503,6 +519,7 @@ complete_value(Path, Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
     complete_value(Path, Ctx, SchemaType, Fields, {ok, Value});
 complete_value(Path, #{ defer_target := Upstream } = Ctx,
                {non_null, InnerTy}, Fields, Result) ->
+    Mod = ?MODULE,
     %% Note we handle arbitrary results in this case. This makes sure errors
     %% factor through the non-null handler here and that handles
     %% nested {error, Reason} tuples correctly
@@ -513,10 +530,14 @@ complete_value(Path, #{ defer_target := Upstream } = Ctx,
             %% object is at fault, don't care too much about this level, just pass
             %% on the error
             err(Path, Reason);
-        {ok, null, InnerErrs} ->
-            err(Path, null_value, InnerErrs);
-        {ok, _C, _E} = V ->
-            V;
+        {ok, Value, InnerErrs} = Res ->
+            case Mod:null_predicate(Value) of
+                true ->
+                    err(Path, null_value, InnerErrs);
+                false ->
+                    Res
+            end;
+
         #work { items = WUs } = Work ->
             %% This closure wraps the null properly and errors null-returns
             %% From the underlying computation if it completes later on with a
@@ -524,7 +545,7 @@ complete_value(Path, #{ defer_target := Upstream } = Ctx,
             %%
             %% Note: The closure ignores the key
             Work#work { items =
-                            [{Self, not_null_closure(Upstream, Self, Path,
+                            [{Self, not_null_closure(Mod, Upstream, Self, Path,
                                                      upstream_ref(WUs))}|WUs]}
     end;
 complete_value(_Path, _Ctx, _Ty, _Fields, {ok, null}) ->
@@ -535,14 +556,11 @@ complete_value(Path, Ctx, {list, InnerTy}, Fields, {ok, Value}) ->
     complete_value_list(Path, Ctx, InnerTy, Fields, Value);
 complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
     complete_value_scalar(Path, ID, RM, Value);
-complete_value(Path, _Ctx, #enum_type { id = ID,
-                                        resolve_module = RM},
-               _Fields, {ok, Value}) ->
+complete_value(Path, _Ctx, #enum_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
     case complete_value_scalar(Path, ID, RM, Value) of
         {ok, null, Errors} ->
             {ok, null, Errors};
         {ok, Result, Errors} ->
-
             case graphql_schema:validate_enum(ID, Result) of
                 ok ->
                     {ok, Result, Errors};
@@ -711,6 +729,7 @@ list_closure(Upstream, Self, Missing, List, Done) ->
                monitor = #{},
                demonitors = [] };
         ({Ref, Result}) ->
+            Mod = ?MODULE,
             case maps:take(Ref, Missing) of
                 {Index, NewMissing} ->
                     NewDone = Done#{ Index => Result },
@@ -727,7 +746,7 @@ list_closure(Upstream, Self, Missing, List, Done) ->
                                        key = Self,
                                        cancel = [],
                                        demonitor = undefined,
-                                       result = {ok, Vs, lists:concat(Es) }
+                                       result = {ok, Mod:renderer(Vs), lists:concat(Es) }
                                       };
                                 {_, Reasons} ->
                                     #done {
@@ -735,7 +754,7 @@ list_closure(Upstream, Self, Missing, List, Done) ->
                                        key = Self,
                                        cancel = [],
                                        demonitor = undefined,
-                                       result = {ok, null, Reasons}
+                                       result = {ok, Mod:renderer(null), Reasons}
                                       }
                             end;
                         _ ->
@@ -750,7 +769,7 @@ list_closure(Upstream, Self, Missing, List, Done) ->
             end
     end.
 
-not_null_closure(Upstream, Self, Path, Ref) ->
+not_null_closure(Mod, Upstream, Self, Path, Ref) ->
     fun
         (cancel) ->
             #done {
@@ -763,24 +782,22 @@ not_null_closure(Upstream, Self, Path, Ref) ->
         ({change_ref, _Old, New}) ->
             #work { demonitors = [],
                     monitor = #{},
-                    items = [{Self, not_null_closure(Upstream, Self, Path,
+                    items = [{Self, not_null_closure(Mod, Upstream, Self, Path,
                                                      New)}] };
-        ({_Ref, {ok, null, InnerErrs}}) ->
+        ({_Ref, {ok, Value, InnerErrs} = Res}) ->
+            Result =
+                case Mod:null_predicate(Value) of
+                    true ->
+                        err(Path, null_value, InnerErrs);
+                    false ->
+                        Res
+                end,
             #done {
                upstream = Upstream,
                key = Self,
                cancel = [],
                demonitor = undefined,
-               result = err(Path, null_value, InnerErrs)
-              };
-        ({_Ref, Res}) ->
-            {ok, _, _} = Res, % Assert the current state of affairs
-            #done {
-               upstream = Upstream,
-               key = Self,
-               cancel = [],
-               demonitor = undefined,
-               result = Res
+               result = Result
               }
     end.
 
@@ -1082,12 +1099,12 @@ null(Path, Reason) ->
     null(Path, Reason, []).
 
 null(Path, Reason, More) ->
+    Mod = ?MODULE,
     {error, Return} = err(Path, Reason, More),
-    {ok, null, Return}.
+    {ok, Mod:renderer(null), Return}.
 
 err(Path, Reason) ->
     err(Path, Reason, []).
 
 err(Path, Reason, More) when is_list(More) ->
     {error, [graphql_err:mk(Path, execute, Reason)|More]}.
-
