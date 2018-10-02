@@ -935,6 +935,7 @@ null_input(Config) ->
              path :=
                  [<<"document">>,<<"TestNullInput">>,<<"room">>,
                   <<"id">>]}]} = run(Config, <<"test_null_input_2.graphql">>, <<"TestNullInput">>, #{}),
+    x = run(Config, <<"test_null_input_3.graphql">>, <<"TestNullInput">>, #{}),
     ok.
 
 quoted_input_error(Config) ->
