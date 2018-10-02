@@ -936,6 +936,14 @@ null_input(Config) ->
                  [<<"document">>,<<"TestNullInput">>,<<"room">>,
                   <<"id">>]}]} = run(Config, <<"test_null_input_2.graphql">>, <<"TestNullInput">>, #{}),
     x = run(Config, <<"test_null_input_3.graphql">>, <<"TestNullInput">>, #{}),
+    x = run(Config, <<"test_null_input_4.graphql">>, <<"TestNullInput">>,
+           #{ <<"name">> => <<"Orc">>,
+              <<"description">> => <<"This is an ORC!">>,
+              <<"weight">> => null }),
+    x = run(Config, <<"test_null_input_4.graphql">>, <<"TestNullInput">>,
+           #{ <<"name">> => <<"Orc">>,
+              <<"description">> => <<"This is an ORC!">> }),
+    x = run(Config, <<"test_null_input_5.graphql">>, <<"TestNullInput">>, #{}),
     ok.
 
 quoted_input_error(Config) ->
