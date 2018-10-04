@@ -45,7 +45,7 @@
 
 -export_type([json/0, param_context/0]).
 
--type token() :: {'$graphql_token', pid(), reference()}.
+-type token() :: {'$graphql_token', pid(), reference(), reference()}.
 -type name() :: {name, pos_integer(), binary()} | binary().
 -type document() :: #document{}.
 -type directive() :: #directive{}.
@@ -64,12 +64,16 @@ throw(Msg) ->
 
 %% TOKENS
 %% --------------------------------------------------------------------------
+-spec token(#{ defer_process := pid(),
+               defer_request_id := reference() }) ->
+                   token().
 token(#{ defer_process := Proc, defer_request_id := ReqId }) ->
     {'$graphql_token', Proc, ReqId, make_ref()}.
 
 %% @private
 token_ref({'$graphql_token', _, _, Ref}) -> Ref.
 
+-spec reply_cast(token(), term()) -> ok.
 reply_cast({'$graphql_token', Target, Id, Ref}, Data) ->
     Target ! {'$graphql_reply', Id, Ref, Data},
     ok.
@@ -158,4 +162,3 @@ insert_root(Defn) ->
 -spec validate_schema() -> ok | {error, any()}.
 validate_schema() ->
     graphql_schema_validate:x().
-
