@@ -86,7 +86,7 @@ collect_auxiliary_data() ->
     end.
 
 execute_query(#{ defer_request_id := ReqId } = Ctx, #op { selection_set = SSet,
-                         schema = QType } = Op) ->
+                                                          schema = QType } = Op) ->
     #object_type{} = QType,
     case execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self(),
                                                   defer_target => top_level },
@@ -455,7 +455,7 @@ resolve_field_value(Ctx, #object_type { id = OID,
         is_function(Fun, 4) -> Fun(CtxAnnot, Value, Name, Args);
         is_function(Fun, 3) -> Fun(CtxAnnot, Value, Args)
     end) of
-        V -> 
+        V ->
             case handle_resolver_result(V) of
                 wrong ->
                     Obj = graphql_schema:id(ObjectType),
@@ -1090,4 +1090,3 @@ err(Path, Reason) ->
 
 err(Path, Reason, More) when is_list(More) ->
     {error, [graphql_err:mk(Path, execute, Reason)|More]}.
-

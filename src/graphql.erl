@@ -54,7 +54,7 @@
               token/0,
               schema_field/0]).
 
--define(DEFAULT_TIMEOUT, 750).
+-define(DEFAULT_TIMEOUT, 3000).
 
 %% EARLY EXIT
 %% --------------------------------------------------------------------------
