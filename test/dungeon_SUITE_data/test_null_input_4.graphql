@@ -1,0 +1,7 @@
+mutation TestNullInput($input : IntroduceItemInput!) {
+    introduceItem(input: $input) {
+        item {
+            id
+        }
+    }
+}

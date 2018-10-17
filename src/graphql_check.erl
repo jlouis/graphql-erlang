@@ -356,7 +356,7 @@ check_input_obj(Ctx, {input_object, Obj},
         {not_unique, Key} ->
             err(Ctx, {input_object_not_unique, Key});
         ok ->
-            {ok, 
+            {ok,
              check_input_obj_(Ctx, maps:from_list(AssocList),
                               maps:to_list(Fields), #{})}
     end.
@@ -373,16 +373,10 @@ check_input_obj_(Ctx, Obj, [], Acc) ->
 %% @todo: Clearly this has to change because Ty isn't known at this
 check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
                                                  default = Default }} | Next],
-                 Acc) -> 
+                 Acc) ->
     Result = case maps:get(Name, Obj, not_found) of
                  not_found ->
-                     case Ty of
-                         {non_null, _} when Default == null ->
-                             err(add_path(Ctx, Name), missing_non_null_param);
-                         _ ->
-                             {ok, R} = coerce_default_param(Ctx, Default, Ty),
-                             R
-                     end;
+                     check_input_obj_null(add_path(Ctx, Name), Default, Ty);
                  V ->
                      CtxP = add_path(Ctx, Name),
                      {ok, Tau} = infer_input_type(CtxP, Ty),
@@ -393,6 +387,12 @@ check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
                      maps:remove(Name, Obj),
                      Next,
                      Acc#{ Name => Result }).
+
+check_input_obj_null(Ctx, null, {non_null, _}) ->
+    err(Ctx, missing_non_null_param);
+check_input_obj_null(Ctx, Default, Ty) ->
+    {ok, R} = coerce_default_param(Ctx, Default, Ty),
+    R.
 
 check_sset(Ctx, [], Ty) ->
     case Ty of
@@ -583,7 +583,7 @@ check_param_(Ctx, {var, ID}, Sigma) ->
     {ok, #vardef { ty = Tau}} = infer(Ctx, {var, ID}),
     ok = sub_input(CtxP, Tau, Sigma),
     {ok, {var, ID, Tau}};
-check_param_(Ctx, null, {not_null, _}) ->
+check_param_(Ctx, null, {non_null, _}) ->
     err(Ctx, non_null);
 check_param_(Ctx, Val, {non_null, Tau}) ->
     %% Here, the value cannot be null due to the preceeding clauses
@@ -624,7 +624,7 @@ check_param_(Ctx, {input_object, KVPairs}, #input_object_type{} = Tau) ->
     check_input_obj(Ctx, {input_object, KVPairs}, Tau);
     %% Everything else are errors
 check_param_(Ctx, Val, Tau) ->
-    err(Ctx, {param_mismatch, Val, Tau}).    
+    err(Ctx, {param_mismatch, Val, Tau}).
 
 %% -- SUBTYPE/SUBSUMPTION ------------------------------------------------------
 %%
@@ -952,5 +952,3 @@ add_path(#ctx { path = P } = Ctx, C) ->
 -spec err(ctx(), Term :: term()) -> no_return().
 err(#ctx{ path = Path }, Msg) ->
     throw({error, Path, Msg}).
-
-

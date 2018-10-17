@@ -935,6 +935,22 @@ null_input(Config) ->
              path :=
                  [<<"document">>,<<"TestNullInput">>,<<"room">>,
                   <<"id">>]}]} = run(Config, <<"test_null_input_2.graphql">>, <<"TestNullInput">>, #{}),
+    %% The following bugs must fail because the value is null which is not allowed
+    #{ errors := [#{ key := non_null }]} =
+        run(Config, <<"test_null_input_3.graphql">>, <<"TestNullInput">>, #{}),
+    #{ errors := [#{ key := non_null }]} =
+        run(Config, <<"test_null_input_4.graphql">>, <<"TestNullInput">>,
+            #{ <<"input">> =>
+                   #{ <<"name">> => <<"Orc">>,
+                      <<"description">> => <<"This is an ORC!">>,
+                      <<"weight">> => null }}),
+    #{ errors := [#{ key := missing_non_null_param }]} =
+        run(Config, <<"test_null_input_4.graphql">>, <<"TestNullInput">>,
+            #{ <<"input">> =>
+                   #{ <<"name">> => <<"Orc">>,
+                      <<"description">> => <<"This is an ORC!">> }}),
+    #{ errors := [#{ key := missing_non_null_param }]} =
+        run(Config, <<"test_null_input_5.graphql">>, <<"TestNullInput">>, #{}),
     ok.
 
 quoted_input_error(Config) ->

@@ -1,0 +1,10 @@
+mutation TestNullInput {
+    introduceItem(input: {
+            name: "Orc"
+            description: "A Very VERY VERRRRY angry Orc!"
+         }) {
+        item {
+            id
+        }
+    }
+}
