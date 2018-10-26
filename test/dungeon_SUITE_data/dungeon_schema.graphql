@@ -36,6 +36,8 @@ type Stats {
   shellScripting : Int
 }
 
+directive @private(scope: String) on FIELD_DEFINITION
+
 type Monster implements Node {
   id : ID!
   name : String! @private(scope: "memberOf")

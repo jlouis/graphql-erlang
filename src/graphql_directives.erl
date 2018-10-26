@@ -9,7 +9,7 @@
 include() ->
     #directive_type {
        id = <<"include">>,
-       locations = [field, fragment_spread, inline_fragment],
+       locations = [<<"FIELD">>, <<"FRAGMENT_SPREAD">>, <<"INLINE_FRAGMENT">>],
        args = #{
          <<"if">> =>
              #schema_arg{
@@ -21,7 +21,7 @@ include() ->
 skip() ->
     #directive_type {
        id = <<"skip">>,
-       locations = [field, fragment_spread, inline_fragment],
+       locations = [<<"FIELD">>, <<"FRAGMENT_SPREAD">>, <<"INLINE_FRAGMENT">>],
        args = #{
          <<"if">> =>
              #schema_arg{

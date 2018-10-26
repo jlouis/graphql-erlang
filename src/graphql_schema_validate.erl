@@ -1,8 +1,15 @@
 -module(graphql_schema_validate).
 
 -include("graphql_schema.hrl").
+-include("graphql.hrl").
 
 -export([x/0, root/1]).
+
+-define (DIRECTIVE_LOCATIONS, [
+    <<"QUERY">>, <<"MUTATION">>, <<"SUBSCRIPTION">>, <<"FIELD">>, <<"FRAGMENT_DEFINITION">>,
+    <<"FRAGMENT_SPREAD">>, <<"INLINE_FRAGMENT">>, <<"SCHEMA">>, <<"SCALAR">>, <<"OBJECT">>,
+    <<"FIELD_DEFINITION">>, <<"ARGUMENT_DEFINITION">>, <<"INTERFACE">>, <<"UNION">>,
+    <<"ENUM">>, <<"ENUM_VALUE">>, <<"INPUT_OBJECT">>, <<"INPUT_FIELD_DEFINITION">>]).
 
 -spec root(#root_schema{}) -> #root_schema{}.
 root(#root_schema{ query = Q,
@@ -68,26 +75,34 @@ x(Obj) ->
     end.
 
 
-validate(#scalar_type {}) -> ok;
+validate(#scalar_type {} = X) -> scalar_type(X);
 validate(#root_schema {} = X) -> root_schema(X);
 validate(#object_type {} = X) -> object_type(X);
 validate(#enum_type {} = X) -> enum_type(X);
 validate(#interface_type {} = X) -> interface_type(X);
 validate(#union_type {} = X) -> union_type(X);
-validate(#input_object_type {} = X) -> input_object_type(X).
+validate(#input_object_type {} = X) -> input_object_type(X);
+validate(#directive_type{} = X) -> directive_type(X).
 
-enum_type(#enum_type {}) ->
-    %% TODO: Validate values
+scalar_type(#scalar_type {directives = Ds}) ->
+    is_valid_directives(Ds, <<"SCALAR">>),
     ok.
 
-input_object_type(#input_object_type { fields = FS }) ->
+enum_type(#enum_type { directives = Ds }) ->
+    is_valid_directives(Ds, <<"ENUM">>),
+    %% TODO: Validate values and their directives (ENUM_VALUE)
+    ok.
+
+input_object_type(#input_object_type { fields = FS, directives = Ds }) ->
     all(fun schema_input_type_arg/1, maps:to_list(FS)),
+    is_valid_directives(Ds, <<"INPUT_OBJECT">>),
     ok.
 
 union_type(#union_type { types = [] } = Union) ->
     err({empty_union, Union});
-union_type(#union_type { types = Types }) ->
+union_type(#union_type { types = Types, directives = Ds }) ->
     all(fun is_union_type/1, Types),
+    is_valid_directives(Ds, <<"UNION">>),
     case unique([name(T) || T <- Types]) of
         ok ->
             ok;
@@ -95,36 +110,51 @@ union_type(#union_type { types = Types }) ->
             err({union_not_unique, X})
     end.
 
-interface_type(#interface_type { fields= FS }) ->
+interface_type(#interface_type { fields= FS, directives = Ds }) ->
     all(fun schema_field/1, maps:to_list(FS)),
+    is_valid_directives(Ds, <<"INTERFACE">>),
     ok.
 
 object_type(#object_type {
 	fields = FS,
-	interfaces = IFaces} = Obj) ->
+	interfaces = IFaces,
+    directives = Ds} = Obj) ->
     all(fun is_interface/1, IFaces),
     all(fun(IF) -> implements(lookup(IF), Obj) end, IFaces),
     all(fun schema_field/1, maps:to_list(FS)),
+    is_valid_directives(Ds, <<"OBJECT">>),
     ok.
+
+directive_type(#directive_type {
+        args = _Args,
+        locations = Locations
+        }) ->
+    all(fun is_directive_location/1, Locations),
+    ok.
+    
 
 root_schema(#root_schema {
                query = Q,
                mutation = M,
                subscription = S,
-               interfaces = IFaces }) ->
+               interfaces = IFaces,
+               directives = Ds }) ->
     is_object(Q),
     undefined_object(M),
     undefined_object(S),
     all(fun is_interface/1, IFaces),
+    is_valid_directives(Ds, <<"SCHEMA">>),
     ok.
     
-schema_field({_, #schema_field { ty = Ty, args = Args }}) ->
+schema_field({_, #schema_field { ty = Ty, args = Args, directives = Ds }}) ->
     all(fun schema_input_type_arg/1, maps:to_list(Args)),
     type(Ty),
+    is_valid_directives(Ds, <<"FIELD_DEFINITION">>),
     ok.
 
 schema_input_type_arg({_, #schema_arg { ty = Ty }}) ->
     %% TODO: Default check!
+    %% TODO: argument definition directive check
     input_type(Ty),
     ok.
 
@@ -177,6 +207,31 @@ is_union_type(Obj) ->
     case lookup(Obj) of
         #object_type{} -> ok;
         _ -> err({not_union_type, Obj})
+    end.
+
+is_valid_directives(Dirs, Location) ->
+    all(fun(D) -> is_valid_directive(D, Location) end, Dirs).
+
+is_valid_directive(#directive{ id = Id }, Location) ->
+    is_valid_directive(name(Id), Location);
+is_valid_directive(Dir, Location) ->
+    case lookup(Dir) of
+        #directive_type{ id = Id, locations = Locations } ->
+            case lists:member(Location, Locations) of
+                true -> ok;
+                false -> err({invalid_directive_use, #{
+                        directive_type => Id,
+                        used_at        => Location,
+                        allowed_at     => Locations
+                    }})
+            end;
+        _ -> err({not_directive_type, Dir})
+    end.
+
+is_directive_location(Loc) ->
+    case lists:member(Loc, ?DIRECTIVE_LOCATIONS) of
+        true -> ok;
+        false -> err({not_directive_location, Loc})
     end.
 
 type({non_null, T}) -> type(T);

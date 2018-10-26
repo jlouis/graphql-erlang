@@ -424,7 +424,7 @@ check_sset_(Ctx, [#frag_spread { directives = Dirs } = FragSpread | Fs], Sigma) 
     CtxP = add_path(Ctx, FragSpread),
     {ok, #frag { schema = Tau }} = infer(Ctx, FragSpread),
     ok = sub_output(CtxP, Tau, Sigma),
-    {ok, CDirectives} = check_directives(CtxP, fragment_spread, Dirs),
+    {ok, CDirectives} = check_directives(CtxP, <<"FRAGMENT_SPREAD">>, Dirs),
     {ok, [FragSpread#frag_spread { directives = CDirectives } | Rest]};
 check_sset_(Ctx, [#field{} = F|Fs], {non_null, Ty}) ->
     check_sset_(Ctx, [F|Fs], Ty);
@@ -434,7 +434,7 @@ check_sset_(Ctx, [#field{ args = Args, directives = Dirs,
                           selection_set = SSet } = F | Fs], Sigma) ->
     {ok, Rest} = check_sset_(Ctx, Fs, Sigma),
     CtxP = add_path(Ctx, F),
-    {ok, CDirectives} = check_directives(CtxP, field, Dirs),
+    {ok, CDirectives} = check_directives(CtxP, <<"FIELD">>, Dirs),
     {ok, FieldTypes} = fields(CtxP, Sigma),
     case infer_field(Ctx, F, FieldTypes) of
         {ok, {introspection, typename} = Ty} ->
@@ -472,7 +472,7 @@ check(Ctx, #frag { directives = Dirs,
     CtxP = add_path(Ctx, F),
     {ok, Tau} = infer(Ctx, F),
     ok = sub_output(CtxP, Tau, Sigma),
-    {ok, CDirectives} = check_directives(CtxP, inline_fragment, Dirs),
+    {ok, CDirectives} = check_directives(CtxP, <<"INLINE_FRAGMENT">>, Dirs),
     {ok, CSSet} = check_sset(CtxP, SSet, Tau),
     {ok, F#frag { schema = Tau,
                   directives = CDirectives,
@@ -887,10 +887,10 @@ fragenv(Frags) ->
 %% Figure out what kind of operation context we have
 operation_context(#op { ty = Ty }) ->
     case Ty of
-        undefined -> query;
-        {query, _} -> query;
-        {mutation, _} -> mutation;
-        {subscription, _} -> subscription
+        undefined -> <<"QUERY">>;
+        {query, _} -> <<"QUERY">>;
+        {mutation, _} -> <<"MUTATITON">>;
+        {subscription, _} -> <<"SUBSCRIPTION">>
     end.
 
 %% Pull out a value from a list of arguments. This is used to check

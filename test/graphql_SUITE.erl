@@ -64,21 +64,26 @@ groups() ->
                   [
                    schema_test,
                    double_iface,
+                   double_directive,
                    empty_union,
                    non_unique_union
                   ]},
+
+    Directives = {directives, [shuffle, parallel], [
+       directive_definition
+    ]},
 
     Introspection = {introspection, [shuffle, parallel], [
        is_supports_type
     ]},
 
-    [Basic, Schema, SchemaTest, Introspection].
+    [Basic, Schema, Introspection, Directives, SchemaTest].
 
 all() -> [
     {group, schema},
     {group, basic},
     {group, schema_test},
-    {group, introspection} ].
+    {group, introspection}].
 
 %% -- BASIC --------------------------------------
 hello_world(Config) ->
@@ -161,6 +166,18 @@ double_iface(Config) ->
             ct:fail(schema_load_passed_but_must_fail)
     catch
         exit:{entry_already_exists_in_schema, <<"Node">>} ->
+            ok
+    end.
+
+double_directive(Config) ->
+    FName = filename:join([?config(data_dir, Config), "double_directive.spec"]),
+    {ok, Data} = file:read_file(FName),
+    graphql:load_schema(#{}, Data),
+    try graphql:load_schema(#{}, Data) of
+        _ ->
+            ct:fail(schema_load_passed_but_must_fail)
+    catch
+        exit:{entry_already_exists_in_schema, <<"fieldDefDirective">>} ->
             ok
     end.
 

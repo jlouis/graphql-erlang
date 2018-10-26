@@ -8,6 +8,10 @@ Nonterminals
   FragmentDefinition
 
   TypeSystemDefinition
+    DirectiveDefinition
+      DirectiveLocations
+        DirectiveLocation
+
     SchemaDefinition
       RootOperationList
         RootOperationTypeDefinition
@@ -53,6 +57,7 @@ Terminals
   'query' 'mutation' 'subscription' 'fragment' 'on' 'null'
   'type' 'implements' 'interface' 'union' 'scalar' 'enum' 'input' 'extend'
   'schema'
+  'directive'
 
   name int float bstring bool.
 
@@ -250,7 +255,7 @@ InputObjectField -> Name ':' Value : {'$1', '$3'}.
 
 TypeSystemDefinition -> SchemaDefinition : '$1'.
 TypeSystemDefinition -> TypeDefinition : '$1'.
-%% TypeSystemDefinition -> DirectiveDefinition : '$1'.
+TypeSystemDefinition -> DirectiveDefinition : '$1'.
 
 
 SchemaDefinition -> 'schema' '{' RootOperationList '}'
@@ -274,6 +279,25 @@ TypeDefinition -> InterfaceTypeDefinition : '$1'.
 TypeDefinition -> UnionTypeDefinition : '$1'.
 TypeDefinition -> EnumTypeDefinition : '$1'.
 TypeDefinition -> InputObjectTypeDefinition : '$1'.
+
+DirectiveDefinition -> 'directive' '@' Name 'on' DirectiveLocations
+  : #p_directive{ id = '$3', locations = '$5' }.
+DirectiveDefinition -> Description 'directive' '@' Name 'on' DirectiveLocations
+  : #p_directive{ description = '$1', id = '$4', locations = '$6' }.
+DirectiveDefinition -> 'directive' '@' Name ArgumentsDefinition 'on' DirectiveLocations
+  : #p_directive{ id = '$3', args = '$4', locations = '$6' }.
+DirectiveDefinition -> Description 'directive' '@' Name ArgumentsDefinition 'on' DirectiveLocations
+  : #p_directive{ description = '$1', id = '$4', args = '$5', locations = '$7' }.
+
+DirectiveLocations -> DirectiveLocation
+  : ['$1'].
+DirectiveLocations -> '|' DirectiveLocation
+  : ['$2'].
+DirectiveLocations -> DirectiveLocations '|' DirectiveLocation
+  : ['$3'|'$1'].
+
+DirectiveLocation -> Name
+  : '$1'.
 
 
 ScalarTypeDefinition -> 'scalar' Name

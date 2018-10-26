@@ -70,7 +70,15 @@ x({scalar, #{ id := ID, description := Desc} = Scalar}) ->
                    description = binarize(Desc),
                    directives = directives(Scalar),
                    resolve_module = ModuleResolver
-                 }.
+                 };
+x({directive, #{ id := ID, description := Desc } = Obj}) ->
+    ModuleResolver = maps:get(resolve_module, Obj, graphql_directives),
+    #directive_type { id = c_id(ID),
+                      resolve_module = ModuleResolver,
+                      description = binarize(Desc),
+                      args = c_directive_args(Obj),
+                      locations = c_directive_locations(Obj)
+                    }.
 
 %% -- ROOT -------------
 root_query(#{ query := Q}) -> binarize(Q);
@@ -197,6 +205,13 @@ enum_resolve(_) ->
 directives(#{ directives := Ds }) -> Ds;
 directives(#{}) -> [].
 
+c_directive_args(#{ args := Args }) -> map_2(fun c_args/2, Args);
+c_directive_args(#{}) -> #{}.
+
 %% -- Deprecation
 deprecation(#{ deprecation := Reason }) -> binarize(Reason);
 deprecation(#{}) -> undefined.
+
+%% -- directive locations
+c_directive_locations(#{ locations := Ls }) ->
+    lists:map(fun binarize/1, Ls).

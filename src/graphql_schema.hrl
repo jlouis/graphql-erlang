@@ -11,14 +11,15 @@
       | schema_base_type().
 
 -type resolver_args() :: #{ binary() => term() }.
--type location() :: query | mutation | field
-                  | fragment_definition | fragment_spread | inline_fragment.
+-type location() :: binary().
 
 -type resolver() :: fun ((ctx, term(), resolver_args()) -> term()).
 
 -record(directive_type,
         { id :: binary(),
+          description :: undefined | binary(),
           locations :: [location()],
+          resolve_module = graphql_directives :: mod(),
           args = #{} :: #{ binary() => schema_arg() }
         }).
 -type directive_type() :: #directive_type{}.

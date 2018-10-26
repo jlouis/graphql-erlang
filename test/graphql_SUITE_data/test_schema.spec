@@ -65,8 +65,14 @@ type Monster implements Node {
   hitpoints: Int!
   inventory: [Thing]
   hp: Int!
-  mood: Mood
+  mood: Mood @fieldDefDirective(myarg: "Hello World")
   plushFactor: Float!
   stats(minAttack: Int! = 0): [Stats]
   properties: [Property]
 }
+
+directive @execDefDirective on
+  | FIELD
+  | FRAGMENT_SPREAD
+
+directive @fieldDefDirective(myarg: String) on FIELD_DEFINITION
