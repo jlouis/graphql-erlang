@@ -94,6 +94,13 @@ query GoblinQueryDirectivesInline($id : Id! = "bW9uc3Rlcjox", $fat : Bool!) {
   }
 }
 
+query GoblinQueryCustomFieldDirectives($id : Id! = "bW9uc3Rlcjox") {
+  goblin: monster(id: $id) {
+    id
+    inventory
+  }
+}
+
 query MinGoblin($id : Id! = "bW9uc3Rlcjox", $minAttack : int!) {
   goblin: monster(id: $id) {
     id
@@ -302,6 +309,17 @@ query RollX5($delay: Int){
     rollDeferX2
     rollDeferX3
     rollDeferX5
+  }
+}
+
+query TestFieldDirectiveHook($id: Id!) {
+  monster(id: $id) {
+    inventory {
+      __typename
+      ... on Node {
+        id
+      }
+    }
   }
 }
 

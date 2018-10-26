@@ -434,32 +434,37 @@ report_wrong_return(Obj, Name, Fun, Val) ->
        Val]).
 
 format_directives([]) -> [];
-format_directives([#directive { id = N, args = Args }|Ds]) ->
+format_directives([#directive { id = N, args = Args, resolve_module = Mod }|Ds]) ->
     [#directive{ id = name(N),
                  args = maps:from_list(
-                          [{name(ID), Value} || {ID, Value} <- Args])}
-     | format_directives(Ds)];
+                          [{name(ID), Value} || {ID, Value} <- Args]),
+                 resolve_module = Mod} | format_directives(Ds)];
 format_directives([#directive_type { id = N, args = Args }|Ds]) ->
     [#directive{ id = name(N), args = Args }| format_directives(Ds)].
 
 resolve_field_value(Ctx, #object_type { id = OID,
                                         directives = ODirectives} = ObjectType,
-                    Value, Name, FDirectives, Fun, Args) ->
+                    Value, Name, FDirectives, Fun0, Args) ->
+    % wrap a 3-arity function in a 4-arity to avoid handing two kinds of functions later on
+    Fun1 = if
+        is_function(Fun0, 4) -> Fun0;
+        is_function(Fun0, 3) -> fun (Ctx, Obj, _, Args) -> Fun0(Ctx, Obj, Args) end
+    end,
+    % wrap the field resolver in any directive resolvers from the field:
+    Fun2 = resolver_directive_wrap(Fun1, format_directives(FDirectives)),
+
     CtxAnnot = Ctx#{
         field => Name,
         field_directives => format_directives(FDirectives),
         object_type => OID,
         object_directives => format_directives(ODirectives)
     },
-    try (if
-        is_function(Fun, 4) -> Fun(CtxAnnot, Value, Name, Args);
-        is_function(Fun, 3) -> Fun(CtxAnnot, Value, Args)
-    end) of
+    try Fun2(CtxAnnot, Value, Name, Args) of
         V -> 
             case handle_resolver_result(V) of
                 wrong ->
                     Obj = graphql_schema:id(ObjectType),
-                    report_wrong_return(Obj, Name, Fun, V),
+                    report_wrong_return(Obj, Name, Fun2, V),
                     {error, {wrong_resolver_return, {Obj, Name}}};
                 Res -> Res
             end
@@ -468,7 +473,7 @@ resolve_field_value(Ctx, #object_type { id = OID,
             case handle_resolver_result(Msg) of
                 wrong ->
                     Obj = graphql_schema:id(ObjectType),
-                    report_wrong_return(Obj, Name, Fun, Msg),
+                    report_wrong_return(Obj, Name, Fun2, Msg),
                     {error, {wrong_resolver_return, {Obj, Name}}};
                 Res -> Res
             end;
@@ -849,6 +854,13 @@ resolver_function(#object_type {
     exit({no_resolver, Id});
 resolver_function(#object_type { resolve_module = M }, undefined) ->
     fun M:execute/4.
+
+resolver_directive_wrap(Fun, []) -> Fun;
+resolver_directive_wrap(Fun, [#directive{ resolve_module = Mod }=Dir | Rest]) ->
+    Wrap = fun (Ctx, Obj, Field, Args) ->
+        Mod:execute(Ctx, Obj, Field, Args, Dir, Fun)
+    end,
+    resolver_directive_wrap(Wrap, Rest).
 
 %% -- OUTPUT COERCION ------------------------------------
 

@@ -75,6 +75,7 @@ groups() ->
          , nested_field_merge
          , multiple_monsters_and_rooms
          , include_directive
+         , custom_field_directives
          , introspection
          , introspection_with_variable
          , get_operation
@@ -230,6 +231,19 @@ include_directive(Config) ->
              <<"hitpoints">> := 10 }}} =
         run(Config, <<"GoblinQueryDirectivesInline">>, #{ <<"fat">> => true }),
     ok.
+
+custom_field_directives(Config) ->
+    GoblinId = ?config(known_goblin_id_1, Config),
+    #{
+        errors := [
+            #{ key := resolver_error, message := <<"{always_error_directive,<<\"custom directive test\">>}">>}],
+        data := #{
+            <<"goblin">> := #{
+            <<"id">> := GoblinId,
+            <<"inventory">> := null }}
+    } = run(Config, <<"GoblinQueryCustomFieldDirectives">>, #{}),
+    ok.
+
 
 unions(Config) ->
     ct:log("Initial query on the schema"),

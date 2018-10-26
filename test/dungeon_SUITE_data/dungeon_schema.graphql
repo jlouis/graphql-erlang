@@ -41,7 +41,7 @@ type Monster implements Node {
   name : String! @private(scope: "memberOf")
   color(colorType: ColorType = "rgb") : Color!
   hitpoints : Int!
-  inventory : [Thing]
+  inventory : [Thing] @alwaysError(reason: "custom directive test")
   hp : Int!
   mood(fail: Bool) : Mood @private
   plushFactor : Float!

@@ -2,7 +2,8 @@
 -record(directive,
         { id :: graphql:name(),
           args = [] :: #{ binary() => term() } | [{any(), any()}],
-          schema :: any()
+          schema :: any(),
+          resolve_module :: atom()
         }).
 
 -define(LAZY(X), {'$lazy', fun() -> X end}).

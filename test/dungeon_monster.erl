@@ -35,10 +35,11 @@ execute(Ctx, #monster { id = ID,
             {defer, HPToken};
         <<"hp">> -> {ok, HP};
         <<"inventory">> ->
+            ct:pal("Inventory Context Directives: ~p", [maps:get(field_directives, Ctx)]),
             Data = [dungeon:load(OID) || OID <- Inventory],
             {ok, Data};
         <<"mood">> ->
-            ct:pal("Name Context Directives: ~p", [maps:get(field_directives, Ctx)]),
+            ct:pal("Mood Context Directives: ~p", [maps:get(field_directives, Ctx)]),
             case Args of
                 #{ <<"fail">> := true } ->
                     {ok, <<"INVALIDMOOD">>};

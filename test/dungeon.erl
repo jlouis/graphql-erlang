@@ -180,6 +180,7 @@ mapping_rules() ->
        enums => #{ 'Mood' => dungeon_enum, default => graphql_enum_coerce },
        interfaces => #{ default => dungeon_type },
        unions => #{ default => dungeon_type },
+       directives => #{ default => dungeon_directive },
        objects => #{
          'Monster' => dungeon_monster,
          'Item' => dungeon_item,

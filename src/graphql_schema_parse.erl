@@ -2,6 +2,7 @@
 
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
+-include("graphql.hrl").
 
 -export([inject/2]).
 
@@ -50,7 +51,7 @@ mk(#{ unions := Us }, #p_union { id = ID,
        directives => Directives,
        resolve_module => Mod,
        types => Types }};
-mk(#{ objects := OM },
+mk(#{ objects := OM }=Map,
    #p_object { id = ID,
                description = Desc,
                directives = Directives,
@@ -58,7 +59,7 @@ mk(#{ objects := OM },
                interfaces = Impls }) ->
     Name = name(ID),
     Mod = mapping(Name, OM),
-    Fields = fields(Fs),
+    Fields = fields(Map, Fs),
     Implements = [name(I) || I <- Impls],
     {object, #{
        id => Name,
@@ -94,14 +95,14 @@ mk(_Map,
        description => description(Desc),
        directives => Directives,
        fields => Defs }};
-mk(#{ interfaces := IF },
+mk(#{ interfaces := IF }=Map,
    #p_interface { id = ID,
                   description = Description,
                   directives = Directives,
                   fields = FS }) ->
     Name = name(ID),
     Mod = mapping(Name, IF),
-    Fields = fields(FS),
+    Fields = fields(Map, FS),
     {interface,
      #{
        id => Name,
@@ -111,8 +112,8 @@ mk(#{ interfaces := IF },
        fields => Fields
       }}.
 
-fields(Raw) ->
-    maps:from_list([field(R) || R <- Raw]).
+fields(Map, Raw) ->
+    maps:from_list([field(Map, R) || R <- Raw]).
 
 input_defs(Raw) ->
     maps:from_list([input_def(D) || D <- Raw]).
@@ -174,7 +175,7 @@ input_def(#p_input_value { id = ID,
            description =>description(Desc) },
     {K, V}.
 
-field(#p_field_def{ id = ID,
+field(Map, #p_field_def{ id = ID,
                     description = Desc,
                     directives = Directives,
                     type = T,
@@ -184,7 +185,7 @@ field(#p_field_def{ id = ID,
     K = binary_to_atom(Name, utf8),
     V = #{ type => handle_type(T),
            description => description(Desc),
-           directives => Directives,
+           directives => directives(maps:get(directives, Map, #{}), Directives),
            args => handle_args(Args)},
     {K, V}.
 
@@ -195,6 +196,16 @@ root_op(#p_root_operation { op_type = OpType,
         {mutation, _} -> {mutation, name(Name)};
         {subscription, _} -> {subscription, name(Name)}
     end.
+
+directives(Map, Directives) ->
+    directives(Map, Directives, []).
+directives(Map, [], Acc) ->
+    lists:reverse(Acc);
+directives(Map, [#directive{id=Id}=Directive|Rest], Acc) ->
+    Name = name(Id),
+    Mod = mapping(Name, Map),
+    directives(Map, Rest, [Directive#directive{
+                               resolve_module = Mod}|Acc]).
 
 handle_args(Args) ->
     maps:from_list([input_def(A) || A <- Args]).
