@@ -42,7 +42,7 @@ enum Property {
   BEAST
   MECH
   DRAGON
-  PIRATE
+  PIRATE @deprecated(reason: "I am a deprecation on an enum")
   MURLOC
   TOTEM
   DEMON

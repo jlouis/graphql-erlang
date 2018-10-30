@@ -104,7 +104,8 @@ c_enum_val(K, #{ value := V, description := Desc } = Map) ->
     {V, #enum_value {
         val = Key,
         description = binarize(Desc),
-        deprecation = deprecation(Map) }}.
+        deprecation = deprecation(Map),
+        directives = directives(Map)}}.
 
 %% -- FIELDS ----------
 c_input_value(K, V) ->

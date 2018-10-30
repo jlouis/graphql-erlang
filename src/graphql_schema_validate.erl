@@ -88,9 +88,9 @@ scalar_type(#scalar_type {directives = Ds}) ->
     is_valid_directives(Ds, <<"SCALAR">>),
     ok.
 
-enum_type(#enum_type { directives = Ds }) ->
+enum_type(#enum_type { directives = Ds, values = Vs }) ->
     is_valid_directives(Ds, <<"ENUM">>),
-    %% TODO: Validate values and their directives (ENUM_VALUE)
+    all(fun schema_enum_value/1, maps:to_list(Vs)),
     ok.
 
 input_object_type(#input_object_type { fields = FS, directives = Ds }) ->
@@ -158,6 +158,10 @@ schema_input_type_arg({_, #schema_arg { ty = Ty }}) ->
     input_type(Ty),
     ok.
 
+schema_enum_value({_, #enum_value { directives = Ds }}) ->
+    is_valid_directives(Ds, <<"ENUM_VALUE">>),
+    ok.
+
 undefined_object(undefined) -> ok;
 undefined_object(Obj) -> is_object(Obj).
 
@@ -215,7 +219,7 @@ is_valid_directives(Dirs, Location) ->
 is_valid_directive(#directive{ id = Id }, Location) ->
     is_valid_directive(name(Id), Location);
 is_valid_directive(Dir, Location) ->
-    case lookup(Dir) of
+    try lookup(Dir) of
         #directive_type{ id = Id, locations = Locations } ->
             case lists:member(Location, Locations) of
                 true -> ok;
@@ -225,7 +229,10 @@ is_valid_directive(Dir, Location) ->
                         allowed_at     => Locations
                     }})
             end;
-        _ -> err({not_directive_type, Dir})
+        _ -> err({not_directive, Dir})
+    catch
+        throw:{invalid, {not_found, _Key}} ->
+            err({not_directive, Dir})
     end.
 
 is_directive_location(Loc) ->
@@ -288,6 +295,10 @@ err_fmt({schema_validation, Type, {not_found, NF}}) ->
     io_lib:format(
       "Schema Error in type ~p: it refers to a type ~p, "
       "which is not present in the schema", [Type, NF]);
+err_fmt({schema_validation, Type, {not_directive, D}}) ->
+    io_lib:format(
+      "Schema Error in type ~p: it refers to a directive ~p, "
+      "which is not present in the schema", [Type, D]);
 err_fmt({schema_validation, Type, {union_not_unique, X}}) ->
     io_lib:format(
       "Schema Error in type ~p: it contains duplicate types ~p",

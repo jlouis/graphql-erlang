@@ -190,7 +190,7 @@ unknown_directive_use(Config) ->
         ok ->
             ct:fail(validate_schema_passed_but_must_fail)
     catch
-        exit:{schema_validation, <<"Point">>, {not_found, <<"myUndefinedDirective">>}} ->
+        exit:{schema_validation, <<"Point">>, {not_directive, <<"myUndefinedDirective">>}} ->
             ok
     end.
 

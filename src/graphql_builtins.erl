@@ -50,6 +50,17 @@ standard_directives_inject() ->
             default => false,
             description => <<"Wether or not the item should be included">> }}
         }},
+    DeprecatedDirective = {directive, #{
+        id => <<"deprecated">>,
+        description => <<"Mark field as deprecated with a helpful message on what to use instead">>,
+        locations => [<<"FIELD_DEFINITION">>, <<"ENUM_VALUE">>],
+        resolve_module => graphql_directives,
+        args => #{ <<"reason">> => #{
+            type => 'String',
+            default => <<"No longer supported">>,
+            description => <<"A message to the developer on why this field is deprecated and what to use instead">> }}
+        }},
     ok = graphql:insert_schema_definition(SkipDirective),
     ok = graphql:insert_schema_definition(IncludeDirective),
+    ok = graphql:insert_schema_definition(DeprecatedDirective),
     ok.
