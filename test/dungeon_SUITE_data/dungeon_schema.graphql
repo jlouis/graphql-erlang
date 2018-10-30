@@ -88,9 +88,11 @@ union Thing = Item | Monster
 
 # Inputs and Payloads
 
+directive @inputDirective(scope: String = "Hello World") on INPUT_FIELD_DEFINITION
+
 input StatsInput {
   attack : Int! = 7
-  yell : String
+  yell : String @inputDirective
   shellScripting : Int
 }
 

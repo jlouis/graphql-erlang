@@ -25,6 +25,7 @@ id_(#frag { id = ID }) -> ID;
 id_(#vardef { id = ID }) -> ID;
 id_(#directive { id = ID }) -> ID.
      
+typename(#directive_type { id = ID }) -> ID;
 typename(#enum_type { id = ID }) -> ID;
 typename(#interface_type { id = ID }) -> ID;
 typename(#union_type { id = ID }) -> ID;

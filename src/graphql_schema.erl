@@ -40,6 +40,7 @@ reset() ->
     ok = gen_server:call(?MODULE, reset),
     ok = graphql_introspection:inject(),
     ok = graphql_builtins:standard_types_inject(),
+    ok = graphql_builtins:standard_directives_inject(),
     ok.
 
 -spec insert(any()) -> ok.

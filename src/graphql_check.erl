@@ -157,10 +157,10 @@ infer_output_type(Ctx, Ty) ->
 %% a valid type for that expression. This is mostly handled by
 %% a lookup into the environment.
 infer(Ctx, #directive { id = ID }) ->
-    case graphql_ast:name(ID) of
-        <<"include">> -> {ok, graphql_directives:include()};
-        <<"skip">> -> {ok, graphql_directives:skip()};
-        Name -> err(Ctx, {unknown_directive, Name})
+    Name = graphql_ast:name(ID),
+    case graphql_schema:lookup(Name) of
+        #directive_type{} = Tau -> {ok, Tau};
+        not_found -> err(Ctx, {unknown_directive, Name})
     end;
 infer(Ctx, #op { ty = Ty } = Op) ->
     CtxP = add_path(Ctx, Op),

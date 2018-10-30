@@ -64,13 +64,13 @@ groups() ->
                   [
                    schema_test,
                    double_iface,
-                   double_directive,
                    empty_union,
                    non_unique_union
                   ]},
 
     Directives = {directives, [shuffle, parallel], [
-       directive_definition
+       double_directive,
+       unknown_directive_use
     ]},
 
     Introspection = {introspection, [shuffle, parallel], [
@@ -83,6 +83,7 @@ all() -> [
     {group, schema},
     {group, basic},
     {group, schema_test},
+    {group, directives},
     {group, introspection}].
 
 %% -- BASIC --------------------------------------
@@ -172,12 +173,24 @@ double_iface(Config) ->
 double_directive(Config) ->
     FName = filename:join([?config(data_dir, Config), "double_directive.spec"]),
     {ok, Data} = file:read_file(FName),
-    graphql:load_schema(#{}, Data),
+    graphql:load_schema(#{}, Data), % load first, then load again:
     try graphql:load_schema(#{}, Data) of
         _ ->
             ct:fail(schema_load_passed_but_must_fail)
     catch
         exit:{entry_already_exists_in_schema, <<"fieldDefDirective">>} ->
+            ok
+    end.
+
+unknown_directive_use(Config) ->
+    FName = filename:join([?config(data_dir, Config), "unknown_directive_use.spec"]),
+    {ok, Data} = file:read_file(FName),
+    ok = graphql:load_schema(#{ objects => #{ default => object_resource } }, Data),
+    try graphql:validate_schema() of
+        ok ->
+            ct:fail(validate_schema_passed_but_must_fail)
+    catch
+        exit:{schema_validation, <<"Point">>, {not_found, <<"myUndefinedDirective">>}} ->
             ok
     end.
 
