@@ -33,7 +33,7 @@ standard_directives_inject() ->
     SkipDirective = {directive, #{
         id => <<"skip">>,
         description => <<"Allows excluding a field depending on argument">>,
-        locations => [<<"FIELD">>, <<"FRAGMENT_SPREAD">>, <<"INLINE_FRAGMENT">>],
+        locations => ['FIELD', 'FRAGMENT_SPREAD', 'INLINE_FRAGMENT'],
         resolve_module => graphql_directives,
         args => #{ <<"if">> => #{
             type => 'Bool',
@@ -43,7 +43,7 @@ standard_directives_inject() ->
     IncludeDirective = {directive, #{
         id => <<"include">>,
         description => <<"Allows including a field depending on argument">>,
-        locations => [<<"FIELD">>, <<"FRAGMENT_SPREAD">>, <<"INLINE_FRAGMENT">>],
+        locations => ['FIELD', 'FRAGMENT_SPREAD', 'INLINE_FRAGMENT'],
         resolve_module => graphql_directives,
         args => #{ <<"if">> => #{
             type => 'Bool',
@@ -53,7 +53,7 @@ standard_directives_inject() ->
     DeprecatedDirective = {directive, #{
         id => <<"deprecated">>,
         description => <<"Mark field as deprecated with a helpful message on what to use instead">>,
-        locations => [<<"FIELD_DEFINITION">>, <<"ENUM_VALUE">>],
+        locations => ['FIELD_DEFINITION', 'ENUM_VALUE'],
         resolve_module => graphql_directives,
         args => #{ <<"reason">> => #{
             type => 'String',

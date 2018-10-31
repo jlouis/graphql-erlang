@@ -72,9 +72,7 @@ x({scalar, #{ id := ID, description := Desc} = Scalar}) ->
                    resolve_module = ModuleResolver
                  };
 x({directive, #{ id := ID, description := Desc } = Obj}) ->
-    ModuleResolver = maps:get(resolve_module, Obj, graphql_directives),
     #directive_type { id = c_id(ID),
-                      resolve_module = ModuleResolver,
                       description = binarize(Desc),
                       args = c_directive_args(Obj),
                       locations = c_directive_locations(Obj)
@@ -215,4 +213,4 @@ deprecation(#{}) -> undefined.
 
 %% -- directive locations
 c_directive_locations(#{ locations := Ls }) ->
-    lists:map(fun binarize/1, Ls).
+    Ls.

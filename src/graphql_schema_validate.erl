@@ -6,10 +6,10 @@
 -export([x/0, root/1]).
 
 -define (DIRECTIVE_LOCATIONS, [
-    <<"QUERY">>, <<"MUTATION">>, <<"SUBSCRIPTION">>, <<"FIELD">>, <<"FRAGMENT_DEFINITION">>,
-    <<"FRAGMENT_SPREAD">>, <<"INLINE_FRAGMENT">>, <<"SCHEMA">>, <<"SCALAR">>, <<"OBJECT">>,
-    <<"FIELD_DEFINITION">>, <<"ARGUMENT_DEFINITION">>, <<"INTERFACE">>, <<"UNION">>,
-    <<"ENUM">>, <<"ENUM_VALUE">>, <<"INPUT_OBJECT">>, <<"INPUT_FIELD_DEFINITION">>]).
+    'QUERY', 'MUTATION', 'SUBSCRIPTION', 'FIELD', 'FRAGMENT_DEFINITION',
+    'FRAGMENT_SPREAD', 'INLINE_FRAGMENT', 'SCHEMA', 'SCALAR', 'OBJECT',
+    'FIELD_DEFINITION', 'ARGUMENT_DEFINITION', 'INTERFACE', 'UNION',
+    'ENUM', 'ENUM_VALUE', 'INPUT_OBJECT', 'INPUT_FIELD_DEFINITION']).
 
 -spec root(#root_schema{}) -> #root_schema{}.
 root(#root_schema{ query = Q,
@@ -85,24 +85,24 @@ validate(#input_object_type {} = X) -> input_object_type(X);
 validate(#directive_type{} = X) -> directive_type(X).
 
 scalar_type(#scalar_type {directives = Ds}) ->
-    is_valid_directives(Ds, <<"SCALAR">>),
+    is_valid_directives(Ds, 'SCALAR'),
     ok.
 
 enum_type(#enum_type { directives = Ds, values = Vs }) ->
-    is_valid_directives(Ds, <<"ENUM">>),
+    is_valid_directives(Ds, 'ENUM'),
     all(fun schema_enum_value/1, maps:to_list(Vs)),
     ok.
 
 input_object_type(#input_object_type { fields = FS, directives = Ds }) ->
     all(fun schema_input_type_arg/1, maps:to_list(FS)),
-    is_valid_directives(Ds, <<"INPUT_OBJECT">>),
+    is_valid_directives(Ds, 'INPUT_OBJECT'),
     ok.
 
 union_type(#union_type { types = [] } = Union) ->
     err({empty_union, Union});
 union_type(#union_type { types = Types, directives = Ds }) ->
     all(fun is_union_type/1, Types),
-    is_valid_directives(Ds, <<"UNION">>),
+    is_valid_directives(Ds, 'UNION'),
     case unique([name(T) || T <- Types]) of
         ok ->
             ok;
@@ -112,7 +112,7 @@ union_type(#union_type { types = Types, directives = Ds }) ->
 
 interface_type(#interface_type { fields= FS, directives = Ds }) ->
     all(fun schema_field/1, maps:to_list(FS)),
-    is_valid_directives(Ds, <<"INTERFACE">>),
+    is_valid_directives(Ds, 'INTERFACE'),
     ok.
 
 object_type(#object_type {
@@ -122,7 +122,7 @@ object_type(#object_type {
     all(fun is_interface/1, IFaces),
     all(fun(IF) -> implements(lookup(IF), Obj) end, IFaces),
     all(fun schema_field/1, maps:to_list(FS)),
-    is_valid_directives(Ds, <<"OBJECT">>),
+    is_valid_directives(Ds, 'OBJECT'),
     ok.
 
 directive_type(#directive_type {
@@ -143,13 +143,13 @@ root_schema(#root_schema {
     undefined_object(M),
     undefined_object(S),
     all(fun is_interface/1, IFaces),
-    is_valid_directives(Ds, <<"SCHEMA">>),
+    is_valid_directives(Ds, 'SCHEMA'),
     ok.
     
 schema_field({_, #schema_field { ty = Ty, args = Args, directives = Ds }}) ->
     all(fun schema_input_type_arg/1, maps:to_list(Args)),
     type(Ty),
-    is_valid_directives(Ds, <<"FIELD_DEFINITION">>),
+    is_valid_directives(Ds, 'FIELD_DEFINITION'),
     ok.
 
 schema_input_type_arg({_, #schema_arg { ty = Ty }}) ->
@@ -159,7 +159,7 @@ schema_input_type_arg({_, #schema_arg { ty = Ty }}) ->
     ok.
 
 schema_enum_value({_, #enum_value { directives = Ds }}) ->
-    is_valid_directives(Ds, <<"ENUM_VALUE">>),
+    is_valid_directives(Ds, 'ENUM_VALUE'),
     ok.
 
 undefined_object(undefined) -> ok;

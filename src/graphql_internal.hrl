@@ -26,13 +26,6 @@
 
 -type selection_set() :: field() | frag() | frag_spread().
 
--type directive_location_type() :: binary().
-% specifically:
-% QUERY, MUTATION, SUBSCRIPTION, FIELD, FRAGMENT_DEFINITION, FRAGMENT_SPREAD, INLINE_FRAGMENT,
-% SCHEMA, SCALAR, OBJECT, FIELD_DEFINITION, ARGUMENT_DEFINITION, INTERFACE, UNION,
-% ENUM, ENUM_VALUE, INPUT_OBJECT, INPUT_FIELD_DEFINITION
-
-
 -record(field, {
 	id :: graphql:name(),
 	args = [] :: [any()],
@@ -157,4 +150,4 @@
         { id :: graphql:name(),
           description = undefined :: 'undefined' | binary(),
           args = [] :: [any()],
-          locations = [] :: [graphql:name()]}).
+          locations = [] :: [atom()]}).

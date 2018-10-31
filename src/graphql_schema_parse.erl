@@ -110,24 +110,18 @@ mk(#{ interfaces := IF },
        directives => Directives,
        fields => Fields
       }};
-mk(Map,
+mk(#{},
     #p_directive{ id = ID,
                   description = Description,
                   args = Args,
                   locations = Locations }) ->
-    % if no directive mapping is specified default to the internal graphql_directives mod
-    Ds = case Map of
-        #{ directives := L } -> L;
-        #{}                  -> #{ default => graphql_directives }
-    end,
     Name = name(ID),
     {directive,
         #{
             id => Name,
             description => description(Description),
             args => handle_args(Args),
-            locations => directive_locations(Locations),
-            resolve_module => mapping(Name, Ds)
+            locations => Locations
         }}.
 
 
@@ -251,11 +245,4 @@ mapping(Name, Map) ->
             maps:get(default, Map);
         X -> X
     end.
-
-directive_locations(Ls) ->
-    directive_locations(Ls, []).
-directive_locations([], Acc) ->
-    lists:reverse(Acc);
-directive_locations([ID|Rest], Acc) ->
-    directive_locations(Rest, [name(ID)|Acc]).
 

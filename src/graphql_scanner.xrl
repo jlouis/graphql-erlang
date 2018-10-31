@@ -75,6 +75,7 @@ identifier("union", TokenLine) -> {union, TokenLine};
 identifier("extend", TokenLine) -> {extend, TokenLine};
 identifier("schema", TokenLine) -> {schema, TokenLine};
 identifier("directive", TokenLine) -> {directive, TokenLine};
+
 identifier(ID, TokenLine) -> {name, TokenLine, iolist_to_binary(ID)}.
 
 unquote(Str) ->
