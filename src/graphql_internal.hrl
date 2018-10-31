@@ -146,3 +146,8 @@
         { defs = [] :: [#p_root_operation{}],
           directives = [] :: [graphql:directive()] }).
 
+-record(p_directive,
+        { id :: graphql:name(),
+          description = undefined :: 'undefined' | binary(),
+          args = [] :: [any()],
+          locations = [] :: [atom()]}).

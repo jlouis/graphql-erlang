@@ -68,17 +68,23 @@ groups() ->
                    non_unique_union
                   ]},
 
+    Directives = {directives, [shuffle, parallel], [
+       double_directive,
+       unknown_directive_use
+    ]},
+
     Introspection = {introspection, [shuffle, parallel], [
        is_supports_type
     ]},
 
-    [Basic, Schema, SchemaTest, Introspection].
+    [Basic, Schema, Introspection, Directives, SchemaTest].
 
 all() -> [
     {group, schema},
     {group, basic},
     {group, schema_test},
-    {group, introspection} ].
+    {group, directives},
+    {group, introspection}].
 
 %% -- BASIC --------------------------------------
 hello_world(Config) ->
@@ -161,6 +167,30 @@ double_iface(Config) ->
             ct:fail(schema_load_passed_but_must_fail)
     catch
         exit:{entry_already_exists_in_schema, <<"Node">>} ->
+            ok
+    end.
+
+double_directive(Config) ->
+    FName = filename:join([?config(data_dir, Config), "double_directive.spec"]),
+    {ok, Data} = file:read_file(FName),
+    graphql:load_schema(#{}, Data), % load first, then load again:
+    try graphql:load_schema(#{}, Data) of
+        _ ->
+            ct:fail(schema_load_passed_but_must_fail)
+    catch
+        exit:{entry_already_exists_in_schema, <<"fieldDefDirective">>} ->
+            ok
+    end.
+
+unknown_directive_use(Config) ->
+    FName = filename:join([?config(data_dir, Config), "unknown_directive_use.spec"]),
+    {ok, Data} = file:read_file(FName),
+    ok = graphql:load_schema(#{ objects => #{ default => object_resource } }, Data),
+    try graphql:validate_schema() of
+        ok ->
+            ct:fail(validate_schema_passed_but_must_fail)
+    catch
+        exit:{schema_validation, <<"Point">>, {not_directive, <<"myUndefinedDirective">>}} ->
             ok
     end.
 

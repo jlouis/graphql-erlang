@@ -40,6 +40,7 @@ reset() ->
     ok = gen_server:call(?MODULE, reset),
     ok = graphql_introspection:inject(),
     ok = graphql_builtins:standard_types_inject(),
+    ok = graphql_builtins:standard_directives_inject(),
     ok.
 
 -spec insert(any()) -> ok.
@@ -152,7 +153,8 @@ id(#object_type{ id = ID}) -> ID;
 id(#enum_type{ id = ID}) -> ID;
 id(#interface_type{ id = ID}) -> ID;
 id(#union_type{ id = ID}) -> ID;
-id(#input_object_type{ id = ID }) -> ID.
+id(#input_object_type{ id = ID }) -> ID;
+id(#directive_type{ id = ID }) -> ID.
 
 %% -- CALLBACKS
 
@@ -228,6 +230,7 @@ determine_table(#interface_type{}) -> ?OBJECTS;
 determine_table(#scalar_type{}) -> ?OBJECTS;
 determine_table(#input_object_type{}) -> ?OBJECTS;
 determine_table(#union_type{}) -> ?OBJECTS;
+determine_table(#directive_type{}) -> ?OBJECTS;
 determine_table(_) -> {error, unknown}.
 
 %% insert enum values

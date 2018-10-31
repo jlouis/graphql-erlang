@@ -24,6 +24,9 @@ changes:
   we defined. In particular, there are no more annotations (They are
   now handled as directives). And docstrings are optional entries on
   definitions now.
+- Directive definitions are now actually checked.
+  The builtins `@skip`, `@include` and `@deprecated` work out of the box.
+  Other directives must be defined in the schema.
 - Alter your execute/4 functions to use `field_directives` and
   `object_directives` rather than using the old annotation code (if
   you applied this).

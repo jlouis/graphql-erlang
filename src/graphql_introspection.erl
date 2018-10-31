@@ -75,6 +75,7 @@ subscription_type(_Ctx, _Obj, _) ->
 schema_types(_Ctx, _Obj, _Args) ->
     Pass = fun
         (#root_schema{}) -> false;
+        (#directive_type{}) -> false;
         (_) -> true
     end,
     Types = [X || X <- graphql_schema:all(), Pass(X)],

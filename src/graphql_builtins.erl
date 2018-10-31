@@ -2,7 +2,7 @@
 
 -include("graphql_schema.hrl").
 
--export([standard_types_inject/0]).
+-export([standard_types_inject/0, standard_directives_inject/0]).
 
 -spec standard_types_inject() -> ok.
 standard_types_inject() ->
@@ -28,3 +28,39 @@ standard_types_inject() ->
     ok = graphql:insert_schema_definition(ID),
     ok.
 
+-spec standard_directives_inject() -> ok.
+standard_directives_inject() ->
+    SkipDirective = {directive, #{
+        id => <<"skip">>,
+        description => <<"Allows excluding a field depending on argument">>,
+        locations => ['FIELD', 'FRAGMENT_SPREAD', 'INLINE_FRAGMENT'],
+        resolve_module => graphql_directives,
+        args => #{ <<"if">> => #{
+            type => 'Bool',
+            default => false,
+            description => <<"Wether or not the item should be skipped">> }}
+        }},
+    IncludeDirective = {directive, #{
+        id => <<"include">>,
+        description => <<"Allows including a field depending on argument">>,
+        locations => ['FIELD', 'FRAGMENT_SPREAD', 'INLINE_FRAGMENT'],
+        resolve_module => graphql_directives,
+        args => #{ <<"if">> => #{
+            type => 'Bool',
+            default => false,
+            description => <<"Wether or not the item should be included">> }}
+        }},
+    DeprecatedDirective = {directive, #{
+        id => <<"deprecated">>,
+        description => <<"Mark field as deprecated with a helpful message on what to use instead">>,
+        locations => ['FIELD_DEFINITION', 'ENUM_VALUE'],
+        resolve_module => graphql_directives,
+        args => #{ <<"reason">> => #{
+            type => 'String',
+            default => <<"No longer supported">>,
+            description => <<"A message to the developer on why this field is deprecated and what to use instead">> }}
+        }},
+    ok = graphql:insert_schema_definition(SkipDirective),
+    ok = graphql:insert_schema_definition(IncludeDirective),
+    ok = graphql:insert_schema_definition(DeprecatedDirective),
+    ok.
