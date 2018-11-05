@@ -889,7 +889,7 @@ directive_location(#op { ty = Ty }) ->
     case Ty of
         undefined -> 'QUERY';
         {query, _} -> 'QUERY';
-        {mutation, _} -> 'MUTATITON';
+        {mutation, _} -> 'MUTATION';
         {subscription, _} -> 'SUBSCRIPTION'
     end.
 
