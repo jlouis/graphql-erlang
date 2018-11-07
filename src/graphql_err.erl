@@ -210,7 +210,7 @@ type_check_err_msg(non_null) ->
 type_check_err_msg({null_input, N}) ->
     ["The arg ", N, " is given a null, which is not allowed in the input path"];
 type_check_err_msg({not_found, Ty}) ->
-    iolib:format("The type ~p was not found in the schema", [Ty]);
+    io_lib:format("The type ~p was not found in the schema", [Ty]);
 type_check_err_msg({enum_not_found, Ty, Val}) ->
     X = io_lib:format("The value ~p is not a valid enum value for type ", [Val]),
     [X, graphql_err:format_ty(Ty)];
