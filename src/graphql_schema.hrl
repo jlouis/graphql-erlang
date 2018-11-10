@@ -17,7 +17,7 @@
         | 'SCALAR' | 'OBJECT' | 'FIELD_DEFINITION' | 'ARGUMENT_DEFINITION' | 'INTERFACE'
         | 'UNION' | 'ENUM' | 'ENUM_VALUE' | 'INPUT_OBJECT' | 'INPUT_FIELD_DEFINITION'.
 
--type resolver() :: fun ((ctx, term(), resolver_args()) -> term()).
+-type resolver() :: fun ((ctx, term(), binary(), resolver_args()) -> term()).
 
 -record(directive_type,
         { id :: binary(),

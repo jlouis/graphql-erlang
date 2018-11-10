@@ -147,9 +147,14 @@ non_null(Ty) ->
         _Otherwise -> list_to_binary(Ty)
     end.
 
-c_field_val_resolve(#{ resolve := R}) when is_function(R, 3) -> R;
-c_field_val_resolve(#{ resolve := R}) when is_function(R) -> exit(wrong_resolver_arity);
-c_field_val_resolve(_) -> undefined.
+c_field_val_resolve(#{ resolve := R }) when is_function(R, 3) ->
+    fun (Ctx, Obj, _FieldName, Args) -> R(Ctx, Obj, Args) end;
+c_field_val_resolve(#{ resolve := R }) when is_function(R, 4) ->
+    R;
+c_field_val_resolve(#{ resolve := R }) when is_function(R) ->
+    exit(wrong_resolver_arity);
+c_field_val_resolve(_) ->
+    undefined.
 
 c_field_val_args(#{ args := Args }) ->map_2(fun c_args/2, Args);
 c_field_val_args(_) -> #{}.

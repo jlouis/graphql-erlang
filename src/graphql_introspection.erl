@@ -9,12 +9,12 @@
 
 %% Resolvers for the introspection
 -export([
-    schema_resolver/3,
-    type_resolver/3,
-    schema_types/3,
-    query_type/3,
-    mutation_type/3,
-    subscription_type/3
+    schema_resolver/4,
+    type_resolver/4,
+    schema_types/4,
+    query_type/4,
+    mutation_type/4,
+    subscription_type/4
 ]).
 
 -spec augment_root(QueryObj) -> ok
@@ -25,7 +25,7 @@ augment_root(QName) ->
     Schema = #schema_field {
                 ty = {non_null, <<"__Schema">>},
                 description = <<"The introspection schema">>,
-                resolve = fun ?MODULE:schema_resolver/3
+                resolve = fun ?MODULE:schema_resolver/4
                },
     Type = #schema_field {
               ty = <<"__Type">>,
@@ -35,7 +35,7 @@ augment_root(QName) ->
                     #schema_arg { ty = {non_null, <<"String">>},
                                   description = <<"The type to query">> }
                },
-              resolve = fun ?MODULE:type_resolver/3 },
+              resolve = fun ?MODULE:type_resolver/4 },
     Augmented = Obj#object_type { fields = Fields#{
                                              <<"__schema">> => Schema,
                                              <<"__type">> => Type
@@ -43,36 +43,36 @@ augment_root(QName) ->
     ok = graphql_schema:insert(Augmented, #{}),
     ok.
 
-schema_resolver(_Ctx, none, #{}) ->
+schema_resolver(_Ctx, none, _, #{}) ->
     {ok, #{ <<"directives">> =>
                 [directive(include),
                  directive(skip)]}}.
 
-type_resolver(_Ctx, none, #{ <<"name">> := N }) ->
+type_resolver(_Ctx, none, _, #{ <<"name">> := N }) ->
     case graphql_schema:lookup(N) of
         not_found -> {ok, null};
         Ty -> render_type(Ty)
     end.
 
-query_type(_Ctx, _Obj, _) ->
+query_type(_Ctx, _Obj, _, _) ->
     #root_schema{ query = QType } = graphql_schema:get('ROOT'),
     render_type(QType).
 
-mutation_type(_Ctx, _Obj, _) ->
+mutation_type(_Ctx, _Obj, _, _) ->
     #root_schema { mutation = MType } = graphql_schema:get('ROOT'),
     case MType of
         undefined -> {ok, null};
         MT -> render_type(MT)
     end.
 
-subscription_type(_Ctx, _Obj, _) ->
+subscription_type(_Ctx, _Obj, _, _) ->
     #root_schema { subscription = SType } = graphql_schema:get('ROOT'),
     case SType of
         undefined -> {ok, null};
         ST -> render_type(ST)
     end.
 
-schema_types(_Ctx, _Obj, _Args) ->
+schema_types(_Ctx, _Obj, _, _Args) ->
     Pass = fun
         (#root_schema{}) -> false;
         (#directive_type{}) -> false;
@@ -221,19 +221,19 @@ inject() ->
                   types => #{
                     type => {non_null, ['__Type!']},
                     description => "The types in the Schema that are defined",
-                    resolve => fun ?MODULE:schema_types/3 },
+                    resolve => fun ?MODULE:schema_types/4 },
                   queryType => #{
                     type => '__Type!',
                     description => "The type of the 'query' entries.",
-                    resolve => fun ?MODULE:query_type/3 },
+                    resolve => fun ?MODULE:query_type/4 },
                   mutationType => #{
                     type => '__Type',
                     description => "The type of the 'mutation' entries.",
-                    resolve => fun ?MODULE:mutation_type/3 },
+                    resolve => fun ?MODULE:mutation_type/4 },
                   subscriptionType => #{
                     type => '__Type',
                     description => "The type of the 'subscription' entries.",
-                    resolve => fun ?MODULE:subscription_type/3 },
+                    resolve => fun ?MODULE:subscription_type/4 },
                   directives => #{
                     type => {non_null, ['__Directive!']},
                     description => "The directives the server currently understands"
