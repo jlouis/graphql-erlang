@@ -74,7 +74,7 @@ x({scalar, #{ id := ID, description := Desc} = Scalar}) ->
 x({directive, #{ id := ID, description := Desc } = Obj}) ->
     #directive_type { id = c_id(ID),
                       description = binarize(Desc),
-                      args = c_directive_args(Obj),
+                      args = c_field_val_args(Obj),
                       locations = c_directive_locations(Obj)
                     }.
 
@@ -109,13 +109,8 @@ c_enum_val(K, #{ value := V, description := Desc } = Map) ->
 c_input_value(K, V) ->
     {binarize(K), c_input_value_val(V)}.
 
-c_input_value_val(#{ type := Ty, description := Desc } = M) ->
-    Def = default(M),
-    #schema_arg {
-        ty = handle_type(Ty),
-        default = Def,
-        description = binarize(Desc)
-    }.
+c_input_value_val(#{ type := _, description := _ } = M) ->
+    c_arg_val(M). % these functions are currently identical
 
 default(#{ default := Def }) -> Def;
 default(#{ }) -> null.
@@ -161,11 +156,15 @@ c_field_val_description(_) -> undefined.
 c_args(K, V) ->
     {binarize(K), c_arg_val(V)}.
 
+c_arg_val(#{ type := Ty, description := Desc }=M) ->
+    #schema_arg {
+        ty = handle_type(Ty),
+        default = default(M),
+        description = binarize(Desc),
+        directives = directives(M)
+    }.
 
-c_arg_val(#{ type := Ty, description := Desc, default := Def }) ->
-    #schema_arg { ty = handle_type(Ty), description = binarize(Desc), default = Def };
-c_arg_val(#{ type := Ty, description := Desc }) ->
-    #schema_arg { ty = handle_type(Ty), description = binarize(Desc) }.
+
 
 union_resolver(#{ resolve_module := M}) when is_atom(M) -> M;
 union_resolver(#{ resolve_type := F}) when is_function(F,1) -> F;
@@ -203,9 +202,6 @@ enum_resolve(_) ->
 %% -- Directives
 directives(#{ directives := Ds }) -> Ds;
 directives(#{}) -> [].
-
-c_directive_args(#{ args := Args }) -> map_2(fun c_args/2, Args);
-c_directive_args(#{}) -> #{}.
 
 %% -- Deprecation
 deprecation(#{ deprecation := Reason }) -> binarize(Reason);

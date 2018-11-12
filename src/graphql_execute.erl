@@ -438,9 +438,7 @@ format_directives([#directive { id = N, args = Args }|Ds]) ->
     [#directive{ id = name(N),
                  args = maps:from_list(
                           [{name(ID), Value} || {ID, Value} <- Args])}
-     | format_directives(Ds)];
-format_directives([#directive_type { id = N, args = Args }|Ds]) ->
-    [#directive{ id = name(N), args = Args }| format_directives(Ds)].
+     | format_directives(Ds)].
 
 resolve_field_value(Ctx, #object_type { id = OID,
                                         directives = ODirectives} = ObjectType,
