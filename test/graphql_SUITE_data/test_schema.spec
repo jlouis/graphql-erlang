@@ -67,7 +67,7 @@ type Monster implements Node {
   hp: Int!
   mood: Mood @fieldDefDirective(myarg: "Hello World")
   plushFactor: Float!
-  stats(minAttack: Int! = 0): [Stats]
+  stats(minAttack: Int! = 0 @myArgDirective): [Stats]
   properties: [Property]
 }
 
@@ -76,3 +76,6 @@ directive @execDefDirective on
   | FRAGMENT_SPREAD
 
 directive @fieldDefDirective(myarg: String) on FIELD_DEFINITION
+
+directive @myArgDirective on ARGUMENT_DEFINITION
+

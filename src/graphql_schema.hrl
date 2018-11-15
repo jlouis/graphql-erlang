@@ -30,7 +30,7 @@
 -record(enum_value,
         { val :: binary(),
           description :: binary(),
-          directives = [] :: [directive_type()],
+          directives = [] :: [graphql:directive()],
           deprecation = undefined :: undefined | binary()
         }).
 -type enum_value() :: #enum_value{}.
@@ -39,7 +39,7 @@
         { id :: binary(),
           description :: binary(),
           resolve_module = graphql_enum_coerce :: mod(),
-          directives = [] :: [directive_type()],
+          directives = [] :: [graphql:directive()],
           values :: #{ integer() => enum_value() }
         }).
 -type enum_type() :: #enum_type{}.
@@ -48,7 +48,7 @@
         { id :: binary(),
           description :: binary(),
           resolve_type :: mod() | fun ((any()) -> {ok, atom()} | {error, term()}),
-          directives = [] :: [directive_type()],
+          directives = [] :: [graphql:directive()],
           fields :: #{ binary() => schema_field() }
         }).
 -type interface_type() :: #interface_type{}.
@@ -57,7 +57,7 @@
         { id :: binary(),
           description :: binary(),
           resolve_type :: mod() | fun ((any()) -> {ok, atom()} | {error, term()}),
-          directives = [] :: [directive_type()],
+          directives = [] :: [graphql:directive()],
           types :: [binary() | {name, non_neg_integer(), binary()}]
         }).
 -type union_type() :: #union_type{}.
@@ -65,7 +65,8 @@
 -record(schema_arg,
         { ty :: schema_type(),
           default = null :: any(),
-          description :: binary()
+          description :: binary(),
+          directives = [] :: [graphql:directive()]
         }).
 -type schema_arg() :: #schema_arg{}.
 
@@ -75,7 +76,7 @@
           resolve = undefined :: undefined | resolver(),
           %% FIXME: deprecations are directives so they can be cast as one
           deprecation = undefined :: undefined | binary(),
-          directives = [] :: [directive_type()],
+          directives = [] :: [graphql:directive()],
           args = #{} :: #{ binary() => schema_arg() }
         }).
 -type schema_field() :: #schema_field{}.
@@ -83,7 +84,7 @@
 -record(scalar_type,
         { id :: binary(),
           description :: binary(),
-          directives = [] :: [directive_type()],
+          directives = [] :: [graphql:directive()],
           resolve_module = graphql_enum_coerce :: mod()
         }).
 -type scalar_type() :: #scalar_type{}.
@@ -91,7 +92,7 @@
 -record(input_object_type,
         { id :: binary(),
           description :: binary(),
-          directives = [] :: [directive_type() | graphql:directive()],
+          directives = [] :: [graphql:directive()],
           fields = #{} :: #{ binary() => schema_arg() }
         }).
 -type input_object_type() :: #input_object_type{}.
@@ -99,7 +100,7 @@
 -record(object_type,
         { id :: binary(),
           description :: binary(),
-          directives = [] :: [directive_type() | graphql:directive()],
+          directives = [] :: [graphql:directive()],
           resolve_module :: mod(),
           fields = #{} :: #{ binary() => schema_field() },
           interfaces = [] :: [binary()]
@@ -111,7 +112,7 @@
           query = undefined :: undefined | binary(),
           mutation = undefined :: undefined | binary(),
           subscription = undefined :: undefined | binary(),
-          directives = [] :: [directive_type()],
+          directives = [] :: [graphql:directive()],
           interfaces = [] :: [binary()]
         }).
 -type root_schema() :: #root_schema{}.
