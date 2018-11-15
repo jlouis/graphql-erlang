@@ -152,7 +152,7 @@ format_fields(Xs) ->
         ValF = format_val(Val),
         <<Name/binary, "(", TyF/binary, "): ", ValF/binary>>
     end,
-    iolist_to_binary(join(<<", ">>, [F(X) || X <- Xs])).
+    iolist_to_binary(lists:join(<<", ">>, [F(X) || X <- Xs])).
 
 format_val(B) when is_binary(B) -> B;
 format_val(I) when is_integer(I) -> integer_to_binary(I);
@@ -168,12 +168,6 @@ name({name, _, N}) -> N;
 name(X) when is_binary(X) -> X.
 
 %% -- INTERNALS ----------------------------
-join(_Sep, []) -> [];
-join(Sep, [H|T]) -> [H|join_prepend(Sep, T)].
-
-join_prepend(_Sep, []) -> [];
-join_prepend(Sep, [H|T]) -> [Sep,H|join_prepend(Sep,T)].
-
 execute_err_msg(null_value) ->
     ["The schema specifies the field is non-null, "
      "but a null value was returned by the backend"];
