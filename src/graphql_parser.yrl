@@ -8,6 +8,10 @@ Nonterminals
   FragmentDefinition
 
   TypeSystemDefinition
+    DirectiveDefinition
+      DirectiveLocations
+        DirectiveLocation
+
     SchemaDefinition
       RootOperationList
         RootOperationTypeDefinition
@@ -53,6 +57,7 @@ Terminals
   'query' 'mutation' 'subscription' 'fragment' 'on' 'null'
   'type' 'implements' 'interface' 'union' 'scalar' 'enum' 'input' 'extend'
   'schema'
+  'directive'
 
   name int float bstring bool.
 
@@ -250,7 +255,7 @@ InputObjectField -> Name ':' Value : {'$1', '$3'}.
 
 TypeSystemDefinition -> SchemaDefinition : '$1'.
 TypeSystemDefinition -> TypeDefinition : '$1'.
-%% TypeSystemDefinition -> DirectiveDefinition : '$1'.
+TypeSystemDefinition -> DirectiveDefinition : '$1'.
 
 
 SchemaDefinition -> 'schema' '{' RootOperationList '}'
@@ -275,6 +280,24 @@ TypeDefinition -> UnionTypeDefinition : '$1'.
 TypeDefinition -> EnumTypeDefinition : '$1'.
 TypeDefinition -> InputObjectTypeDefinition : '$1'.
 
+DirectiveDefinition -> 'directive' '@' Name 'on' DirectiveLocations
+  : #p_directive{ id = '$3', locations = '$5' }.
+DirectiveDefinition -> Description 'directive' '@' Name 'on' DirectiveLocations
+  : #p_directive{ description = '$1', id = '$4', locations = '$6' }.
+DirectiveDefinition -> 'directive' '@' Name ArgumentsDefinition 'on' DirectiveLocations
+  : #p_directive{ id = '$3', args = '$4', locations = '$6' }.
+DirectiveDefinition -> Description 'directive' '@' Name ArgumentsDefinition 'on' DirectiveLocations
+  : #p_directive{ description = '$1', id = '$4', args = '$5', locations = '$7' }.
+
+DirectiveLocations -> DirectiveLocation
+  : ['$1'].
+DirectiveLocations -> '|' DirectiveLocation
+  : ['$2'].
+DirectiveLocations -> DirectiveLocations '|' DirectiveLocation
+  : ['$3'|'$1'].
+
+DirectiveLocation -> name
+  : g_directive_location('$1').
 
 ScalarTypeDefinition -> 'scalar' Name
   : #p_scalar { id = '$2' }.
@@ -450,6 +473,28 @@ g_null({null, _}) -> null.
 g_list(L) when is_list(L) -> L.
 g_input_object(KVPairs) ->
     {input_object, KVPairs}.
+
+g_directive_location({name, _, <<"QUERY">>}) -> 'QUERY';
+g_directive_location({name, _, <<"MUTATION">>}) -> 'MUTATION';
+g_directive_location({name, _, <<"SUBSCRIPTION">>}) -> 'SUBSCRIPTION';
+g_directive_location({name, _, <<"FIELD">>}) -> 'FIELD';
+g_directive_location({name, _, <<"FRAGMENT_DEFINITION">>}) -> 'FRAGMENT_DEFINITION';
+g_directive_location({name, _, <<"FRAGMENT_SPREAD">>}) -> 'FRAGMENT_SPREAD';
+g_directive_location({name, _, <<"INLINE_FRAGMENT">>}) -> 'INLINE_FRAGMENT';
+g_directive_location({name, _, <<"SCHEMA">>}) -> 'SCHEMA';
+g_directive_location({name, _, <<"SCALAR">>}) -> 'SCALAR';
+g_directive_location({name, _, <<"OBJECT">>}) -> 'OBJECT';
+g_directive_location({name, _, <<"FIELD_DEFINITION">>}) -> 'FIELD_DEFINITION';
+g_directive_location({name, _, <<"ARGUMENT_DEFINITION">>}) -> 'ARGUMENT_DEFINITION';
+g_directive_location({name, _, <<"INTERFACE">>}) -> 'INTERFACE';
+g_directive_location({name, _, <<"UNION">>}) -> 'UNION';
+g_directive_location({name, _, <<"ENUM">>}) -> 'ENUM';
+g_directive_location({name, _, <<"ENUM_VALUE">>}) -> 'ENUM_VALUE';
+g_directive_location({name, _, <<"INPUT_OBJECT">>}) -> 'INPUT_OBJECT';
+g_directive_location({name, _, <<"INPUT_FIELD_DEFINITION">>}) -> 'INPUT_FIELD_DEFINITION';
+g_directive_location({name, Line, N}) -> return_error(Line, {invalid_directive_location, N}).
+
+
 
 %% Convert keywords into binaries if they don't occur in the KW-position
 keyword({A, Line}) when is_atom(A) ->

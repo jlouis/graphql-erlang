@@ -451,11 +451,8 @@ resolve_field_value(Ctx, #object_type { id = OID,
         object_type => OID,
         object_directives => format_directives(ODirectives)
     },
-    try (if
-        is_function(Fun, 4) -> Fun(CtxAnnot, Value, Name, Args);
-        is_function(Fun, 3) -> Fun(CtxAnnot, Value, Args)
-    end) of
-        V ->
+    try Fun(CtxAnnot, Value, Name, Args) of
+        V -> 
             case handle_resolver_result(V) of
                 wrong ->
                     Obj = graphql_schema:id(ObjectType),
@@ -842,7 +839,7 @@ fragments(Frags) ->
 
 %% -- FUNCTION RESOLVERS ---------------------------------
 
-resolver_function(_ObjType, R) when is_function(R, 3) -> R;
+resolver_function(_ObjType, R) when is_function(R, 4) -> R;
 resolver_function(#object_type {
                      id = Id,
                      resolve_module = undefined }, undefined) ->

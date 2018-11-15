@@ -11,14 +11,18 @@
       | schema_base_type().
 
 -type resolver_args() :: #{ binary() => term() }.
--type location() :: query | mutation | field
-                  | fragment_definition | fragment_spread | inline_fragment.
 
--type resolver() :: fun ((ctx, term(), resolver_args()) -> term()).
+-type directive_location() :: 'QUERY' | 'MUTATION' | 'SUBSCRIPTION' | 'FIELD'
+        | 'FRAGMENT_DEFINITION' | 'FRAGMENT_SPREAD' | 'INLINE_FRAGMENT' | 'SCHEMA'
+        | 'SCALAR' | 'OBJECT' | 'FIELD_DEFINITION' | 'ARGUMENT_DEFINITION' | 'INTERFACE'
+        | 'UNION' | 'ENUM' | 'ENUM_VALUE' | 'INPUT_OBJECT' | 'INPUT_FIELD_DEFINITION'.
+
+-type resolver() :: fun ((ctx, term(), binary(), resolver_args()) -> term()).
 
 -record(directive_type,
         { id :: binary(),
-          locations :: [location()],
+          description :: undefined | binary(),
+          locations :: [directive_location()],
           args = #{} :: #{ binary() => schema_arg() }
         }).
 -type directive_type() :: #directive_type{}.

@@ -70,7 +70,13 @@ x({scalar, #{ id := ID, description := Desc} = Scalar}) ->
                    description = binarize(Desc),
                    directives = directives(Scalar),
                    resolve_module = ModuleResolver
-                 }.
+                 };
+x({directive, #{ id := ID, description := Desc } = Obj}) ->
+    #directive_type { id = c_id(ID),
+                      description = binarize(Desc),
+                      args = c_directive_args(Obj),
+                      locations = c_directive_locations(Obj)
+                    }.
 
 %% -- ROOT -------------
 root_query(#{ query := Q}) -> binarize(Q);
@@ -96,7 +102,8 @@ c_enum_val(K, #{ value := V, description := Desc } = Map) ->
     {V, #enum_value {
         val = Key,
         description = binarize(Desc),
-        deprecation = deprecation(Map) }}.
+        deprecation = deprecation(Map),
+        directives = directives(Map)}}.
 
 %% -- FIELDS ----------
 c_input_value(K, V) ->
@@ -140,9 +147,14 @@ non_null(Ty) ->
         _Otherwise -> list_to_binary(Ty)
     end.
 
-c_field_val_resolve(#{ resolve := R}) when is_function(R, 3) -> R;
-c_field_val_resolve(#{ resolve := R}) when is_function(R) -> exit(wrong_resolver_arity);
-c_field_val_resolve(_) -> undefined.
+c_field_val_resolve(#{ resolve := R }) when is_function(R, 3) ->
+    fun (Ctx, Obj, _FieldName, Args) -> R(Ctx, Obj, Args) end;
+c_field_val_resolve(#{ resolve := R }) when is_function(R, 4) ->
+    R;
+c_field_val_resolve(#{ resolve := R }) when is_function(R) ->
+    exit(wrong_resolver_arity);
+c_field_val_resolve(_) ->
+    undefined.
 
 c_field_val_args(#{ args := Args }) ->map_2(fun c_args/2, Args);
 c_field_val_args(_) -> #{}.
@@ -197,6 +209,13 @@ enum_resolve(_) ->
 directives(#{ directives := Ds }) -> Ds;
 directives(#{}) -> [].
 
+c_directive_args(#{ args := Args }) -> map_2(fun c_args/2, Args);
+c_directive_args(#{}) -> #{}.
+
 %% -- Deprecation
 deprecation(#{ deprecation := Reason }) -> binarize(Reason);
 deprecation(#{}) -> undefined.
+
+%% -- directive locations
+c_directive_locations(#{ locations := Ls }) ->
+    Ls.

@@ -109,7 +109,21 @@ mk(#{ interfaces := IF },
        resolve_module => Mod,
        directives => Directives,
        fields => Fields
-      }}.
+      }};
+mk(#{},
+    #p_directive{ id = ID,
+                  description = Description,
+                  args = Args,
+                  locations = Locations }) ->
+    Name = name(ID),
+    {directive,
+        #{
+            id => Name,
+            description => description(Description),
+            args => handle_args(Args),
+            locations => Locations
+        }}.
+
 
 fields(Raw) ->
     maps:from_list([field(R) || R <- Raw]).
@@ -135,6 +149,7 @@ schema_defn(#p_interface{}) -> true;
 schema_defn(#p_union{}) -> true;
 schema_defn(#p_scalar{}) -> true;
 schema_defn(#p_enum{}) -> true;
+schema_defn(#p_directive{}) -> true;
 schema_defn(_) -> false.
 
 report_other_entries([]) -> ok;
@@ -230,3 +245,4 @@ mapping(Name, Map) ->
             maps:get(default, Map);
         X -> X
     end.
+

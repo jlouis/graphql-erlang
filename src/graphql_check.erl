@@ -157,10 +157,10 @@ infer_output_type(Ctx, Ty) ->
 %% a valid type for that expression. This is mostly handled by
 %% a lookup into the environment.
 infer(Ctx, #directive { id = ID }) ->
-    case graphql_ast:name(ID) of
-        <<"include">> -> {ok, graphql_directives:include()};
-        <<"skip">> -> {ok, graphql_directives:skip()};
-        Name -> err(Ctx, {unknown_directive, Name})
+    Name = graphql_ast:name(ID),
+    case graphql_schema:lookup(Name) of
+        #directive_type{} = Tau -> {ok, Tau};
+        not_found -> err(Ctx, {unknown_directive, Name})
     end;
 infer(Ctx, #op { ty = Ty } = Op) ->
     CtxP = add_path(Ctx, Op),
@@ -424,7 +424,7 @@ check_sset_(Ctx, [#frag_spread { directives = Dirs } = FragSpread | Fs], Sigma) 
     CtxP = add_path(Ctx, FragSpread),
     {ok, #frag { schema = Tau }} = infer(Ctx, FragSpread),
     ok = sub_output(CtxP, Tau, Sigma),
-    {ok, CDirectives} = check_directives(CtxP, fragment_spread, Dirs),
+    {ok, CDirectives} = check_directives(CtxP, 'FRAGMENT_SPREAD', Dirs),
     {ok, [FragSpread#frag_spread { directives = CDirectives } | Rest]};
 check_sset_(Ctx, [#field{} = F|Fs], {non_null, Ty}) ->
     check_sset_(Ctx, [F|Fs], Ty);
@@ -434,7 +434,7 @@ check_sset_(Ctx, [#field{ args = Args, directives = Dirs,
                           selection_set = SSet } = F | Fs], Sigma) ->
     {ok, Rest} = check_sset_(Ctx, Fs, Sigma),
     CtxP = add_path(Ctx, F),
-    {ok, CDirectives} = check_directives(CtxP, field, Dirs),
+    {ok, CDirectives} = check_directives(CtxP, 'FIELD', Dirs),
     {ok, FieldTypes} = fields(CtxP, Sigma),
     case infer_field(Ctx, F, FieldTypes) of
         {ok, {introspection, typename} = Ty} ->
@@ -472,7 +472,7 @@ check(Ctx, #frag { directives = Dirs,
     CtxP = add_path(Ctx, F),
     {ok, Tau} = infer(Ctx, F),
     ok = sub_output(CtxP, Tau, Sigma),
-    {ok, CDirectives} = check_directives(CtxP, inline_fragment, Dirs),
+    {ok, CDirectives} = check_directives(CtxP, 'INLINE_FRAGMENT', Dirs),
     {ok, CSSet} = check_sset(CtxP, SSet, Tau),
     {ok, F#frag { schema = Tau,
                   directives = CDirectives,
@@ -480,9 +480,9 @@ check(Ctx, #frag { directives = Dirs,
 check(Ctx, #op { vardefs = VDefs, directives = Dirs, selection_set = SSet } = Op,
            #object_type {} = Sigma) ->
     CtxP = add_path(Ctx, Op),
-    OperationType = operation_context(Op),
+    DirectiveLocation = directive_location(Op),
     {ok, VarDefs} = var_defs(CtxP, VDefs),
-    {ok, CDirectives} = check_directives(CtxP, OperationType, Dirs),
+    {ok, CDirectives} = check_directives(CtxP, DirectiveLocation, Dirs),
     {ok, CSSet} = check_sset(CtxP#ctx { vars = VarDefs }, SSet, Sigma),
     {ok, Op#op {
            schema = Sigma,
@@ -884,13 +884,13 @@ fragenv(Frags) ->
     maps:from_list(
       [{graphql_ast:name(ID), annotate_frag(Frg)} || #frag { id = ID } = Frg <- Frags]).
 
-%% Figure out what kind of operation context we have
-operation_context(#op { ty = Ty }) ->
+%% Figure out what kind of directive location we are in
+directive_location(#op { ty = Ty }) ->
     case Ty of
-        undefined -> query;
-        {query, _} -> query;
-        {mutation, _} -> mutation;
-        {subscription, _} -> subscription
+        undefined -> 'QUERY';
+        {query, _} -> 'QUERY';
+        {mutation, _} -> 'MUTATION';
+        {subscription, _} -> 'SUBSCRIPTION'
     end.
 
 %% Pull out a value from a list of arguments. This is used to check
