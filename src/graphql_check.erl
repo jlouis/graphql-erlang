@@ -503,7 +503,7 @@ check_(#document{ definitions = Defs } = Doc) ->
                   fun(#frag{}) -> true; (_) -> false end,
                   Defs),
     FragEnv = fragenv(Fragments),
-    CtxP = add_path(#ctx{}, document),
+    CtxP = #ctx{},
     Ctx = CtxP#ctx { frags = FragEnv },
     COps = [begin
                 {ok, Type} = infer(Ctx, Op),

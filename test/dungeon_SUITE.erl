@@ -895,8 +895,7 @@ unknown_variable(Config) ->
     ID = ?config(known_goblin_id_1, Config),
     #{ errors :=
           [#{key := unbound_variable,
-             path := [<<"document">>,
-                      <<"GoblinQuery">>,
+             path := [<<"GoblinQuery">>,
                       <<"monster">>,
                       <<"id">>]}]} =
         run(Config,
@@ -909,8 +908,7 @@ missing_fragment(Config) ->
     ID = ?config(known_goblin_id_1, Config),
     #{ errors :=
            [#{key := unknown_fragment,
-              path := [<<"document">>,
-                       <<"GoblinQuery">>,
+              path := [<<"GoblinQuery">>,
                        <<"monster">>,
                        <<"GoblinFragment">>] }]} =
         run(Config,
@@ -927,7 +925,7 @@ null_input(Config) ->
              message :=
                  <<"The arg id is given a null, which is not allowed in the input path">>,
              path :=
-                 [<<"document">>,<<"TestNullInput">>,<<"room">>,
+                 [<<"TestNullInput">>,<<"room">>,
                   <<"id">>]}]} = run(Config, <<"test_null_input_2.graphql">>, <<"TestNullInput">>, #{}),
     %% The following bugs must fail because the value is null which is not allowed
     #{ errors := [#{ key := non_null }]} =
@@ -995,12 +993,12 @@ invalid_enums(Config) ->
     #{ errors :=
            [#{ key := enum_not_found,
                message := <<"The value <<\"AGGRESSIF\">> is not a valid enum value for type Mood">>,
-               path := [<<"document">>,<<"IMonster">>,<<"introduceMonster">>, <<"input">>, <<"mood">>]}]} =
+               path := [<<"IMonster">>,<<"introduceMonster">>, <<"input">>, <<"mood">>]}]} =
         run(Config, "invalid_enum_1.graphql", <<"IMonster">>, #{}),
     #{ errors :=
            [#{ key := enum_not_found,
                message := <<"The value <<>> is not a valid enum value for type Mood">>,
-               path := [<<"document">>,<<"IMonster">>,<<"introduceMonster">>, <<"input">>, <<"mood">>]}]} =
+               path := [<<"IMonster">>,<<"introduceMonster">>, <<"input">>, <<"mood">>]}]} =
         run(Config, "invalid_enum_2.graphql", <<"IMonster">>, #{}),
     ok.
 
