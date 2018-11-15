@@ -8,6 +8,15 @@ Versioning generally follows semantic versioning, but breaks it for
 releases less than 1.0.0 in certain situations. The changelog mentions
 the compatibility issues you are likely to encounter.
 
+## [Unreleased]
+
+### Compatiblity
+
+* The error_module now uses `err/2` and `crash/2` where there is no
+  `Path` component. Furthermore, the response format has changed to
+  `#{ message => iodata(), extensions => #{ key() => json() }}` in
+  accordance with spec compliance.
+
 ## [0.14.0] 2018-11-15 Another flag day release
 
 Check the sections below for the changes. We do believe they are all
