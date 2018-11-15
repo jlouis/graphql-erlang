@@ -10,7 +10,7 @@
 -export([path/1]).
 -export([format_ty/1]).
 
--export([crash/3, err/3]).
+-export([crash/2, err/2]).
 
 abort(Path, Msg) ->
     abort(Path, uncategorized, Msg).
@@ -25,30 +25,30 @@ mk(Path, Phase, Term) ->
        phase => Phase,
        error_term => Term
      }.
-    
+
 mk(Path, Phase, Term, Stack) ->
     X = mk(Path, Phase, Term),
     X#{ stack_trace => Stack }.
 
 %% ERROR FORMATTING
 %% ----------------------------------------------------------------------------
-crash(_Ctx, Path, Err) ->
+crash(_Ctx, Err) ->
     %% We dump the error data internally, but we don't dump crashes
     %% to the client.
     %%
     %% We recommend providing your own override of this function to include
     %% some unique request id for the request as well.
     error_logger:error_report([{crash, Err}]),
-    #{ path => Path,
-       key => internal_server_error,
-       message => <<"Internal Server Error">> }.
+    #{ message => <<"GraphQL Internal Server Error">>,
+       extensions => #{ key => internal_server_error } }.
 
-err(_Ctx, Path, Err) ->
+err(_Ctx, Err) ->
+    %% Default resolver for errors. This is used to print out an error
+    %% To user of the API. It can be used to manipulate the error and
+    %% give a useful message to an end user
     Msg = io_lib:format("~p", [Err]),
-    #{ path => Path,
-       key => resolver_error,
-       message => iolist_to_binary(Msg)
-     }.
+    #{ message => Msg,
+       extensions => #{ key => resolver_error } }.
 
 format_errors(Ctx, Errs) ->
     case maps:get(error_module, Ctx, none) of
@@ -61,14 +61,28 @@ format_errors(Ctx, Errs) ->
 format_errors_(_Ctx, []) -> [];
 format_errors_(#{ error_module := Mod } = Ctx, [#{ path := Path, phase := Phase, error_term := Term } | Es]) ->
     Res = case Term of
-              {resolver_crash, T} -> Mod:crash(Ctx, Path, T);
-              {resolver_error, T} -> Mod:err(Ctx, Path, T);
+              {resolver_crash, T} ->
+                  CrashResponse = Mod:crash(Ctx, T),
+                  check_error_response(Path, CrashResponse);
+              {resolver_error, T} ->
+                  ErrResponse = Mod:err(Ctx, T),
+                  check_error_response(Path, ErrResponse);
               Other ->
-                  #{ path => Path,
-                     key => err_key(Phase, Other),
-                     message => iolist_to_binary(err_msg({Phase, Other})) }
+                  OtherResponse = #{
+                                    extensions => #{ key => err_key(Phase, Other) },
+                                    message => err_msg({Phase, Other}) },
+                  check_error_response(Path, OtherResponse)
           end,
     [Res|format_errors_(Ctx, Es)].
+
+check_error_response(Path, #{ message := Message, extensions := Extensions })
+  when is_map(Extensions) ->
+    #{ path => Path,
+       message => iolist_to_binary(Message),
+       extensions => Extensions };
+check_error_response(Path, #{ message := Message }) ->
+    #{ path => Path,
+       message => iolist_to_binary(Message) }.
 
 %% -- Error handling dispatch to the module responsible for the error
 err_msg({execute, Reason})       -> execute_err_msg(Reason);
@@ -312,4 +326,3 @@ validate_err_msg({not_unique, X}) ->
     ["The name ", X, " is not a unique name"];
 validate_err_msg({cycles_in_fragments, Cycles}) ->
     io_lib:format("The following fragments contains cycles: ~p", [Cycles]).
-

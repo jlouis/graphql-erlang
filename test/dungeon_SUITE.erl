@@ -165,11 +165,11 @@ invalid_list_resolver(Config) ->
     Expected =
         #{data => #{<<"monster">> => #{<<"errorListResolution">> => null}},
           errors =>
-              [#{key => list_resolution,
-                 message =>
-                     <<"Internal Server error: A list is being incorrectly resolved">>,
-                 path =>
-                     [<<"monster">>,<<"errorListResolution">>]}]},
+              [#{ extensions => #{key => list_resolution },
+                  message =>
+                      <<"Internal Server error: A list is being incorrectly resolved">>,
+                  path =>
+                      [<<"monster">>,<<"errorListResolution">>]}]},
     Expected = th:x(Config, Q1),
     ok.
 
@@ -616,15 +616,15 @@ complex_modifiers(Config) ->
         #{ <<"monster">> := null },
         errors := [#{path :=
                          [<<"monster">>, <<"statsVariantThree">>],
-                     key := null_value,
+                     extensions := #{ key := null_value },
                      message := _} ,
                    #{path :=
                          [<<"monster">>, <<"statsVariantThree">>, 0],
-                     key := null_value,
+                     extensions := #{ key := null_value },
                      message := _},
                    #{path :=
                          [<<"monster">>, <<"statsVariantThree">>, 0, <<"attack">>],
-                     key := null_value,
+                     extensions := #{ key := null_value },
                      message := _}]
      } = run(Config, <<"MonsterStatsThree">>, #{ <<"id">> => MonsterID }),
     ok.
@@ -712,9 +712,9 @@ multiple_monsters_and_rooms(Config) ->
     #{ data := #{ <<"rooms">> := null },
        errors :=
            [#{path := [<<"rooms">>, 1],
-              key := null_value },
+              extensions := #{ key := null_value } },
             #{path := [<<"rooms">>, 1],
-              key := not_found } ]
+              extensions := #{ key := not_found } }]
      } = run(Config, <<"MultipleRooms">>,
              #{ <<"ids">> => [Room1, NonExistentRoom]}),
     ok.
@@ -726,7 +726,7 @@ error_handling(Config) ->
               #{<<"room">> =>
                     #{<<"id">> => <<"cm9vbTox">>,<<"magic">> => null}},
           errors =>
-              [#{key => resolver_error,
+              [#{extensions => #{ key => resolver_error },
                  message => <<"unsupported">>,
                  path => [<<"room">>,<<"magic">>]}]},
     Expected1 = run(Config, <<"RoomErrors1">>, #{ <<"id">> => Room1 }),
@@ -736,8 +736,8 @@ error_handling(Config) ->
               #{<<"room">> =>
                     #{<<"id">> => <<"cm9vbTox">>,<<"leyline">> => null}},
           errors =>
-              [#{key => internal_server_error,
-                 message => <<"Internal Server Error">>,
+              [#{extensions => #{ key => internal_server_error },
+                 message => <<"GraphQL Internal Server Error">>,
                  path => [<<"room">>,<<"leyline">>]}]},
     Expected2 = run(Config, <<"RoomErrors2">>, #{ <<"id">> => Room1 }),
     ok.
@@ -894,7 +894,7 @@ auxiliary_data(Config) ->
 unknown_variable(Config) ->
     ID = ?config(known_goblin_id_1, Config),
     #{ errors :=
-          [#{key := unbound_variable,
+          [#{extensions := #{ key := unbound_variable },
              path := [<<"GoblinQuery">>,
                       <<"monster">>,
                       <<"id">>]}]} =
@@ -907,7 +907,7 @@ unknown_variable(Config) ->
 missing_fragment(Config) ->
     ID = ?config(known_goblin_id_1, Config),
     #{ errors :=
-           [#{key := unknown_fragment,
+           [#{extensions := #{ key := unknown_fragment },
               path := [<<"GoblinQuery">>,
                        <<"monster">>,
                        <<"GoblinFragment">>] }]} =
@@ -921,27 +921,27 @@ null_input(Config) ->
     #{errors := [_]} =
         run(Config, <<"test_null_input_1.graphql">>, <<"TestNullInput">>, #{}),
     #{errors :=
-          [#{key := null_input,
+          [#{extensions := #{ key := null_input },
              message :=
                  <<"The arg id is given a null, which is not allowed in the input path">>,
              path :=
                  [<<"TestNullInput">>,<<"room">>,
                   <<"id">>]}]} = run(Config, <<"test_null_input_2.graphql">>, <<"TestNullInput">>, #{}),
     %% The following bugs must fail because the value is null which is not allowed
-    #{ errors := [#{ key := non_null }]} =
+    #{ errors := [#{ extensions := #{ key := non_null }}]} =
         run(Config, <<"test_null_input_3.graphql">>, <<"TestNullInput">>, #{}),
-    #{ errors := [#{ key := non_null }]} =
+    #{ errors := [#{ extensions := #{ key := non_null }}]} =
         run(Config, <<"test_null_input_4.graphql">>, <<"TestNullInput">>,
             #{ <<"input">> =>
                    #{ <<"name">> => <<"Orc">>,
                       <<"description">> => <<"This is an ORC!">>,
                       <<"weight">> => null }}),
-    #{ errors := [#{ key := missing_non_null_param }]} =
+    #{ errors := [#{ extensions := #{ key := missing_non_null_param }}]} =
         run(Config, <<"test_null_input_4.graphql">>, <<"TestNullInput">>,
             #{ <<"input">> =>
                    #{ <<"name">> => <<"Orc">>,
                       <<"description">> => <<"This is an ORC!">> }}),
-    #{ errors := [#{ key := missing_non_null_param }]} =
+    #{ errors := [#{ extensions := #{ key := missing_non_null_param }}]} =
         run(Config, <<"test_null_input_5.graphql">>, <<"TestNullInput">>, #{}),
     ok.
 
@@ -957,7 +957,7 @@ invalid_type_resolution(Config) ->
     #{ data := #{ <<"thing">> := null },
        errors :=
            [#{ path := [<<"thing">>],
-               key := type_resolver_error,
+               extensions := #{ key := type_resolver_error },
                message := <<"Couldn't type-resolve: kraken">> }
              ]} = run(Config, <<"LookupThing">>, Input),
     ok.
@@ -971,32 +971,32 @@ invalid_enums(Config) ->
       <<"mood">> => <<"AGGRESSIF">>
      },
     #{errors :=
-          [#{ key := enum_not_found,
+          [#{ extensions := #{ key := enum_not_found },
               message := <<"The value <<\"AGGRESSIF\">> is not a valid enum value for type Mood">>,
               path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}]} =
         run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input }),
     #{errors :=
-          [ #{ key := enum_not_found,
+          [ #{ extensions := #{ key := enum_not_found },
                message := <<"The value <<>> is not a valid enum value for type Mood">>,
                path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}]} =
         run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input#{ <<"mood">> => <<"">> }}),
     #{errors :=
-          [#{key := enum_not_found,
+          [#{extensions := #{ key := enum_not_found },
              message := <<"The value <<>> is not a valid enum value for type Mood">>,
              path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}]} =
           run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input#{ <<"mood">> => <<>> }}),
     #{errors :=
-      [#{key := param_mismatch,
+      [#{extensions := #{ key := param_mismatch },
          message := <<"The enum value matches types [Property] but was used in a context where an enum value of type Mood was expected">>,
          path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}]} =
         run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input#{ <<"mood">> => <<"DRAGON">> }}),
     #{ errors :=
-           [#{ key := enum_not_found,
+           [#{ extensions := #{  key := enum_not_found },
                message := <<"The value <<\"AGGRESSIF\">> is not a valid enum value for type Mood">>,
                path := [<<"IMonster">>,<<"introduceMonster">>, <<"input">>, <<"mood">>]}]} =
         run(Config, "invalid_enum_1.graphql", <<"IMonster">>, #{}),
     #{ errors :=
-           [#{ key := enum_not_found,
+           [#{ extensions := #{ key := enum_not_found },
                message := <<"The value <<>> is not a valid enum value for type Mood">>,
                path := [<<"IMonster">>,<<"introduceMonster">>, <<"input">>, <<"mood">>]}]} =
         run(Config, "invalid_enum_2.graphql", <<"IMonster">>, #{}),
@@ -1010,7 +1010,7 @@ input_coerce_error(Config) ->
       <<"hitpoints">> => 3,
       <<"mood">> => <<"AGGRESSIVE">>
      },
-    #{errors := [#{key := input_coercion,
+    #{errors := [#{extensions := #{ key := input_coercion },
                    path := [<<"IntroduceMonster">>,
                             <<"input">>,
                             <<"color">>]}]} =
@@ -1025,7 +1025,7 @@ input_coerce_error_exception(Config) ->
       <<"hitpoints">> => 3,
       <<"mood">> => <<"AGGRESSIVE">>
      },
-    #{errors := [#{key := input_coerce_abort,
+    #{errors := [#{extensions := #{ key := input_coerce_abort },
                    path := [<<"IntroduceMonster">>,
                             <<"input">>,
                             <<"color">>]}]} =
