@@ -15,6 +15,10 @@ the compatibility issues you are likely to encounter.
 To run this version of GraphQL, you have to carry out the following
 changes:
 
+- We removed resolver functions of the form `fun F/3` and only support
+  functions of the form `fun F/4` which streamlines the internals. As
+  a workaround for this, you can define a function `f(Ctx, Obj, _,
+  Args)` in its place and use that.
 - The pass `graphql:elaborate/1` is now gone. The pass is folded into
   the Type Check phase, so you have to update the code base to follow
   this new setup. In the short-term we'd like to support a
@@ -24,6 +28,9 @@ changes:
   we defined. In particular, there are no more annotations (They are
   now handled as directives). And docstrings are optional entries on
   definitions now.
+- Directive definitions are now actually checked.
+  The builtins `@skip`, `@include` and `@deprecated` work out of the box.
+  Other directives must be defined in the schema.
 - Alter your execute/4 functions to use `field_directives` and
   `object_directives` rather than using the old annotation code (if
   you applied this).
