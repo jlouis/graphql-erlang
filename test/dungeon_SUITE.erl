@@ -169,7 +169,7 @@ invalid_list_resolver(Config) ->
                  message =>
                      <<"Internal Server error: A list is being incorrectly resolved">>,
                  path =>
-                     [<<"Q">>,<<"monster">>,<<"errorListResolution">>]}]},
+                     [<<"monster">>,<<"errorListResolution">>]}]},
     Expected = th:x(Config, Q1),
     ok.
 
@@ -615,16 +615,15 @@ complex_modifiers(Config) ->
     #{ data :=
         #{ <<"monster">> := null },
         errors := [#{path :=
-                         [<<"MonsterStatsThree">>, <<"monster">>, <<"statsVariantThree">>],
+                         [<<"monster">>, <<"statsVariantThree">>],
                      key := null_value,
                      message := _} ,
                    #{path :=
-                         [<<"MonsterStatsThree">>, <<"monster">>, <<"statsVariantThree">>, 0],
+                         [<<"monster">>, <<"statsVariantThree">>, 0],
                      key := null_value,
                      message := _},
                    #{path :=
-                         [<<"MonsterStatsThree">>, <<"monster">>,
-                          <<"statsVariantThree">>, 0, <<"attack">>],
+                         [<<"monster">>, <<"statsVariantThree">>, 0, <<"attack">>],
                      key := null_value,
                      message := _}]
      } = run(Config, <<"MonsterStatsThree">>, #{ <<"id">> => MonsterID }),
@@ -694,19 +693,14 @@ multiple_monsters_and_rooms(Config) ->
     #{ data := #{
         <<"monsters">> := [
             #{ <<"id">> := ID1 }, #{ <<"id">> := ID2 } , null ]},
-       errors := [
-           #{path := [<<"MultipleMonsters">>, <<"monsters">>, 2],
-             message := <<"not_found">> }]
+       errors := [#{path := [<<"monsters">>, 2], message := <<"not_found">> }]
      } = run(Config, <<"MultipleMonsters">>, #{ <<"ids">> => [ID1, ID2, IDMissing] }),
 
     #{ data := #{
         <<"monsters">> := [
             #{ <<"id">> := ID1 }, null, #{ <<"id">> := ID2 }, null ]},
-       errors := [
-                  #{path := [<<"MultipleMonstersExprMissing">>, <<"monsters">>, 1],
-                    message := <<"not_found">>},
-                  #{path := [<<"MultipleMonstersExprMissing">>, <<"monsters">>, 3],
-                    message := <<"not_found">>}]
+       errors := [#{path := [<<"monsters">>, 1], message := <<"not_found">>},
+                  #{path := [<<"monsters">>, 3], message := <<"not_found">>}]
      } = run(Config, <<"MultipleMonstersExprMissing">>, #{}),
 
     Room1 = ?config(known_room_id, Config),
@@ -717,9 +711,9 @@ multiple_monsters_and_rooms(Config) ->
     % look for an existing room and a non existing room
     #{ data := #{ <<"rooms">> := null },
        errors :=
-           [#{path := [<<"MultipleRooms">>, <<"rooms">>, 1],
+           [#{path := [<<"rooms">>, 1],
               key := null_value },
-            #{path := [<<"MultipleRooms">>, <<"rooms">>, 1],
+            #{path := [<<"rooms">>, 1],
               key := not_found } ]
      } = run(Config, <<"MultipleRooms">>,
              #{ <<"ids">> => [Room1, NonExistentRoom]}),
@@ -734,7 +728,7 @@ error_handling(Config) ->
           errors =>
               [#{key => resolver_error,
                  message => <<"unsupported">>,
-                 path => [<<"RoomErrors1">>,<<"room">>,<<"magic">>]}]},
+                 path => [<<"room">>,<<"magic">>]}]},
     Expected1 = run(Config, <<"RoomErrors1">>, #{ <<"id">> => Room1 }),
 
     Expected2 =
@@ -744,7 +738,7 @@ error_handling(Config) ->
           errors =>
               [#{key => internal_server_error,
                  message => <<"Internal Server Error">>,
-                 path => [<<"RoomErrors2">>,<<"room">>,<<"leyline">>]}]},
+                 path => [<<"room">>,<<"leyline">>]}]},
     Expected2 = run(Config, <<"RoomErrors2">>, #{ <<"id">> => Room1 }),
     ok.
 
@@ -964,7 +958,7 @@ invalid_type_resolution(Config) ->
      },
     #{ data := #{ <<"thing">> := null },
        errors :=
-           [#{ path := [<<"LookupThing">>, <<"thing">>],
+           [#{ path := [<<"thing">>],
                key := type_resolver_error,
                message := <<"Couldn't type-resolve: kraken">> }
              ]} = run(Config, <<"LookupThing">>, Input),

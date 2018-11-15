@@ -88,8 +88,8 @@ collect_auxiliary_data() ->
 execute_query(#{ defer_request_id := ReqId } = Ctx, #op { selection_set = SSet,
                                                           schema = QType } = Op) ->
     #object_type{} = QType,
-    case execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self(),
-                                                  defer_target => top_level },
+    case execute_sset([], Ctx#{ defer_process => self(),
+                                defer_target => top_level },
                       SSet, QType, none) of
         {ok, Res, Errs} ->
             complete_top_level(Res, Errs);
@@ -104,8 +104,8 @@ execute_query(#{ defer_request_id := ReqId } = Ctx, #op { selection_set = SSet,
 execute_mutation(Ctx, #op { selection_set = SSet,
                             schema = QType } = Op) ->
     #object_type{} = QType,
-    case execute_sset([graphql_ast:id(Op)], Ctx#{ defer_process => self(),
-                                                  defer_target => top_level },
+    case execute_sset([], Ctx#{ defer_process => self(),
+                                defer_target => top_level },
                       SSet, QType, none) of
         %% In mutations, there is no way you can get deferred work
         %% So we just ignore the case here. If it ever occurs with a
