@@ -8,7 +8,10 @@ Versioning generally follows semantic versioning, but breaks it for
 releases less than 1.0.0 in certain situations. The changelog mentions
 the compatibility issues you are likely to encounter.
 
-## [Unreleased]
+## [0.14.0] 2018-11-15 Another flag day release
+
+Check the sections below for the changes. We do believe they are all
+for the better, but they might require some adaptation.
 
 ### Compatibility
 
