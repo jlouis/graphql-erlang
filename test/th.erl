@@ -1,6 +1,7 @@
 %%% Test Helper module
 -module(th).
 -include_lib("common_test/include/ct.hrl").
+-include("graphql_internal.hrl").
 -export([
          x/2, x/3, x/4,
          errors/1,
@@ -69,8 +70,8 @@ v(Q) ->
                ok = graphql:validate(AST),
                true
             catch
-                Class:Err ->
-                  ct:log("Error: ~p", [{Class, Err, erlang:get_stacktrace()}]),
+                ?EXCEPTION(Class, Err, Stacktrace) ->
+                  ct:log("Error: ~p", [{Class, Err, ?GET_STACK(Stacktrace)}]),
                   false
             end;
         Err ->
