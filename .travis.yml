@@ -9,7 +9,9 @@ matrix:
     - os: linux
       otp_release: 19.3
     - os: linux
-      otp_release: 20.1
+      otp_release: 20.3
+    - os: linux
+      otp_release: 21.1
 
 script: "make compile test dialyzer REBAR=./rebar3"
 
