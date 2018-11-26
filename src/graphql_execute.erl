@@ -396,8 +396,9 @@ field_closure(Path, #{ defer_target := Upstream } = Ctx,
                         demonitor = undefined,
                         result = {error, [{worker_crash, Pid, Reason}]}
                       };
-            (ResVal) ->
+            (ResolverResult) ->
                 remove_monitor(Monitor),
+                ResVal = handle_resolver_result(ResolverResult),
                 case complete_value(Path, Ctx, ElaboratedTy, Fields, ResVal) of
                     {ok, Result, Errs} ->
                         #done { upstream = Upstream,
