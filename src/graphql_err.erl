@@ -40,7 +40,7 @@ crash(_Ctx, Err) ->
     %% some unique request id for the request as well.
     error_logger:error_report([{crash, Err}]),
     #{ message => <<"GraphQL Internal Server Error">>,
-       extensions => #{ key => internal_server_error } }.
+       extensions => #{ code => internal_server_error } }.
 
 err(_Ctx, Err) ->
     %% Default resolver for errors. This is used to print out an error
@@ -48,7 +48,7 @@ err(_Ctx, Err) ->
     %% give a useful message to an end user
     Msg = io_lib:format("~p", [Err]),
     #{ message => Msg,
-       extensions => #{ key => resolver_error } }.
+       extensions => #{ code => resolver_error } }.
 
 format_errors(Ctx, Errs) ->
     case maps:get(error_module, Ctx, none) of
@@ -69,7 +69,7 @@ format_errors_(#{ error_module := Mod } = Ctx, [#{ path := Path, phase := Phase,
                   check_error_response(Path, ErrResponse);
               Other ->
                   OtherResponse = #{
-                                    extensions => #{ key => err_key(Phase, Other) },
+                                    extensions => #{ code => err_code(Phase, Other) },
                                     message => err_msg({Phase, Other}) },
                   check_error_response(Path, OtherResponse)
           end,
@@ -91,14 +91,13 @@ err_msg({validate, Reason})      -> validate_err_msg(Reason);
 err_msg({uncategorized, Reason}) ->
     io_lib:format("General uncategorized error: ~p", [Reason]).
 
-err_key(execute, {type_resolver_error, _}) -> type_resolver_error;
-err_key(execute, {resolver_crash, _}) -> resolver_crash;
-err_key(execute, {resolver_error, _}) -> resolver_error;
-err_key(execute, Key)       -> simplify(Key);
-err_key(type_check, Key)    -> simplify(Key);
-err_key(validate, Key)      -> simplify(Key);
-err_key(uncategorized, Key) -> simplify(Key).
-
+err_code(execute, {type_resolver_error, _}) -> type_resolver_error;
+err_code(execute, {resolver_crash, _}) -> resolver_crash;
+err_code(execute, {resolver_error, _}) -> resolver_error;
+err_code(execute, Key)       -> simplify(Key);
+err_code(type_check, Key)    -> simplify(Key);
+err_code(validate, Key)      -> simplify(Key);
+err_code(uncategorized, Key) -> simplify(Key).
 
 simplify(A) when is_atom(A) -> A;
 simplify(B) when is_binary(B) -> B;

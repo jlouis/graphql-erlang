@@ -12,6 +12,9 @@ the compatibility issues you are likely to encounter.
 
 ### Compatiblity
 
+* The default errors use `code` in its errors: `#{ path => .., message
+  => .., extensions => #{ code => .. }}`, which follows the
+  specifications examples more closely.
 * The error_module now uses `err/2` and `crash/2` where there is no
   `Path` component. Furthermore, the response format has changed to
   `#{ message => iodata(), extensions => #{ key() => json() }}` in
