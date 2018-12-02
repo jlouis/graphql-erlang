@@ -310,18 +310,15 @@ collect_fields(Ctx, Type, [#frag_spread { id = ID, directives = Dirs }|SS], Visi
     end;
 collect_fields(Ctx, Type, [S|SS], Visited, Grouped) ->
     case S of
-        #frag{ id = FragID, selection_set = FragmentSSet, directives = Dirs } = Fragment ->
+        #frag{ selection_set = FragmentSSet, directives = Dirs } = Fragment ->
             case view_include_skip_directives(Ctx, Dirs) of
                 include ->
                     case does_fragment_type_apply(Type, Fragment) of
                         false ->
                             collect_fields(Ctx, Type, SS, Visited, Grouped);
                         true ->
-                            CtxP = add_path(Ctx, name(FragID)),
-                            %% TODO: Consider this, it is probably wrong to extend 
-                            %% with the path
                             FragGrouped =
-                                collect_fields(CtxP, Type, FragmentSSet, Visited),
+                                collect_fields(Ctx, Type, FragmentSSet, Visited),
                             Grouped2 = collect_groups(FragGrouped, Grouped),
                             collect_fields(Ctx, Type, SS, Visited, Grouped2)
                     end;
