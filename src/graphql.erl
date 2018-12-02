@@ -25,7 +25,8 @@
 
 %% Deferred execution
 -export([
-         token/1, reply_cast/2
+         token/1, reply_cast/2,
+         sync/3
          ]).
 
 %% Schema Definitions
@@ -69,6 +70,9 @@ throw(Msg) ->
                    token().
 token(#{ defer_process := Proc, defer_request_id := ReqId }) ->
     {'$graphql_token', Proc, ReqId, make_ref()}.
+
+sync(#{ defer_process := Proc, defer_request_id := ReqId }, Pid, Msg) ->
+    Proc ! {'$graphql_sync', ReqId, Pid, Msg}.
 
 %% @private
 token_ref({'$graphql_token', _, _, Ref}) -> Ref.

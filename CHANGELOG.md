@@ -24,6 +24,18 @@ Nothing yet
   `#{ message => iodata(), extensions => #{ key() => json() }}` in
   accordance with spec compliance.
 
+### Added
+
+* New command `graphql:sync/3`. Calling `graphql:sync(Ctx, Pid, Msg)`
+  will place a message into the GraphQL mailbox. When this message
+  occurs, we will send `Pid` a message `Msg`. This is useful for e.g.,
+  a data loader to have a barrier. Once the GraphQL system is done and
+  enters its defer loop where it awaits defers, the message will be
+  the first one, and processing of it will instruct the data loader to
+  start requesting early. Adding a new message will have it occur
+  after the current queue of defers (which will be ahead of them in
+  the mailbox).
+
 ## [0.14.0] 2018-11-15 Another flag day release
 
 Check the sections below for the changes. We do believe they are all
