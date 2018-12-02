@@ -103,9 +103,9 @@ simplify(A) when is_atom(A) -> A;
 simplify(B) when is_binary(B) -> B;
 simplify(T) when is_tuple(T) -> element(1, T).
 
--spec path([Input]) -> [binary()]
+-spec path(Input | [Input]) -> [binary()]
   when
-    Input :: document | frag() | op() | field() | binary() | [Input].
+    Input :: document | frag() | op() | field() | binary() | integer() | [Input].
 path(Path) ->
    F = fun
            F('ROOT') -> <<"ROOT">>;
@@ -126,7 +126,12 @@ path(Path) ->
            F(L) when is_list(L) ->
                [F(X) || X <- L]
        end,
-   lists:flatten([F(Elem) || Elem <- Path]).
+    if
+        is_list(Path) ->
+            lists:flatten([F(Elem) || Elem <- Path]);
+        true ->
+            F(Path)
+    end.
 
 format_ty(#enum_type { id = Ty }) -> Ty;
 format_ty(#input_object_type { id = Ty }) -> Ty;

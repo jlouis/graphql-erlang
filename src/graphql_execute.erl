@@ -6,9 +6,22 @@
 
 -export([x/1, x/2]).
 -export([builtin_input_coercer/1]).
-
 -type source() :: reference().
 -type demonitor() :: {reference(), pid()} .
+
+-record(ectx,
+        {
+         op_type = query :: query | mutation | subscription,
+         path = [] :: [any()],
+         params = #{} :: #{ binary() => term() },
+         frags = #{} :: #{ binary() =>  term() },
+         defer_request_id = undefined :: undefined | reference(),
+         defer_process = undefined :: undefined | pid(),
+         defer_target = top_level :: top_level | reference(),
+
+         ctx = #{} :: #{ atom() => term() }
+        }).
+-type ectx() :: #ectx{}.
 
 -record(done,
         { upstream :: source() | top_level,
@@ -46,19 +59,19 @@ x(Ctx, X) ->
 
 execute_request(InitialCtx, #document { definitions = Operations }) ->
     {Frags, Ops} = lists:partition(fun (#frag {}) -> true;(_) -> false end, Operations),
-    Ctx = InitialCtx#{ fragments => fragments(Frags),
-                       defer_request_id => make_ref() },
+    Ctx = InitialCtx#ectx{ frags = fragments(Frags),
+                           defer_request_id = make_ref() },
     case get_operation(Ctx, Ops) of
         {ok, #op { ty = {query, _} } = Op } ->
-            execute_query(Ctx#{ op_type => query }, Op);
+            execute_query(Ctx#ectx{ op_type = query }, Op);
         {ok, #op { ty = {subscription, _} } = Op } ->
-            execute_query(Ctx#{ op_type => subscription }, Op);
+            execute_query(Ctx#ectx{ op_type = subscription }, Op);
         {ok, #op { ty = undefined } = Op } ->
-            execute_query(Ctx#{ op_type => query }, Op);
+            execute_query(Ctx#ectx{ op_type = query }, Op);
         {ok, #op { ty = {mutation, _} } = Op } ->
-            execute_mutation(Ctx#{ op_type => mutation }, Op);
+            execute_mutation(Ctx#ectx{ op_type = mutation }, Op);
         {error, Reason} ->
-            {error, Errs} = err([], Reason),
+            {error, Errs} = err(Ctx, Reason),
             complete_top_level(undefined, Errs)
     end.
 
@@ -85,11 +98,12 @@ collect_auxiliary_data() ->
         []
     end.
 
-execute_query(#{ defer_request_id := ReqId } = Ctx, #op { selection_set = SSet,
-                                                          schema = QType }) ->
+execute_query(#ectx{ defer_request_id = ReqId } = Ctx,
+              #op { selection_set = SSet, schema = QType }) ->
     #object_type{} = QType,
-    case execute_sset([], Ctx#{ defer_process => self(),
-                                defer_target => top_level },
+    case execute_sset(Ctx#ectx{ path = [],
+                                defer_process = self(),
+                                defer_target = top_level },
                       SSet, QType, none) of
         {ok, Res, Errs} ->
             complete_top_level(Res, Errs);
@@ -104,8 +118,9 @@ execute_query(#{ defer_request_id := ReqId } = Ctx, #op { selection_set = SSet,
 execute_mutation(Ctx, #op { selection_set = SSet,
                             schema = QType }) ->
     #object_type{} = QType,
-    case execute_sset([], Ctx#{ defer_process => self(),
-                                defer_target => top_level },
+    case execute_sset(Ctx#ectx{ path = [],
+                                defer_process = self(),
+                                defer_target = top_level },
                       SSet, QType, none) of
         %% In mutations, there is no way you can get deferred work
         %% So we just ignore the case here. If it ever occurs with a
@@ -114,11 +129,11 @@ execute_mutation(Ctx, #op { selection_set = SSet,
             complete_top_level(Res, Errs)
     end.
 
-execute_sset(Path, #{ defer_target := DeferTarget } = Ctx, SSet, Type, Value) ->
-    GroupedFields = collect_fields(Path, Ctx, Type, SSet),
+execute_sset(#ectx{ defer_target = DeferTarget } = Ctx, SSet, Type, Value) ->
+    GroupedFields = collect_fields(Ctx, Type, SSet),
     Self = make_ref(),
     try
-        case execute_sset_field(Path, Ctx#{ defer_target => Self }, GroupedFields, Type, Value) of
+        case execute_sset_field(Ctx#ectx{ defer_target = Self }, GroupedFields, Type, Value) of
             {ok, Map, Errs} ->
                 {ok, Map, Errs};
             {defer, Map, Errs, Work, Missing} ->
@@ -193,14 +208,14 @@ merge_work(#work { items = I1, monitor = M1, demonitors = D1, timeout = T1},
             timeout = MaxTimeOut,
             demonitors = D2 ++ D1 }.
 
-execute_sset_field(Path, Ctx, Fields, Type, Value) ->
+execute_sset_field(Ctx, Fields, Type, Value) ->
     Map = [],
     Errs = [],
     Work = #work { items = [], monitor = #{}, demonitors = [] },
     Missing = #{},
-    execute_sset_field(Path, Ctx, Fields, Type, Value, Map, Errs, Work, Missing).
+    execute_sset_field(Ctx, Fields, Type, Value, Map, Errs, Work, Missing).
 
-execute_sset_field(_Path, _Ctx, [], _Type, _Value, Map, Errs, Work, Missing) ->
+execute_sset_field(_Ctx, [], _Type, _Value, Map, Errs, Work, Missing) ->
     Result = maps:from_list(lists:reverse(Map)),
     case Work#work.items of
         [] ->
@@ -210,23 +225,24 @@ execute_sset_field(_Path, _Ctx, [], _Type, _Value, Map, Errs, Work, Missing) ->
             true = maps:size(Missing) > 0,
             {defer, Result, Errs, Work, Missing}
     end;
-execute_sset_field(Path, Ctx, [{Key, [F|_] = Fields} | Next],
+execute_sset_field(Ctx, [{Key, [F|_] = Fields} | Next],
              Type, Value, Map, Errs, Work, Missing) ->
     case lookup_field(F, Type) of
         typename ->
-            execute_sset_field(Path, Ctx, Next, Type, Value,
+            execute_sset_field(Ctx, Next, Type, Value,
                                [{Key, typename(Type)} | Map],
                                Errs, Work, Missing);
         FieldType ->
-            case execute_field([Key | Path], Ctx, Type, Value, Fields, FieldType) of
+            CtxP = add_path(Ctx, Key),
+            case execute_field(CtxP, Type, Value, Fields, FieldType) of
                 {ok, Result, FieldErrs} ->
-                    execute_sset_field(Path, Ctx, Next, Type, Value,
+                    execute_sset_field(Ctx, Next, Type, Value,
                                        [{Key, Result} | Map],
                                        FieldErrs ++ Errs,
                                        Work, Missing);
                 #work { items = WUs } = Work2 ->
                     Ref = upstream_ref(WUs),
-                    execute_sset_field(Path, Ctx, Next, Type, Value, Map, Errs,
+                    execute_sset_field(Ctx, Next, Type, Value, Map, Errs,
                                        merge_work(Work, Work2),
                                        Missing#{ Ref => Key });
                 {error, Errors} ->
@@ -256,56 +272,61 @@ view_include_skip_directives(Ctx, [#directive { id = ID } = D | Next]) ->
             view_include_skip_directives(Ctx, Next)
     end.
 
-collect_fields(Path, Ctx, Type, SSet) -> collect_fields(Path, Ctx, Type, SSet, #{}).
+collect_fields(Ctx, Type, SSet) ->
+    collect_fields(Ctx, Type, SSet, #{}).
 
-collect_fields(Path, Ctx, Type, SSet, Visited) ->
-    collect_fields(Path, Ctx, Type, SSet, Visited, orddict:new()).
-collect_fields(_Path, _Ctx, _Type, [], _Visited, Grouped) ->
+collect_fields(Ctx, Type, SSet, Visited) ->
+    collect_fields(Ctx, Type, SSet, Visited, orddict:new()).
+
+collect_fields(_Ctx, _Type, [], _Visited, Grouped) ->
     Grouped;
-collect_fields(Path, Ctx, Type, [#field{ directives = Dirs } = S |SS], Visited, Grouped) ->
+collect_fields(Ctx, Type, [#field{ directives = Dirs } = S |SS], Visited, Grouped) ->
     case view_include_skip_directives(Ctx, Dirs) of
         include ->
-            collect_fields(Path, Ctx, Type, SS, Visited,
+            collect_fields(Ctx, Type, SS, Visited,
                            orddict:append(alias(S), S, Grouped));
         skip ->
-            collect_fields(Path, Ctx, Type, SS, Visited, Grouped)
+            collect_fields(Ctx, Type, SS, Visited, Grouped)
     end;
-collect_fields(Path, Ctx, Type, [#frag_spread { id = ID, directives = Dirs }|SS], Visited, Grouped) ->
+collect_fields(Ctx, Type, [#frag_spread { id = ID, directives = Dirs }|SS], Visited, Grouped) ->
     case view_include_skip_directives(Ctx, Dirs) of
         include ->
-            #{ fragments := Frags } = Ctx,
+            #ectx{ frags = Frags } = Ctx,
             Name = name(ID),
             %% TODO: Lift this to a function by itself called collect_view_fragment...
             case maps:is_key(Name, Visited) of
                 true ->
-                    collect_fields(Path, Ctx, Type, SS, Visited, Grouped);
+                    collect_fields(Ctx, Type, SS, Visited, Grouped);
                 false ->
                     case maps:get(Name, Frags, not_found) of
                         not_found ->
-                            collect_fields(Path, Ctx, Type, SS, Visited#{ Name => true }, Grouped);
+                            collect_fields(Ctx, Type, SS, Visited#{ Name => true }, Grouped);
                         #frag{} = F ->
-                            collect_fields(Path, Ctx, Type, [F | SS], Visited#{ Name => true }, Grouped)
+                            collect_fields(Ctx, Type, [F | SS], Visited#{ Name => true }, Grouped)
                     end
             end;
         skip ->
-            collect_fields(Path, Ctx, Type, SS, Visited, Grouped)
+            collect_fields(Ctx, Type, SS, Visited, Grouped)
     end;
-collect_fields(Path, Ctx, Type, [S |SS], Visited, Grouped) ->
+collect_fields(Ctx, Type, [S|SS], Visited, Grouped) ->
     case S of
         #frag{ id = FragID, selection_set = FragmentSSet, directives = Dirs } = Fragment ->
             case view_include_skip_directives(Ctx, Dirs) of
                 include ->
                     case does_fragment_type_apply(Type, Fragment) of
                         false ->
-                            collect_fields(Path, Ctx, Type, SS, Visited, Grouped);
+                            collect_fields(Ctx, Type, SS, Visited, Grouped);
                         true ->
+                            CtxP = add_path(Ctx, name(FragID)),
+                            %% TODO: Consider this, it is probably wrong to extend 
+                            %% with the path
                             FragGrouped =
-                                collect_fields([name(FragID) | Path], Ctx, Type, FragmentSSet, Visited),
+                                collect_fields(CtxP, Type, FragmentSSet, Visited),
                             Grouped2 = collect_groups(FragGrouped, Grouped),
-                            collect_fields(Path, Ctx, Type, SS, Visited, Grouped2)
+                            collect_fields(Ctx, Type, SS, Visited, Grouped2)
                     end;
                 skip ->
-                    collect_fields(Path, Ctx, Type, SS, Visited, Grouped)
+                    collect_fields(Ctx, Type, SS, Visited, Grouped)
             end
     end.
 
@@ -324,21 +345,22 @@ does_fragment_type_apply(
           #union_type { types = Types } -> lists:member(ID, Types)
       end.
 
-execute_field_await(Path,
-                    #{ defer_request_id := ReqId, default_timeout := TimeOut} = Ctx,
+execute_field_await(#ectx{ defer_request_id = ReqId, 
+                           ctx = #{ default_timeout := TimeOut}} = Ctx,
                     ElaboratedTy,
                     Fields,
                     Ref) ->
     receive
         {'$graphql_reply', ReqId, Ref, ResolvedValue} ->
-            complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue);
+            complete_value(Ctx, ElaboratedTy, Fields, ResolvedValue);
         {'$graphql_reply', _, _, _} ->
-            execute_field_await(Path, Ctx, ElaboratedTy, Fields, Ref)
+            execute_field_await(Ctx, ElaboratedTy, Fields, Ref)
     after TimeOut ->
             exit(defer_mutation_timeout)
     end.
 
-execute_field(Path, #{ op_type := OpType , default_timeout := DT} = Ctx,
+execute_field(#ectx{ op_type = OpType,
+                     ctx = #{ default_timeout := DT }} = Ctx,
               ObjType, Value, [F|_] = Fields,
               #schema_field { directives = Directives, resolve = RF}) ->
     Name = name(F),
@@ -350,14 +372,14 @@ execute_field(Path, #{ op_type := OpType , default_timeout := DT} = Ctx,
             %% A mutation must not run the mutation in the parallel, so it awaits
             %% the data straight away
             Ref = graphql:token_ref(Token),
-            execute_field_await(Path, Ctx, ElaboratedTy, Fields, Ref);
+            execute_field_await(Ctx, ElaboratedTy, Fields, Ref);
         {defer, Token, undefined} ->
             Monitor = undefined,
-            field_closure(Path, Ctx, ElaboratedTy, Fields, Token, Monitor, DT);
+            field_closure(Ctx, ElaboratedTy, Fields, Token, Monitor, DT);
         {defer, Token, DeferStateMap} when is_map(DeferStateMap) ->
-            defer_field_closure(Path, Ctx, ElaboratedTy, Fields, Token, DeferStateMap);
+            defer_field_closure(Ctx, ElaboratedTy, Fields, Token, DeferStateMap);
         ResolvedValue ->
-            complete_value(Path, Ctx, ElaboratedTy, Fields, ResolvedValue)
+            complete_value(Ctx, ElaboratedTy, Fields, ResolvedValue)
     end.
 
 build_monitor(W) when is_pid(W) ->
@@ -369,14 +391,15 @@ build_monitor(_W)->
 remove_monitor(undefined) -> ok;
 remove_monitor({M, _W}) -> demonitor(M, [flush]).
 
-defer_field_closure(Path, #{ defer_target := _Upstream, default_timeout := DT} = Ctx,
+defer_field_closure(#ectx{ defer_target = _Upstream,
+                           ctx = #{ default_timeout := DT}} = Ctx,
               ElaboratedTy, Fields, Token, DeferStateMap) ->
     TimeOut = maps:get(timeout, DeferStateMap, DT),
     Worker = maps:get(worker, DeferStateMap, undefined),
     Monitor = build_monitor(Worker),
-    field_closure(Path, Ctx, ElaboratedTy, Fields, Token, Monitor, TimeOut).
+    field_closure(Ctx, ElaboratedTy, Fields, Token, Monitor, TimeOut).
 
-field_closure(Path, #{ defer_target := Upstream } = Ctx,
+field_closure(#ectx{ defer_target = Upstream } = Ctx,
               ElaboratedTy, Fields, Token, Monitor, TimeOut) ->
     Ref = graphql:token_ref(Token),
     Closure =
@@ -399,7 +422,7 @@ field_closure(Path, #{ defer_target := Upstream } = Ctx,
             (ResolverResult) ->
                 remove_monitor(Monitor),
                 ResVal = handle_resolver_result(ResolverResult),
-                case complete_value(Path, Ctx, ElaboratedTy, Fields, ResVal) of
+                case complete_value(Ctx, ElaboratedTy, Fields, ResVal) of
                     {ok, Result, Errs} ->
                         #done { upstream = Upstream,
                                 key = Ref,
@@ -441,16 +464,21 @@ format_directives([#directive { id = N, args = Args }|Ds]) ->
                           [{name(ID), Value} || {ID, Value} <- Args])}
      | format_directives(Ds)].
 
-resolve_field_value(Ctx, #object_type { id = OID,
-                                        directives = ODirectives} = ObjectType,
+resolve_field_value(#ectx { ctx = CallerContext,
+                            defer_process = Proc,
+                            defer_request_id = ReqId },
+                    #object_type { id = OID,
+                                   directives = ODirectives} = ObjectType,
                     Value, Name, FDirectives, Fun, Args) ->
-    CtxAnnot = Ctx#{
-        field => Name,
-        field_directives => format_directives(FDirectives),
-        object_type => OID,
-        object_directives => format_directives(ODirectives)
+    AnnotatedCallerCtx =
+        CallerContext#{ field => Name,
+                        field_directives => format_directives(FDirectives),
+                        object_type => OID,
+                        object_directives => format_directives(ODirectives),
+                        defer_process => Proc,
+                        defer_request_id => ReqId
     },
-    try Fun(CtxAnnot, Value, Name, Args) of
+    try Fun(AnnotatedCallerCtx, Value, Name, Args) of
         V -> 
             case handle_resolver_result(V) of
                 wrong ->
@@ -491,26 +519,26 @@ handle_resolver_result({defer, Token, DeferStateMap}) ->
     {defer, Token, DeferStateMap};
 handle_resolver_result(_Unknown) -> wrong.
 
-complete_value(Path, Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
+complete_value(Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
     error_logger:warning_msg(
       "Canary: Type lookup during value completion for: ~p~n",
       [Ty]),
     SchemaType = graphql_schema:get(Ty),
-    complete_value(Path, Ctx, SchemaType, Fields, {ok, Value});
-complete_value(Path, #{ defer_target := Upstream } = Ctx,
+    complete_value(Ctx, SchemaType, Fields, {ok, Value});
+complete_value(#ectx{ defer_target = Upstream } = Ctx,
                {non_null, InnerTy}, Fields, Result) ->
     %% Note we handle arbitrary results in this case. This makes sure errors
     %% factor through the non-null handler here and that handles
     %% nested {error, Reason} tuples correctly
     Self = make_ref(),
-    case complete_value(Path, Ctx#{ defer_target := Self }, InnerTy, Fields, Result) of
+    case complete_value(Ctx#ectx{ defer_target = Self }, InnerTy, Fields, Result) of
         {error, Reason} ->
             %% Rule: Along a path, there is at most one error, so if the underlying
             %% object is at fault, don't care too much about this level, just pass
             %% on the error
-            err(Path, Reason);
+            err(Ctx, Reason);
         {ok, null, InnerErrs} ->
-            err(Path, null_value, InnerErrs);
+            err(Ctx, null_value, InnerErrs);
         {ok, _C, _E} = V ->
             V;
         #work { items = WUs } = Work ->
@@ -520,21 +548,21 @@ complete_value(Path, #{ defer_target := Upstream } = Ctx,
             %%
             %% Note: The closure ignores the key
             Work#work { items =
-                            [{Self, not_null_closure(Upstream, Self, Path,
+                            [{Self, not_null_closure(Upstream, Self, Ctx,
                                                      upstream_ref(WUs))}|WUs]}
     end;
-complete_value(_Path, _Ctx, _Ty, _Fields, {ok, null}) ->
+complete_value(_Ctx, _Ty, _Fields, {ok, null}) ->
     {ok, null, []};
-complete_value(Path, _Ctx, {list, _}, _Fields, {ok, V}) when not is_list(V) ->
-    null(Path, not_a_list);
-complete_value(Path, Ctx, {list, InnerTy}, Fields, {ok, Value}) ->
-    complete_value_list(Path, Ctx, InnerTy, Fields, Value);
-complete_value(Path, _Ctx, #scalar_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
-    complete_value_scalar(Path, ID, RM, Value);
-complete_value(Path, _Ctx, #enum_type { id = ID,
+complete_value(Ctx, {list, _}, _Fields, {ok, V}) when not is_list(V) ->
+    null(Ctx, not_a_list);
+complete_value(Ctx, {list, InnerTy}, Fields, {ok, Value}) ->
+    complete_value_list(Ctx, InnerTy, Fields, Value);
+complete_value(Ctx, #scalar_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
+    complete_value_scalar(Ctx, ID, RM, Value);
+complete_value(Ctx, #enum_type { id = ID,
                                         resolve_module = RM},
                _Fields, {ok, Value}) ->
-    case complete_value_scalar(Path, ID, RM, Value) of
+    case complete_value_scalar(Ctx, ID, RM, Value) of
         {ok, null, Errors} ->
             {ok, null, Errors};
         {ok, Result, Errors} ->
@@ -543,28 +571,28 @@ complete_value(Path, _Ctx, #enum_type { id = ID,
                 ok ->
                     {ok, Result, Errors};
                 {other_enums, _EnumTypes} ->
-                    null(Path, {invalid_enum_output, ID, Result}, Errors);
+                    null(Ctx, {invalid_enum_output, ID, Result}, Errors);
                 not_found ->
-                    null(Path, {invalid_enum_output, ID, Result}, Errors)
+                    null(Ctx, {invalid_enum_output, ID, Result}, Errors)
             end
     end;
-complete_value(Path, Ctx, #interface_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
-    complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value});
-complete_value(Path, Ctx, #union_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
-    complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value});
-complete_value(Path, Ctx, #object_type{} = Ty, Fields, {ok, Value}) ->
+complete_value(Ctx, #interface_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
+    complete_value_abstract(Ctx, Resolver, Fields, {ok, Value});
+complete_value(Ctx, #union_type{ resolve_type = Resolver }, Fields, {ok, Value}) ->
+    complete_value_abstract(Ctx, Resolver, Fields, {ok, Value});
+complete_value(Ctx, #object_type{} = Ty, Fields, {ok, Value}) ->
     SubSelectionSet = merge_selection_sets(Fields),
-    execute_sset(Path, Ctx, SubSelectionSet, Ty, Value);
-complete_value(Path, _Ctx, _Ty, _Fields, {error, Reason}) ->
-    null(Path, Reason).
+    execute_sset(Ctx, SubSelectionSet, Ty, Value);
+complete_value(Ctx, _Ty, _Fields, {error, Reason}) ->
+    null(Ctx, Reason).
 
 %% Complete an abstract value
-complete_value_abstract(Path, Ctx, Resolver, Fields, {ok, Value}) ->
+complete_value_abstract(Ctx, Resolver, Fields, {ok, Value}) ->
     case resolve_abstract_type(Resolver, Value) of
         {ok, ResolvedType} ->
-            complete_value(Path, Ctx, ResolvedType, Fields, {ok, Value});
+            complete_value(Ctx, ResolvedType, Fields, {ok, Value});
         {error, Reason} ->
-            null(Path, Reason)
+            null(Ctx, Reason)
     end.
 
 resolve_abstract_type(Module, Value) when is_atom(Module) ->
@@ -584,18 +612,18 @@ resolve_abstract_type(Resolver, Value) when is_function(Resolver, 1) ->
            {error, {resolve_type_crash, {Cl,Err}}}
     end.
 
-complete_value_scalar(Path, ID, RM, Value) ->
+complete_value_scalar(Ctx, ID, RM, Value) ->
     try RM:output(ID, Value) of
         {ok, Result} ->
             {ok, Result, []};
         {error, Reason} ->
-            null(Path, {output_coerce, ID, Value, Reason})
+            null(Ctx, {output_coerce, ID, Value, Reason})
     catch
         ?EXCEPTION(Cl, Err, Stacktrace) ->
             error_logger:error_msg(
               "Output coercer crash during value completion: ~p, stacktrace: ~p~n",
               [{Cl,Err,ID,Value}, ?GET_STACK(Stacktrace)]),
-            null(Path, {output_coerce_abort, ID, Value, {Cl, Err}})
+            null(Ctx, {output_coerce_abort, ID, Value, {Cl, Err}})
     end.
 
 assert_list_completion_structure(Ty, Fields, Results) ->
@@ -621,22 +649,23 @@ assert_list_completion_structure(Ty, Fields, Results) ->
             {error, list_resolution}
     end.
 
-complete_value_list(Path, #{ defer_target := Upstream } = Ctx,
+complete_value_list(#ectx{ defer_target = Upstream } = Ctx,
                     Ty, Fields, Results) ->
     IndexedResults = index(Results),
     case assert_list_completion_structure(Ty, Fields, IndexedResults) of
         {error, list_resolution} ->
-            null(Path, list_resolution);
+            null(Ctx, list_resolution);
         ok ->
             Self = make_ref(),
-            InnerCtx = Ctx#{ defer_target := Self },
+            InnerCtx = Ctx#ectx{ defer_target = Self },
             InitWork = #work {items = [], monitor = #{}, demonitors = [] },
             Completer =
                 fun
                     F([]) -> {[], InitWork, #{}};
                     F([{Index, Result}|Next]) ->
                         {Rest, Work1, Missing} = F(Next),
-                        case complete_value([Index|Path], InnerCtx, Ty, Fields, Result) of
+                        CtxP = add_path(InnerCtx, Index),
+                        case complete_value(CtxP, Ty, Fields, Result) of
                             {ok, V, Errs} ->
                                 Wrapper =
                                     fun
@@ -746,7 +775,7 @@ list_closure(Upstream, Self, Missing, List, Done) ->
             end
     end.
 
-not_null_closure(Upstream, Self, Path, Ref) ->
+not_null_closure(Upstream, Self, Ctx, Ref) ->
     fun
         (cancel) ->
             #done {
@@ -759,7 +788,7 @@ not_null_closure(Upstream, Self, Path, Ref) ->
         ({change_ref, _Old, New}) ->
             #work { demonitors = [],
                     monitor = #{},
-                    items = [{Self, not_null_closure(Upstream, Self, Path,
+                    items = [{Self, not_null_closure(Upstream, Self, Ctx,
                                                      New)}] };
         ({_Ref, {ok, null, InnerErrs}}) ->
             #done {
@@ -767,7 +796,7 @@ not_null_closure(Upstream, Self, Path, Ref) ->
                key = Self,
                cancel = [],
                demonitor = undefined,
-               result = err(Path, null_value, InnerErrs)
+               result = err(Ctx, null_value, InnerErrs)
               };
         ({_Ref, Res}) ->
             {ok, _, _} = Res, % Assert the current state of affairs
@@ -807,6 +836,8 @@ merge_selection_sets(Fields) ->
     lists:concat(
         lists:foldl(F, [], Fields)).
 
+get_operation(#ectx { ctx = CallerCtx }, Op) ->
+    get_operation(CallerCtx, Op);
 get_operation(#{ operation_name := undefined }, [Op]) ->
     {ok, Op};
 %% A variant is that certain clients send the empty string as their
@@ -889,7 +920,7 @@ var_coerce(Tau, {list, SType}, Value)                 -> [var_coerce(Tau, SType,
 value(Ctx, {Ty, Val})                     -> value(Ctx, Ty, Val);
 value(Ctx, #{ type := Ty, value := Val }) -> value(Ctx, Ty, Val).
 
-value(#{ params := Params } = _Ctx, SType, {var, ID, DType}) ->
+value(#ectx{ params = Params } = _Ctx, SType, {var, ID, DType}) ->
     %% Parameter expansion and type check is already completed
     %% at this stage
     Value = maps:get(name(ID), Params),
@@ -945,7 +976,9 @@ field_type(#field { schema = SF }) -> SF.
 
 %% -- CONTEXT CANONICALIZATION ------------
 canon_context(#{ params := Params } = Ctx) ->
-     Ctx#{ params := canon_params(Params) }.
+    CParams = canon_params(Params),
+    #ectx { params = CParams,
+            ctx = Ctx#{ params := CParams} }.
 
 canon_params(Ps) ->
      KVs = maps:to_list(Ps),
@@ -1079,15 +1112,21 @@ defer_handle_cancel(#defer_state { work = WorkMap,
 
 
 %% -- ERROR HANDLING --
-null(Path, Reason) ->
-    null(Path, Reason, []).
+null(Ctx, Reason) ->
+    null(Ctx, Reason, []).
 
-null(Path, Reason, More) ->
-    {error, Return} = err(Path, Reason, More),
+null(Ctx, Reason, More) ->
+    {error, Return} = err(Ctx, Reason, More),
     {ok, null, Return}.
 
-err(Path, Reason) ->
-    err(Path, Reason, []).
+err(Ctx, Reason) ->
+    err(Ctx, Reason, []).
 
-err(Path, Reason, More) when is_list(More) ->
+err(#ectx { path = Path }, Reason, More) when is_list(More) ->
     {error, [graphql_err:mk(Path, execute, Reason)|More]}.
+
+%% Add a path component to the context
+-spec add_path(ectx(), Component :: term()) -> ectx().
+add_path(#ectx{ path = P } = Ctx, C) ->
+    Ctx#ectx{ path = [graphql_err:path(C)|P] }.
+
