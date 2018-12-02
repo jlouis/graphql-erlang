@@ -59,10 +59,10 @@ insert(S, #{ canonicalize := true }) ->
                     {error, {already_exists, Identify(S)}}
             end
     catch
-        Class:Reason ->
+        ?EXCEPTION(Class, Reason, Stacktrace) ->
             error_logger:error_msg(
               "Schema canonicalization error: ~p stacktrace: ~p~n",
-              [{Class,Reason}, erlang:get_stacktrace()]),
+              [{Class,Reason}, ?GET_STACK(Stacktrace)]),
             {error, {schema_canonicalize, {Class, Reason}}}
     end;
 insert(S, #{}) ->

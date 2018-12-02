@@ -468,10 +468,10 @@ resolve_field_value(Ctx, #object_type { id = OID,
                     {error, {wrong_resolver_return, {Obj, Name}}};
                 Res -> Res
             end;
-        Cl:Err ->
+        ?EXCEPTION(Cl, Err, Stacktrace) ->
             M = #{ type => graphql_schema:id(ObjectType),
                    field => Name,
-                   stack => erlang:get_stacktrace(),
+                   stack => ?GET_STACK(Stacktrace),
                    class => Cl,
                    error => Err},
             {error, {resolver_crash, M}}
@@ -577,10 +577,10 @@ resolve_abstract_type(Resolver, Value) when is_function(Resolver, 1) ->
         {error, Reason} ->
             {error, {type_resolver_error, Reason}}
     catch
-       Cl:Err ->
+       ?EXCEPTION(Cl, Err, Stacktrace) ->
             error_logger:error_msg(
               "Type resolver crashed: ~p stacktrace: ~p~n",
-              [{Cl,Err}, erlang:get_stacktrace()]),
+              [{Cl,Err}, ?GET_STACK(Stacktrace)]),
            {error, {resolve_type_crash, {Cl,Err}}}
     end.
 
@@ -591,10 +591,10 @@ complete_value_scalar(Path, ID, RM, Value) ->
         {error, Reason} ->
             null(Path, {output_coerce, ID, Value, Reason})
     catch
-        Cl:Err ->
+        ?EXCEPTION(Cl, Err, Stacktrace) ->
             error_logger:error_msg(
               "Output coercer crash during value completion: ~p, stacktrace: ~p~n",
-              [{Cl,Err,ID,Value}, erlang:get_stacktrace()]),
+              [{Cl,Err,ID,Value}, ?GET_STACK(Stacktrace)]),
             null(Path, {output_coerce_abort, ID, Value, {Cl, Err}})
     end.
 
