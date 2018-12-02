@@ -15,6 +15,21 @@ This README provides the system overview and its mode of operation.
 
 See the file `CHANGELOG.md` in the root of the project.
 
+# Status
+
+Currently, the code implements all of the October 2016 GraphQL
+specification, except for a few areas:
+
+* Some validators are missing and pending implementation. The
+  important validators are present, however. Missing stuff are all
+  tracked as issues in this repository.
+* Parametrization inside fragments are not yet implemented fully.
+
+In addition, we are working towards June 2018 compliance. We already
+implemented many of the changes in the system. But we are still
+missing some parts. The implementation plan is on a demand driven
+basis for Shopgun currently, in that we tend to implement things are
+there is a need for them.
 
 # Documentation
 
@@ -226,9 +241,9 @@ type Ship {
 ```
 
 so a ship has a certain capacity and a current load in its cargo bay.
-We could store the `loadRatio` in the mnesia database and keep it up
-to date. But a more efficient way to handle this is to compute it from
-other data:
+We could store the `loadRatio` in the database and keep it up to date.
+But a more efficient way to handle this is to compute it from other
+data:
 
 ```erlang
 -module(ship).
@@ -434,35 +449,31 @@ mutation. You can build your `mutation_resource` such that it runs a
 `maps:take/2` on the argument input, runs the underlying mutation, and
 then adds back the `clientMutationId` afterwards.
 
-## Schema Extensions
+## Schema Definitions
 
-This GraphQL implementation loosely follows the Apollo extension
-mechanism. We plan to adapt whatever default is eventually chosen by
-the GraphQL people later. You can annotate the specification with
-additional tagging by writing `+Tag(Args)` where `Args` are
-traditional arguments for GraphQL data. These tags are available in
-the context when you execute fields. Some special tags exist:
-
-* `+description(text: String!)` - Used to write in-line documentation
-  on an element in the GraphQL schema. It is also possible to write a
-  multi-line comment through the use of backticks rather than double
-  quotes. GraphQL accepts markdown in a number of description blocks
-  and the backtick only blocks in-line preformatted sections, which is
-  why it what chosen.
+This GraphQL implementation follows the Jun2018 specification for
+defining a schema. In this format, one writes the schema according to
+specification, including doc-strings. What was represented as `tags`
+in an earlier implementation of GraphQL for Erlang is now represented
+as a `@directive` annotation, as per the specification.
 
 As an example, you can write something along the lines of:
 
 ```graphql
-+description(text: "A Ship from the Star Wars universe")
-    type Ship : Node {
-  +description(text: "Unique identity of the ship")
-      id: ID!
-  +description(text: "A descriptive name of the ship")
-      name: String
-    }
+"""
+A Ship from the Star Wars universe
+"""
+type Ship : Node {
+  "Unique identity of the ship"
+  id: ID!
+
+  "The name of the ship"
+  name: String
+}
 ```
 
-And the schema parser knows how to transform this into documentation.
+And the schema parser knows how to transform this into documentation
+for introspection.
 
 ## Resource modules
 
@@ -611,6 +622,9 @@ Resolution follows a rather simple pattern in GraphQL. If a client
 omits a field and it has a default value, the default value is input.
 Otherwise `null` is input. Clients *must* supply every non-null field.
 
+_Note:_ This limitation is lifted in the Jun2018 GraphQL
+specification, but this server doesn't implement that detail yet.
+
 On the server side, we handle arguments by supplying a map of KV pairs
 to the execute function. Suppose we have an input such as
 
@@ -680,17 +694,17 @@ transforming it into a *query plan* which can then be executed.
 
 * A *lexer* tokenizes the query
 * A *parser* constructs an AST of the query from the token stream
-* An *elaborator* walks the AST and attaches type information to the
-  AST by looking up data in the schema ETS table. This vastly
-  simplifies later phases as the necessary information is often
-  directly available in a pattern match. The elaborator also performs
-  an early exit for obviously malformed queries.
-* A *type checker* validates the query from a type perspective.
+* An *type checker* walks the AST and attaches type information to the
+  AST by looking up data in the schema ETS table. The pass also
+  detects type and validation errors. The type checker is written in a
+  bi-directional style so it flips between *inference*, in which we
+  deduce the type of a term, and *checking* in which we verify a term
+  has a given type.
 * A *validator* performs additional linting. Many queries are
   type-correct and thus *executable*, but are still malformed because
   they have nonsensical parts in them. The validator phase rejects
   such queries.
-* A *query plan* is formed.
+* A *query plan* is formed from the AST.
 * An *executor* runs the *query plan*.
 
 Of these tasks, only the execution phase in the end is
@@ -717,16 +731,6 @@ Additionally, Relay Modern provides specifications for cache
 refreshing, pagination, mutation specifications and so on. It is
 recommended you implement those parts in your system as it is part of
 a de-facto standard for how GraphQL servers tend to operate.
-
-# Status
-
-Currently, the code implements all of the October 2016 GraphQL
-specification, except for a few areas:
-
-* Some validators are missing and pending implementation. The
-  important validators are present, however. Missing stuff are all
-  tracked as issues in this repository.
-* Parametrization inside fragments are not yet implemented fully.
 
 # Tests
 
