@@ -10,6 +10,10 @@ the compatibility issues you are likely to encounter.
 
 ## [Unreleased]
 
+Nothing yet
+
+## [0.15.0] 2018-12-02 Hex.pm release
+
 ### Compatiblity
 
 * The default errors use `code` in its errors: `#{ path => .., message
