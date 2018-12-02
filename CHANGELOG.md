@@ -12,6 +12,10 @@ the compatibility issues you are likely to encounter.
 
 ### Added
 
+* Add proper support for OTP release 21 (by getong, 18年梦醒). Detect the
+  OTP 21 version, and if present, use the new stack-trace form. This
+  ensures backwards compatibility as well as proper stack trace
+  handling in new OTP releases.
 * New command `graphql:sync/3`. Calling `graphql:sync(Ctx, Pid, Msg)`
   will place a message into the GraphQL mailbox. When this message
   occurs, we will send `Pid` a message `Msg`. This is useful for e.g.,
