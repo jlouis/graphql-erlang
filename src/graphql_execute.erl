@@ -86,7 +86,7 @@ collect_auxiliary_data() ->
     end.
 
 execute_query(#{ defer_request_id := ReqId } = Ctx, #op { selection_set = SSet,
-                                                          schema = QType } = Op) ->
+                                                          schema = QType }) ->
     #object_type{} = QType,
     case execute_sset([], Ctx#{ defer_process => self(),
                                 defer_target => top_level },
@@ -102,7 +102,7 @@ execute_query(#{ defer_request_id := ReqId } = Ctx, #op { selection_set = SSet,
     end.
 
 execute_mutation(Ctx, #op { selection_set = SSet,
-                            schema = QType } = Op) ->
+                            schema = QType }) ->
     #object_type{} = QType,
     case execute_sset([], Ctx#{ defer_process => self(),
                                 defer_target => top_level },
