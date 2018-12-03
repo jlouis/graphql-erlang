@@ -28,9 +28,11 @@ the compatibility issues you are likely to encounter.
 
 ### Fixed
 
+* Re-instate the operation type in the callers context
 * Remove the occurrence of fragment names in `path` components of
   errors. These are not allowed per the Jun2018 specification and
   clarification.
+
 
 ## [0.15.0] 2018-12-02 Hex.pm release
 

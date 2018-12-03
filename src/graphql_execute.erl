@@ -482,14 +482,16 @@ format_directives([#directive { id = N, args = Args }|Ds]) ->
                           [{name(ID), Value} || {ID, Value} <- Args])}
      | format_directives(Ds)].
 
-resolve_field_value(#ectx { ctx = CallerContext,
+resolve_field_value(#ectx { op_type = OpType,
+                            ctx = CallerContext,
                             defer_process = Proc,
                             defer_request_id = ReqId },
                     #object_type { id = OID,
                                    directives = ODirectives} = ObjectType,
                     Value, Name, FDirectives, Fun, Args) ->
     AnnotatedCallerCtx =
-        CallerContext#{ field => Name,
+        CallerContext#{ op_type => OpType,
+                        field => Name,
                         field_directives => format_directives(FDirectives),
                         object_type => OID,
                         object_directives => format_directives(ODirectives),
