@@ -9,16 +9,37 @@
 -type source() :: reference().
 -type demonitor() :: {reference(), pid()} .
 
+%% Execution context
+%%
+%% This record is the context we have under execution, shortened to ectx.
 -record(ectx,
         {
+         %% What type of operation are we executing
          op_type = query :: query | mutation | subscription,
+
+         %% Track where we are in the response document. Use for error reporting
          path = [] :: [any()],
+
+         %% Params given for the execution (already assumed to be checked)
          params = #{} :: #{ binary() => term() },
+
+         %% Fragments in the execution context. Used for fragment expansion.
          frags = #{} :: #{ binary() =>  term() },
+
+         %% Unique request reference for this particular query
+         %% Used to discriminate this for older, stale queries injecting
+         %% commands into our current processing loop.
          defer_request_id = undefined :: undefined | reference(),
+
+         %% Who is the target of the defer. Currently always self().
          defer_process = undefined :: undefined | pid(),
+
+         %% If building a defer closure at this point in execution,
+         %% which closure should get the result upstream in the result
+         %% tree? Updated as we process different parts of the tree
          defer_target = top_level :: top_level | reference(),
 
+         %% The callers context given to the execute call
          ctx = #{} :: #{ atom() => term() }
         }).
 -type ectx() :: #ectx{}.
