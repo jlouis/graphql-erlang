@@ -68,7 +68,17 @@
 
 -type ty() :: schema_type() | schema_object().
 -type ty_name() :: binary().
-%% -type clause() :: op() | frag_spread() | frag().
+
+%% Results from the infer_type/2 call
+-record(itres,
+       {
+        %% Inferred tpe
+        ty :: term(),
+        %% Inferred polarity
+        polarity :: polarity()
+       }).
+-type itres() :: #itres{}.
+
 %% This is a bidirectional type checker. It proceeds by running three
 %% kinds of functions: synth(Gamma, E) -> {ok, T} | {error, Reason}
 %% which synthesizes a given type out of its constituent parts.
@@ -82,74 +92,74 @@
 
 %% Elaborate a type and also determine its polarity. This is used for
 %% input and output types
--spec infer_type(ctx(), ty_name() | ty()) -> {ok, {polarity(), ty()}}.
+-spec infer_type(ctx(), ty_name() | ty()) -> {ok, itres()}.
 infer_type(Ctx, Tau) ->
     case infer_type(Tau) of
         {error, Reason} ->
             err(Ctx, Reason);
-        {Polarity, TauPrime} ->
-            {ok, {Polarity, TauPrime}}
+        #itres{} = Res ->
+            {ok, Res}
     end.
 
--spec infer_type(ty_name() | ty()) -> {polarity(), ty()} | {error, Reason :: term()}.
+-spec infer_type(ty_name() | ty()) -> itres() | {error, Reason :: term()}.
 infer_type({non_null, Ty}) ->
     case infer_type(Ty) of
         {error, Reason} -> {error, Reason};
-        {Polarity, V} -> {Polarity, {non_null, V}}
+        #itres { ty = Tau } = Itres ->
+            Itres#itres { ty = {non_null, Tau}}
     end;
 infer_type({list, Ty}) ->
     case infer_type(Ty) of
         {error, Reason} -> {error, Reason};
-        {Polarity, V} -> {Polarity, {list, V}}
+        #itres { ty = Tau } = Itres ->
+            Itres#itres { ty = {list, Tau}}
     end;
 infer_type({scalar, Name}) ->
     #scalar_type{} = Ty = graphql_schema:get(Name),
-    {_polarity, Ty} = infer_type(Ty);
+    #itres { ty = Ty } = infer_type(Ty);
 %% NonPolar
-infer_type(#scalar_type{} = Ty) -> {'*', Ty};
-infer_type({enum, _} = E) -> {'*', E};
-infer_type(#enum_type{} = Ty) -> {'*', Ty};
+infer_type(#scalar_type{} = Ty) -> #itres { polarity = '*', ty = Ty};
+infer_type({enum, _} = Ty) -> #itres { polarity = '*', ty = Ty};
+infer_type(#enum_type{} = Ty) -> #itres { polarity = '*', ty = Ty};
 %% Positive
-infer_type(#input_object_type{} = Ty) -> {'+', Ty};
+infer_type(#input_object_type{} = Ty) -> #itres { polarity = '+', ty = Ty};
 %% Negative
-infer_type(#object_type{} = Ty) -> {'-', Ty};
-infer_type(#interface_type{} = Ty) -> {'-', Ty};
-infer_type(#union_type{} = Ty) -> {'-', Ty};
+infer_type(#object_type{} = Ty) -> #itres { polarity = '-', ty = Ty};
+infer_type(#interface_type{} = Ty) -> #itres { polarity = '-', ty = Ty};
+infer_type(#union_type{} = Ty) -> #itres { polarity = '-', ty = Ty};
 %% Lookup
 infer_type({name, _, N}) -> infer_type(N);
 infer_type(N) when is_binary(N) ->
     case graphql_schema:lookup(N) of
         not_found -> {error, {not_found, N}};
         %% Non-polar types
-        #enum_type{} = Enum -> {'*', Enum};
-        #scalar_type{} = Scalar -> {'*', Scalar};
+        #enum_type{} = Enum -> #itres { polarity = '*', ty = Enum};
+        #scalar_type{} = Scalar -> #itres { polarity = '*', ty = Scalar};
 
         %% Positive types
-        #input_object_type{} = IOType -> {'+', IOType};
+        #input_object_type{} = IOType -> #itres { polarity = '+', ty = IOType};
 
         %% Negative types
-        #object_type{} = OT -> {'-', OT};
-        #interface_type{} = IFace -> {'-', IFace};
-        #union_type{} = Union -> {'-', Union}
+        #object_type{} = OT -> #itres { polarity = '-', ty = OT};
+        #interface_type{} = IFace -> #itres { polarity = '-', ty = IFace};
+        #union_type{} = Union -> #itres { polarity = '-', ty = Union}
     end.
 
 %% Infer a type and assert it is valid in input context
 infer_input_type(Ctx, Ty) ->
     case infer_type(Ctx, Ty) of
-        {ok, {'*', Tau}} -> {ok, Tau};
-        {ok, {'+', Tau}} -> {ok, Tau};
-        {ok, {'-', _}} -> err(Ctx, {invalid_input_type, Ty})
+        {ok, #itres { polarity = '*', ty = Tau}} -> {ok, Tau};
+        {ok, #itres { polarity = '+', ty = Tau}} -> {ok, Tau};
+        {ok, #itres { polarity = '-', ty = Wrong}} -> err(Ctx, {invalid_input_type, Wrong})
     end.
 
 %% Infer a type and assert it is valid in output context
 infer_output_type(Ctx, Ty) ->
     case infer_type(Ctx, Ty) of
-        {ok, {'*', Tau}} -> {ok, Tau};
-        {ok, {'-', Tau}} -> {ok, Tau};
-        {ok, {'+', _}} -> err(Ctx, {invalid_output_type, Ty})
+        {ok, #itres { polarity = '*', ty = Tau}} -> {ok, Tau};
+        {ok, #itres { polarity = '-', ty = Tau}} -> {ok, Tau};
+        {ok, #itres { polarity = '+', ty = Wrong}} -> err(Ctx, {invalid_output_type, Wrong})
     end.
-
-
 
 %% Main inference judgement
 %%
