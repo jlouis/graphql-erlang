@@ -4,6 +4,10 @@
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
+-compile(inline).
+-compile(inline_list_funcs).
+-compile({inline_size, 50}).
+
 -export([x/1, x/2]).
 -export([builtin_input_coercer/1]).
 -type source() :: reference().
