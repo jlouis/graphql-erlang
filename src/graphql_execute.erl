@@ -1017,10 +1017,10 @@ defer_loop(#defer_state { req_id = Id , timeout = TimeOut} = State) ->
             defer_handle_work(State, Ref, Data);
         {'$graphql_reply', _, _, _} ->
             defer_loop(State);
-        {'graphql_sync', Id, Pid, Msg} ->
+        {'$graphql_sync', Id, Pid, Msg} ->
             Pid ! Msg,
             defer_loop(State);
-        {'graphql_sync', _, _, _} ->
+        {'$graphql_sync', _, _, _} ->
             defer_loop(State);
         {'DOWN', MRef, process, Pid, Reason} ->
             defer_monitor_down(State, MRef, Pid, Reason)
