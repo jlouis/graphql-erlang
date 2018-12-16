@@ -204,7 +204,7 @@ handle_call(populate_persistent_table, _From, State) ->
         ok ->
             {reply, ok, State}
     catch
-        error:badarg ->
+        error:_ ->
             {reply, {error, no_persistent_table_support}, State}
     end;
 handle_call({insert, X}, _From, State) ->
