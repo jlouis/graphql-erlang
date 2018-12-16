@@ -177,7 +177,7 @@ validate_schema() ->
     graphql_schema_validate:x().
 -else.
 validate_schema() ->
-    ok = graphql_schema:populate_persistent_table() of
+    ok = graphql_schema:populate_persistent_table(),
     graphql_schema_validate:x().
 -endif.
 
