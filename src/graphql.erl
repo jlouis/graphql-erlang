@@ -164,12 +164,9 @@ insert_root(Defn) ->
     graphql_schema:load_schema(Schema).
 
 %% STUB for now
--ifdef(HAVE_PERSISTENT_TERM).
 -spec validate_schema() -> ok | {error, any()}.
--else.
--spec validate_schema() -> ok.
--endif.
 
+-ifdef(HAVE_PERSISTENT_TERM).
 validate_schema() ->
     case graphql_schema:populate_persistent_table() of
         ok ->
@@ -178,6 +175,11 @@ validate_schema() ->
             error_logger:info_report([warning, {populate_persistent_table, Reason}])
     end,
     graphql_schema_validate:x().
+-else.
+validate_schema() ->
+    ok = graphql_schema:populate_persistent_table() of
+    graphql_schema_validate:x().
+-endif.
 
 populate_persistent_table() ->
     graphql_schema:populate_persistent_table().
