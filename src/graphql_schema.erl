@@ -10,7 +10,6 @@
          all/0,
          insert/1, insert/2,
          load/1, load_schema/1,
-         get/1,
          lookup/1, lookup_ets/1,
          validate_enum/2,
          lookup_interface_implementors/1
@@ -110,15 +109,6 @@ insert_new_(Rec) ->
 all() ->
     ets:match_object(?OBJECTS, '_').
 
--spec get(binary() | 'ROOT') -> schema_object().
-get(ID) ->
-    case lookup(ID) of
-        not_found ->
-            exit(schema_not_found);
-        V ->
-            V
-    end.
-
 %% Check if given enum value matches the given type id, other enums,
 %% or nothing at all.
 -spec validate_enum(binary(), binary()) -> ok | not_found | {other_enums, [#enum_type{}]}.
@@ -127,7 +117,7 @@ validate_enum(EnumID, EnumValue) ->
         #{EnumID := _} -> ok;
         EnumIDsMap ->
             EnumIDs = maps:keys(EnumIDsMap),
-            OtherEnums = [?MODULE:get(ID) || ID <- EnumIDs],
+            OtherEnums = [?MODULE:lookup(ID) || ID <- EnumIDs],
             {other_enums, OtherEnums}
     catch
         error:badarg ->

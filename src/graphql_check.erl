@@ -103,7 +103,7 @@ infer_type({list, Ty}) ->
         {Polarity, V} -> {Polarity, {list, V}}
     end;
 infer_type({scalar, Name}) ->
-    #scalar_type{} = Ty = graphql_schema:get(Name),
+    #scalar_type{} = Ty = graphql_schema:lookup(Name),
     {_polarity, Ty} = infer_type(Ty);
 %% NonPolar
 infer_type(#scalar_type{} = Ty) -> {'*', Ty};

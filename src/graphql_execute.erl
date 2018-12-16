@@ -543,8 +543,12 @@ complete_value(Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
     error_logger:warning_msg(
       "Canary: Type lookup during value completion for: ~p~n",
       [Ty]),
-    SchemaType = graphql_schema:get(Ty),
-    complete_value(Ctx, SchemaType, Fields, {ok, Value});
+    case graphql_schema:lookup(Ty) of
+        not_found ->
+            exit(schema_lookup_failed);
+        SchemaType ->
+            complete_value(Ctx, SchemaType, Fields, {ok, Value})
+    end;
 complete_value(#ectx{ defer_target = Upstream } = Ctx,
                {non_null, InnerTy}, Fields, Result) ->
     %% Note we handle arbitrary results in this case. This makes sure errors
@@ -620,7 +624,7 @@ resolve_abstract_type(Module, Value) when is_atom(Module) ->
 resolve_abstract_type(Resolver, Value) when is_function(Resolver, 1) ->
     try Resolver(Value) of
         {ok, Ty} ->
-            Obj = #object_type{} = graphql_schema:get(binarize(Ty)),
+            Obj = #object_type{} = graphql_schema:lookup(binarize(Ty)),
             {ok, Obj};
         {error, Reason} ->
             {error, {type_resolver_error, Reason}}
@@ -971,8 +975,12 @@ value(Ctx, Ty, Val) ->
         #enum_type {} ->
             Val;
         Bin when is_binary(Bin) ->
-            LoadedTy = graphql_schema:get(Bin),
-            value(Ctx, LoadedTy, Val)
+            case graphql_schema:lookup(Bin) of
+                not_found ->
+                    exit(schema_lookup_failed);
+                LoadedTy ->
+                    value(Ctx, LoadedTy, Val)
+            end
     end.
 
 value_object(_, _, []) -> [];
