@@ -33,7 +33,8 @@
 -export([
          load_schema/2,
          insert_schema_definition/1,
-         validate_schema/0
+         validate_schema/0,
+         populate_persistent_table/0
 ]).
 
 %% Internal
@@ -167,5 +168,9 @@ insert_root(Defn) ->
 validate_schema() ->
     ok = graphql_schema:populate_persistent_table(),
     graphql_schema_validate:x().
+
+populate_persistent_table() ->
+    graphql_schema:populate_persistent_table().
+
 
 

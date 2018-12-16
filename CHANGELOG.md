@@ -10,6 +10,16 @@ the compatibility issues you are likely to encounter.
 
 ## [Unreleased]
 
+### Compatibility
+
+* On OTP 21, we now assume the presence of `persistent_term` as in
+  Erlang/OTP 21.2. A new call `graphql:populate_persistent_table/0`
+  exists to populate this table for faster execution. It will be
+  automatically called on `graphql:validate_schema/0` as well, so if
+  you are using the (recommended) schema method of creating GraphQL
+  contracts, the system will now utilize the new feature. This also
+  means faster execution and less schema copying.
+
 ### Added
 
 * Add proper support for OTP release 21 (by getong, 18年梦醒). Detect the
@@ -32,7 +42,6 @@ the compatibility issues you are likely to encounter.
 * Remove the occurrence of fragment names in `path` components of
   errors. These are not allowed per the Jun2018 specification and
   clarification.
-
 
 ## [0.15.0] 2018-12-02 Hex.pm release
 
