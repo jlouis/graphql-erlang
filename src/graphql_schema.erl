@@ -143,11 +143,11 @@ lookup_interface_implementors(IFaceID) ->
 -spec lookup(binary() | 'ROOT') -> schema_object() | not_found.
 -ifdef(HAVE_PERSISTENT_TERM).
 lookup(ID) ->
-    try persistent_term:get(?PTERM_KEY) of
-        Map ->
-            maps:get(ID, Map, not_found)
-    catch
-        error:_ ->
+    case erlang:function_exported(persistent_term, get, 1) of
+        true ->
+            Map = persistent_term:get(?PTERM_KEY),
+            maps:get(ID, Map, not_found);
+        false ->
             lookup_ets(ID)
     end.
 -else.
