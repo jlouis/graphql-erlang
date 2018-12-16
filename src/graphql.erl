@@ -166,7 +166,12 @@ insert_root(Defn) ->
 %% STUB for now
 -spec validate_schema() -> ok | {error, any()}.
 validate_schema() ->
-    ok = graphql_schema:populate_persistent_table(),
+    case graphql_schema:populate_persistent_table() of
+        ok ->
+            ignore;
+        {error, Reason} ->
+            error_logger:info_report([warning, {populate_persistent_table, Reason}])
+    end,
     graphql_schema_validate:x().
 
 populate_persistent_table() ->

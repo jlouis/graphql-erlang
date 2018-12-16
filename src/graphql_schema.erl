@@ -141,8 +141,13 @@ lookup_interface_implementors(IFaceID) ->
 -spec lookup(binary() | 'ROOT') -> schema_object() | not_found.
 -ifdef(HAVE_PERSISTENT_TERM).
 lookup(ID) ->
-    Map = persistent_term:get(?PTERM_KEY),
-    maps:get(ID, Map, not_found).
+    try persistent_term:get(?PTERM_KEY) of
+        Map ->
+            maps:get(ID, Map, not_found)
+    catch
+        error:_ ->
+            lookup_ets(ID)
+    end.
 -else.
 lookup(ID) ->
     lookup_ets(ID).
@@ -193,8 +198,13 @@ handle_cast(_Msg, State) -> {noreply, State}.
 handle_call(populate_persistent_table, _From, State) ->
     Objects = all(),
     Map = maps:from_list([{id(O), O} || O <- Objects]),
-    ok = persistent_term:put(?PTERM_KEY, Map),
-    {reply, ok, State};
+    try persistent_term:put(?PTERM_KEY, Map) of
+        ok ->
+            {reply, ok, State}
+    catch
+        error:badarg ->
+            {reply, {error, no_persistent_table_support}, State}
+    end;
 handle_call({insert, X}, _From, State) ->
     case determine_table(X) of
         {error, unknown} ->
