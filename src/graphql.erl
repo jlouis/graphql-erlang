@@ -164,7 +164,12 @@ insert_root(Defn) ->
     graphql_schema:load_schema(Schema).
 
 %% STUB for now
+-ifdef(HAVE_PERSISTENT_TERM).
 -spec validate_schema() -> ok | {error, any()}.
+-else.
+-spec validate_schema() -> ok.
+-endif.
+
 validate_schema() ->
     case graphql_schema:populate_persistent_table() of
         ok ->

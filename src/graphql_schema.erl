@@ -45,11 +45,13 @@ reset() ->
     ok = graphql_builtins:standard_directives_inject(),
     ok.
 
--spec populate_persistent_table() -> ok | {error, Reason :: term()}.
+
 -ifdef(HAVE_PERSISTENT_TERM).
+-spec populate_persistent_table() -> ok | {error, Reason :: term()}.
 populate_persistent_table() ->
     gen_server:call(?MODULE, populate_persistent_table).
 -else.
+-spec populate_persistent_table() -> ok.
 populate_persistent_table() ->
     ok.
 -endif.
