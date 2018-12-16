@@ -21,7 +21,7 @@
   when QueryObj :: binary().
 
 augment_root(QName) ->
-    #object_type{ fields = Fields } = Obj = graphql_schema:get(QName),
+    #object_type{ fields = Fields } = Obj = graphql_schema:lookup_ets(QName),
     Schema = #schema_field {
                 ty = {non_null, <<"__Schema">>},
                 description = <<"The introspection schema">>,
@@ -49,24 +49,24 @@ schema_resolver(_Ctx, none, _, #{}) ->
                  directive(skip)]}}.
 
 type_resolver(_Ctx, none, _, #{ <<"name">> := N }) ->
-    case graphql_schema:lookup(N) of
+    case graphql_schema:lookup_ets(N) of
         not_found -> {ok, null};
         Ty -> render_type(Ty)
     end.
 
 query_type(_Ctx, _Obj, _, _) ->
-    #root_schema{ query = QType } = graphql_schema:get('ROOT'),
+    #root_schema{ query = QType } = graphql_schema:lookup_ets('ROOT'),
     render_type(QType).
 
 mutation_type(_Ctx, _Obj, _, _) ->
-    #root_schema { mutation = MType } = graphql_schema:get('ROOT'),
+    #root_schema { mutation = MType } = graphql_schema:lookup_ets('ROOT'),
     case MType of
         undefined -> {ok, null};
         MT -> render_type(MT)
     end.
 
 subscription_type(_Ctx, _Obj, _, _) ->
-    #root_schema { subscription = SType } = graphql_schema:get('ROOT'),
+    #root_schema { subscription = SType } = graphql_schema:lookup_ets('ROOT'),
     case SType of
         undefined -> {ok, null};
         ST -> render_type(ST)
@@ -83,7 +83,7 @@ schema_types(_Ctx, _Obj, _, _Args) ->
 
 %% Main renderer. Calls out to the subsets needed
 render_type(Name) when is_binary(Name) ->
-    case graphql_schema:lookup(Name) of
+    case graphql_schema:lookup_ets(Name) of
         not_found ->
            throw({not_found, Name});
        Ty -> render_type(Ty)

@@ -5,13 +5,13 @@
 -include("graphql_schema.hrl").
 -include("graphql_internal.hrl").
 
--export([start_link/0, reset/0]).
+-export([start_link/0, reset/0, populate_persistent_table/0]).
 -export([
          all/0,
          insert/1, insert/2,
          load/1, load_schema/1,
          get/1,
-         lookup/1,
+         lookup/1, lookup_ets/1,
          validate_enum/2,
          lookup_interface_implementors/1
         ]).
@@ -19,10 +19,13 @@
 
 -export([id/1]).
 
+
+
 %% Callbacks
 -export([init/1, handle_call/3, handle_cast/2, terminate/2, handle_info/2,
     code_change/3]).
 
+-define(PTERM_KEY, {?MODULE, objects}).
 -define(ENUMS, graphql_schema_enums).     % Table mapping enum values of type binary() to set of enum type ids
 -define(OBJECTS, graphql_schema_objects). % Table of all types
 
@@ -42,6 +45,15 @@ reset() ->
     ok = graphql_builtins:standard_types_inject(),
     ok = graphql_builtins:standard_directives_inject(),
     ok.
+
+-spec populate_persistent_table() -> ok.
+-ifdef(HAVE_PERSISTENT_TERM).
+populate_persistent_table() ->
+    gen_server:call(?MODULE, populate_persistent_table).
+-else.
+populate_persistent_table() ->
+    ok.
+-endif.
 
 -spec insert(any()) -> ok.
 insert(S) ->
@@ -100,9 +112,11 @@ all() ->
 
 -spec get(binary() | 'ROOT') -> schema_object().
 get(ID) ->
-    case ets:lookup(?OBJECTS, ID) of
-       [S] -> S;
-       _ -> exit(schema_not_found)
+    case lookup(ID) of
+        not_found ->
+            exit(schema_not_found);
+        V ->
+            V
     end.
 
 %% Check if given enum value matches the given type id, other enums,
@@ -135,11 +149,21 @@ lookup_interface_implementors(IFaceID) ->
     qlc:e(QH).
 
 -spec lookup(binary() | 'ROOT') -> schema_object() | not_found.
+-ifdef(HAVE_PERSISTENT_TERM).
 lookup(ID) ->
+    Map = persistent_term:get(?PTERM_KEY),
+    maps:get(ID, Map, not_found).
+-else.
+lookup(ID) ->
+    lookup_ets(ID).
+-endif.
+
+lookup_ets(ID) ->
     case ets:lookup(?OBJECTS, ID) of
        [S] -> S;
        _ -> not_found
     end.
+    
 
 -spec resolve_root_type(undefined | operation_type(), root_schema()) -> undefined | binary().
 resolve_root_type(undefined, #root_schema { query = Q }) -> Q;
@@ -176,6 +200,11 @@ handle_cast(_Msg, State) -> {noreply, State}.
   when
     S :: #state{},
     M :: term().
+handle_call(populate_persistent_table, _From, State) ->
+    Objects = all(),
+    Map = maps:from_list([{id(O), O} || O <- Objects]),
+    ok = persistent_term:put(?PTERM_KEY, Map),
+    {reply, ok, State};
 handle_call({insert, X}, _From, State) ->
     case determine_table(X) of
         {error, unknown} ->

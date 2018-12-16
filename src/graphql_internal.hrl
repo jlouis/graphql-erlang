@@ -153,9 +153,13 @@
           locations = [] :: [atom()]}).
 
 -ifdef(OTP_RELEASE). %% this implies 21 or higher
--define(EXCEPTION(Class, Reason, Stacktrace), Class:Reason:Stacktrace).
--define(GET_STACK(Stacktrace), Stacktrace).
+  -if(?OTP_RELEASE >= 21).
+    -define(HAVE_PERSISTENT_TERM, true).
+
+    -define(EXCEPTION(Class, Reason, Stacktrace), Class:Reason:Stacktrace).
+    -define(GET_STACK(Stacktrace), Stacktrace).
+  -endif.
 -else.
--define(EXCEPTION(Class, Reason, _), Class:Reason).
--define(GET_STACK(_), erlang:get_stacktrace()).
+  -define(EXCEPTION(Class, Reason, _), Class:Reason).
+  -define(GET_STACK(_), erlang:get_stacktrace()).
 -endif.
