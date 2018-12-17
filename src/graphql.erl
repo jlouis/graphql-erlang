@@ -33,7 +33,8 @@
 -export([
          load_schema/2,
          insert_schema_definition/1,
-         validate_schema/0
+         validate_schema/0,
+         populate_persistent_table/0
 ]).
 
 %% Internal
@@ -164,5 +165,24 @@ insert_root(Defn) ->
 
 %% STUB for now
 -spec validate_schema() -> ok | {error, any()}.
+
+-ifdef(HAVE_PERSISTENT_TERM).
 validate_schema() ->
+    case graphql_schema:populate_persistent_table() of
+        ok ->
+            ignore;
+        {error, Reason} ->
+            error_logger:info_report([warning, {populate_persistent_table, Reason}])
+    end,
     graphql_schema_validate:x().
+-else.
+validate_schema() ->
+    ok = graphql_schema:populate_persistent_table(),
+    graphql_schema_validate:x().
+-endif.
+
+populate_persistent_table() ->
+    graphql_schema:populate_persistent_table().
+
+
+

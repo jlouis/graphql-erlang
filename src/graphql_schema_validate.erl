@@ -43,7 +43,7 @@ root_lookup(Val, Type) ->
 %% - Directly written Mutations and Subscriptions MUST exist
 %% - Try to coerce otherwise 
 root_lookup_(Q, Type, Def) ->
-    case graphql_schema:lookup(Q) of
+    case graphql_schema:lookup_ets(Q) of
         not_found when Type == query -> err({schema_without_query, Q});
         not_found when Def == direct -> err({schema_missing_type, Q});
         not_found -> {ok, undefined};
@@ -269,7 +269,7 @@ all(F, [E|Es]) ->
     all(F, Es).
 
 lookup(Key) ->
-    case graphql_schema:lookup(Key) of
+    case graphql_schema:lookup_ets(Key) of
         not_found -> err({not_found, Key});
         X -> X
     end.

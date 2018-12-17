@@ -2,7 +2,7 @@ language: erlang
 sudo: false
 
 os: linux
-otp_release: 19.3
+otp_release: 21.2
 
 matrix:
   include:
@@ -12,6 +12,8 @@ matrix:
       otp_release: 20.3
     - os: linux
       otp_release: 21.1
+    - os: linux
+      otp_release: 21.2
 
 script: "make compile test dialyzer REBAR=./rebar3"
 
