@@ -58,7 +58,8 @@ groups() ->
              [ hello_world,
                hello_world_query,
                named_queries,
-               user_queries ] },
+               user_queries,
+               error_formatter ] },
 
     SchemaTest = {schema_test, [shuffle, parallel],
                   [
@@ -120,6 +121,25 @@ named_queries(Config) ->
     Expected = th:x(Config, Query1, <<"Q">>, #{ <<"id">> => <<"2">> }),
     Expected = th:x(Config, Query2, <<>>, #{ <<"id">> => <<"2">> }),
     ok.
+
+error_formatter(_Config) ->
+    T = fun(M) ->
+                graphql_err:format_errors(#{ error_module => failing_error_module },
+                                          M)
+        end,
+    [#{ message := <<"OK">>,
+        path := [] }] = T([#{ path => [], phase => {execute, {resolver_crash, x}},
+                              error_term => {resolver_crash, x}}]),
+    [#{ message := <<"Error Module Crashed">>,
+       path := [] }] = T([#{ path => [], phase => {execute, {resolver_crash, y}},
+                             error_term => {resolver_crash, y}}]),
+    [#{ message := <<"Internal Error: Error Module supplied wrong error response">>,
+        path := [] }] = T([#{ path => [], phase => {execute, {resolver_error, x}},
+                              error_term => {resolver_error, x}}]),
+    [#{ message := <<"Error Module Crashed">>,
+       path := [] }] = T([#{ path => [], phase => {execute, {resolver_error, y}},
+                             error_term => {resolver_error, y}}]).
+
 
 %% -- SCHEMA --------------------------------
 lex_schema(Config) ->

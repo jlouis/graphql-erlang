@@ -62,10 +62,10 @@ format_errors_(_Ctx, []) -> [];
 format_errors_(#{ error_module := Mod } = Ctx, [#{ path := Path, phase := Phase, error_term := Term } | Es]) ->
     Res = case Term of
               {resolver_crash, T} ->
-                  CrashResponse = Mod:crash(Ctx, T),
+                  CrashResponse = protect(Mod, crash, [Ctx, T]),
                   check_error_response(Path, CrashResponse);
               {resolver_error, T} ->
-                  ErrResponse = Mod:err(Ctx, T),
+                  ErrResponse = protect(Mod, err, [Ctx, T]),
                   check_error_response(Path, ErrResponse);
               Other ->
                   OtherResponse = #{
@@ -75,6 +75,18 @@ format_errors_(#{ error_module := Mod } = Ctx, [#{ path := Path, phase := Phase,
           end,
     [Res|format_errors_(Ctx, Es)].
 
+protect(M, F, A) ->
+    try apply(M, F, A) of
+        Val -> Val
+    catch
+        ?EXCEPTION(Cl, Err, Stacktrace) ->
+            error_logger:error_report([error_module_crash,
+                                      #{ class => Cl,
+                                         error => Err,
+                                         stack => ?GET_STACK(Stacktrace)}]),
+            #{ message => <<"Error Module Crashed">> }
+    end.
+
 check_error_response(Path, #{ message := Message, extensions := Extensions })
   when is_map(Extensions) ->
     #{ path => Path,
@@ -82,7 +94,12 @@ check_error_response(Path, #{ message := Message, extensions := Extensions })
        extensions => Extensions };
 check_error_response(Path, #{ message := Message }) ->
     #{ path => Path,
-       message => iolist_to_binary(Message) }.
+       message => iolist_to_binary(Message) };
+check_error_response(Path, Otherwise) ->
+    error_logger:error_report([error_response_incorrect, Otherwise]),
+    #{ path => Path,
+       message => <<"Internal Error: Error Module supplied wrong error response">> }.
+
 
 %% -- Error handling dispatch to the module responsible for the error
 err_msg({execute, Reason})       -> execute_err_msg(Reason);

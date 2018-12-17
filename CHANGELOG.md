@@ -46,6 +46,14 @@ the compatibility issues you are likely to encounter.
   `#{ message => iodata(), extensions => #{ key() => json() }}` in
   accordance with spec compliance.
 
+### Fixed
+
+* If the developer-supplied `error_module` crashes while rendering an
+  error, or returns an invalid result, we now protect against this
+  behavior in the GraphQL engine and supply a generic error result
+  instead.
+
+
 ## [0.14.0] 2018-11-15 Another flag day release
 
 Check the sections below for the changes. We do believe they are all
