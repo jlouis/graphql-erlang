@@ -397,7 +397,7 @@ execute_field(#ectx{ op_type = OpType,
             execute_field_await(Ctx, ElaboratedTy, Fields, Ref);
         {defer, Token, undefined} ->
             Monitor = undefined,
-            field_closure(Ctx, ElaboratedTy, Fields, Token, Monitor, DT);
+            field_closure(Ctx, ElaboratedTy, Fields, Token, Monitor, DT, queue:new());
         {defer, Token, DeferStateMap} when is_map(DeferStateMap) ->
             defer_field_closure(Ctx, ElaboratedTy, Fields, Token, DeferStateMap);
         ResolvedValue ->
@@ -418,11 +418,17 @@ defer_field_closure(#ectx{ defer_target = _Upstream,
               ElaboratedTy, Fields, Token, DeferStateMap) ->
     TimeOut = maps:get(timeout, DeferStateMap, DT),
     Worker = maps:get(worker, DeferStateMap, undefined),
+    ApplyChain = maps:get(apply, DeferStateMap, queue:new()),
     Monitor = build_monitor(Worker),
-    field_closure(Ctx, ElaboratedTy, Fields, Token, Monitor, TimeOut).
+    field_closure(Ctx, ElaboratedTy, Fields, Token, Monitor, TimeOut, ApplyChain).
 
 field_closure(#ectx{ defer_target = Upstream } = Ctx,
-              ElaboratedTy, Fields, Token, Monitor, TimeOut) ->
+              ElaboratedTy,
+              Fields,
+              Token,
+              Monitor,
+              TimeOut,
+              ApplyChain) ->
     Ref = graphql:token_ref(Token),
     Closure =
         fun
@@ -443,7 +449,8 @@ field_closure(#ectx{ defer_target = Upstream } = Ctx,
                       };
             (ResolverResult) ->
                 remove_monitor(Monitor),
-                ResVal = handle_resolver_result(ResolverResult),
+                AppliedResult = apply_chain(ResolverResult, queue:to_list(ApplyChain)),
+                ResVal = handle_resolver_result(AppliedResult),
                 case complete_value(Ctx, ElaboratedTy, Fields, ResVal) of
                     {ok, Result, Errs} ->
                         #done { upstream = Upstream,
@@ -470,6 +477,14 @@ field_closure(#ectx{ defer_target = Upstream } = Ctx,
                           undefined -> #{};
                           {M, _} -> #{ M => Ref }
                       end }.
+
+apply_chain(Val, []) ->
+    Val;
+apply_chain(Val, [F|Fs]) ->
+    case F(Val) of
+        {ok, _Val} = Ok -> apply_chain(Ok, Fs);
+        {error, _Reason} = Error -> apply_chain(Error, Fs)
+    end.
 
 report_wrong_return(Obj, Name, Fun, Val) ->
     error_logger:error_msg(

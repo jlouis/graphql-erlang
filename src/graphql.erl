@@ -82,25 +82,16 @@ sync(#{ defer_process := Proc, defer_request_id := ReqId }, Pid, Msg) ->
     Proc ! {'$graphql_sync', ReqId, Pid, Msg}.
 
 -spec monitor(pid(), result()) -> result().
-monitor(_Worker, {ok, Value}) ->
-    {ok, Value};
-monitor(_Worker, {error, Reason}) ->
-    {error, Reason};
-monitor(Worker, {defer, Token}) ->
-    monitor(Worker, {defer, Token, #{}});
-monitor(Worker, {defer, Token, Map}) when is_pid(Worker) ->
-    {defer, Token, Map#{ worker => Worker}}.
+monitor(_Worker, {ok, Value})                            -> {ok, Value};
+monitor(_Worker, {error, Reason})                        -> {error, Reason};
+monitor(Worker, {defer, Token})                          -> monitor(Worker, {defer, Token, #{}});
+monitor(Worker, {defer, Token, Map}) when is_pid(Worker) -> {defer, Token, Map#{ worker => Worker}}.
 
-map(F, {ok, Value}) ->
-    F({ok, Value});
-map(F, {error, Reason}) ->
-    F({error, Reason});
-map(F, {defer, Token}) ->
-    map(F, {defer, Token, #{}});
-map(F, {defer, Token, #{ apply := App} = M}) ->
-    {defer, Token, M#{ apply := queue:in(F, App)}};
-map(F, {defer, Token, #{} = M}) ->
-    {defer, Token, M#{ apply => queue:in(F, queue:new())}}.
+map(F, {ok, Value})                          -> F({ok, Value});
+map(F, {error, Reason})                      -> F({error, Reason});
+map(F, {defer, Token})                       -> map(F, {defer, Token, #{}});
+map(F, {defer, Token, #{ apply := App} = M}) -> {defer, Token, M#{ apply := queue:in(F, App)}};
+map(F, {defer, Token, #{} = M})              -> {defer, Token, M#{ apply => queue:in(F, queue:new())}}.
 
 %% @private
 token_ref({'$graphql_token', _, _, Ref}) -> Ref.
