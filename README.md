@@ -28,7 +28,7 @@ specification, except for a few areas:
 In addition, we are working towards June 2018 compliance. We already
 implemented many of the changes in the system. But we are still
 missing some parts. The implementation plan is on a demand driven
-basis for Shopgun currently, in that we tend to implement things are
+basis for Shopgun currently, in that we tend to implement things when
 there is a need for them.
 
 # Documentation
