@@ -125,11 +125,11 @@ run(Config, File, Q, Params) ->
 
 default_query(Config) ->
     ID = ?config(known_goblin_id_1, Config),
-    #{ data := #{ <<"goblin">> := #{ <<"id">> := ID, <<"name">> := <<"goblin">>, <<"hitpoints">> := 10 }}} =
+    #{ data := #{ <<"goblin">> := #{ <<"id">> := ID, <<"name">> := <<"goblin!">>, <<"hitpoints">> := 10 }}} =
         run(Config, <<"GoblinQuery">>, #{}),
-    #{ data := #{ <<"goblin">> := #{ <<"id">> := ID, <<"name">> := <<"goblin">>, <<"stats">> := [#{ <<"attack">> := 3 }] }}} =
+    #{ data := #{ <<"goblin">> := #{ <<"id">> := ID, <<"name">> := <<"goblin!">>, <<"stats">> := [#{ <<"attack">> := 3 }] }}} =
         run(Config, <<"MinGoblin">>, #{<<"minAttack">> => 0 }),
-    #{ data := #{ <<"goblin">> := #{ <<"id">> := ID, <<"name">> := <<"goblin">>, <<"stats">> := [] }}} =
+    #{ data := #{ <<"goblin">> := #{ <<"id">> := ID, <<"name">> := <<"goblin!">>, <<"stats">> := [] }}} =
         run(Config, <<"MinGoblin">>, #{<<"minAttack">> => 30 }),
     ok.
 
@@ -188,7 +188,7 @@ coercion_int_float(Config) ->
 
 get_operation(Config) ->
     GoblinId = ?config(known_goblin_id_1, Config),
-    Expected = #{ data => #{<<"monster">> => #{ <<"name">> => <<"goblin">> }}},
+    Expected = #{ data => #{<<"monster">> => #{ <<"name">> => <<"goblin!">> }}},
     Q1 = "{ monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { name }}",
     Expected = th:x(Config, Q1),
     Q2 = "query Q { monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { name }}",
@@ -211,7 +211,7 @@ include_directive(Config) ->
     #{ data := #{
          <<"goblin">> := #{
              <<"id">> := GoblinId,
-             <<"name">> := <<"goblin">>,
+             <<"name">> := <<"goblin!">>,
              <<"hitpoints">> := 10 }}} =
         run(Config, <<"GoblinQueryDirectives">>, #{ <<"fat">> => true }),
 
@@ -226,7 +226,7 @@ include_directive(Config) ->
     #{ data := #{
          <<"goblin">> := #{
              <<"id">> := GoblinId,
-             <<"name">> := <<"goblin">>,
+             <<"name">> := <<"goblin!">>,
              <<"hitpoints">> := 10 }}} =
         run(Config, <<"GoblinQueryDirectivesInline">>, #{ <<"fat">> => true }),
     ok.
@@ -239,21 +239,21 @@ unions(Config) ->
     Expected1 = #{ data => #{
                      <<"goblin">> => #{
                      <<"id">> => OpaqueId,
-                     <<"name">> => <<"goblin">>,
+                     <<"name">> => <<"goblin!">>,
                      <<"hitpoints">> => 10 }}},
     Expected1 = run(Config, <<"GoblinQuery">>, #{<<"id">> => OpaqueId}),
     ct:log("Same query, but on items"),
     Expected2 = #{ data => #{
                      <<"goblin">> => #{
                          <<"id">> => OpaqueId,
-                         <<"name">> => <<"goblin">>,
+                         <<"name">> => <<"goblin!">>,
                          <<"hitpoints">> => 10 }}},
     Expected2 = run(Config, <<"GoblinThingQuery">>, #{ <<"id">> => OpaqueId }),
     ct:log("Union expansions"),
     Expected3 = #{ data => #{ <<"things">> => [#{}]}},
     Expected3 = run(Config, <<"ThingQ1">>, #{ }),
 
-    Expected4 = #{ data => #{ <<"things">> => [#{ <<"__typename">> => <<"Monster">>, <<"name">> => <<"goblin">> }]}},
+    Expected4 = #{ data => #{ <<"things">> => [#{ <<"__typename">> => <<"Monster">>, <<"name">> => <<"goblin!">> }]}},
     Expected4 = run(Config, <<"ThingQ2">>, #{ }),
 
     Expected5 = #{ data => #{ <<"things">> => [#{ <<"__typename">> => <<"Monster">> }]}},
@@ -283,7 +283,7 @@ scalar_output_coercion(Config) ->
     #{ data := #{
         <<"goblin">> := #{
             <<"id">> := OpaqueId,
-            <<"name">> := <<"goblin">>,
+            <<"name">> := <<"goblin!">>,
             <<"color">> := <<"#41924B">>,
             <<"hitpoints">> := 10 }}} =
         run(Config, <<"ScalarOutputCoercion">>, #{ <<"id">> => OpaqueId }),
@@ -782,14 +782,14 @@ fragment_over_union_interface(Config) ->
 
 find_monster(Config) ->
     Expected1 =
-        lists:sort([#{<<"name">> => <<"goblin">>},
-                    #{<<"name">> => <<"Auxiliary Undead">>},
-                    #{<<"name">> => <<"goblin">>},
-                    #{<<"name">> => <<"goblin">>},
-                    #{<<"name">> => <<"hobgoblin">>},
-                    #{<<"name">> => <<"Yellow Slime">>},
-                    #{<<"name">> => <<"goblin">>},
-                    #{<<"name">> => <<"goblin">>}]),
+        lists:sort([#{<<"name">> => <<"goblin!">>},
+                    #{<<"name">> => <<"Auxiliary Undead!">>},
+                    #{<<"name">> => <<"goblin!">>},
+                    #{<<"name">> => <<"goblin!">>},
+                    #{<<"name">> => <<"hobgoblin!">>},
+                    #{<<"name">> => <<"Yellow Slime!">>},
+                    #{<<"name">> => <<"goblin!">>},
+                    #{<<"name">> => <<"goblin!">>}]),
     #{ data := #{<<"findMonsters">> := Out1 }} = run(Config, <<"FindQuery">>, #{}),
     Expected1 = lists:sort(Out1),
     #{ data := #{<<"findMonsters">> := Out2 }} = run(Config, <<"FindQueryParam">>, #{ <<"m">> => [<<"DODGY">>]}),
@@ -843,14 +843,14 @@ defer(Config) ->
 find_monster_singleton(Config) ->
     Expected1 =
         lists:sort(
-          [#{<<"name">> => <<"goblin">>},
-           #{<<"name">> => <<"Auxiliary Undead">>},
-           #{<<"name">> => <<"goblin">>},
-           #{<<"name">> => <<"goblin">>},
-           #{<<"name">> => <<"hobgoblin">>},
-           #{<<"name">> => <<"Yellow Slime">>},
-           #{<<"name">> => <<"goblin">>},
-           #{<<"name">> => <<"goblin">>}]),
+          [#{<<"name">> => <<"goblin!">>},
+           #{<<"name">> => <<"Auxiliary Undead!">>},
+           #{<<"name">> => <<"goblin!">>},
+           #{<<"name">> => <<"goblin!">>},
+           #{<<"name">> => <<"hobgoblin!">>},
+           #{<<"name">> => <<"Yellow Slime!">>},
+           #{<<"name">> => <<"goblin!">>},
+           #{<<"name">> => <<"goblin!">>}]),
     #{ data := #{ <<"findMonsters">> := Out1 }} = run(Config, <<"FindQuerySingleton">>, #{}),
     Expected1 = lists:sort(Out1),
     #{ data := #{ <<"findMonsters">> := Out2 }} = run(Config, <<"FindQueryParamSingleton">>, #{ <<"m">> => <<"DODGY">>}),
@@ -886,7 +886,7 @@ auxiliary_data(Config) ->
     Expected = #{
       aux => [{my_auxiliary_data, true}],
       data => #{ <<"monster">> => #{ <<"id">> => OpaqueId
-                                   , <<"name">> => <<"Auxiliary Undead">>}
+                                   , <<"name">> => <<"Auxiliary Undead!">>}
                }
      },
     Expected = run(Config, <<"TestAuxiliaryData">>, #{<<"id">> => OpaqueId}).

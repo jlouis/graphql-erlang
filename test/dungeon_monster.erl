@@ -25,7 +25,9 @@ execute(Ctx, #monster { id = ID,
             spawn_link(fun() ->
                                graphql:reply_cast(NameToken, {ok, Name})
                        end),
-            {defer, NameToken};
+            graphql:map(fun({ok, N}) ->
+                                   {ok, <<N/binary, "!">>}
+                           end, {defer, NameToken});
         <<"color">> -> color(Color, Args);
         <<"hitpoints">> ->
             HPToken = graphql:token(Ctx),
