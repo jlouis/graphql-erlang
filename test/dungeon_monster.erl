@@ -31,10 +31,23 @@ execute(Ctx, #monster { id = ID,
         <<"color">> -> color(Color, Args);
         <<"hitpoints">> ->
             HPToken = graphql:token(Ctx),
+            HPToken2 = graphql:token(Ctx),
             spawn_link(fun() ->
                                graphql:reply_cast(HPToken, {ok, HP})
                        end),
-            {defer, HPToken};
+            D = {defer, HPToken},
+            X = graphql:map(fun({ok, HitPoints}) ->
+                                    V = {ok, term_to_binary(HitPoints)},
+                                    spawn_link(fun() ->
+                                                       graphql:reply_cast(HPToken2, V)
+                                               end),
+                                    {defer, HPToken2}
+                            end,
+                            D),
+            graphql:map(fun({ok, Packed}) ->
+                                {ok, binary_to_term(Packed)}
+                        end,
+                        X);
         <<"hp">> -> {ok, HP};
         <<"inventory">> ->
             Data = [dungeon:load(OID) || OID <- Inventory],

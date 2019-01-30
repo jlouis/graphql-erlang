@@ -449,25 +449,31 @@ field_closure(#ectx{ defer_target = Upstream } = Ctx,
                       };
             (ResolverResult) ->
                 remove_monitor(Monitor),
-                AppliedResult = apply_chain(ResolverResult, queue:to_list(ApplyChain)),
-                ResVal = handle_resolver_result(AppliedResult),
-                case complete_value(Ctx, ElaboratedTy, Fields, ResVal) of
-                    {ok, Result, Errs} ->
-                        #done { upstream = Upstream,
-                                key = Ref,
-                                cancel = [],
-                                demonitor = Monitor,
-                                result = {ok, Result, Errs} };
-                    {error, Errs} ->
-                        #done { upstream = Upstream,
-                                key = Ref,
-                                cancel = [],
-                                demonitor = Monitor,
-                                result = {error, Errs} };
-                    #work { items = Items, demonitors = Ms } = Wrk ->
+                case apply_chain(ResolverResult, queue:to_list(ApplyChain)) of
+                    {go, AppliedResult} ->
+                        ResVal = handle_resolver_result(AppliedResult),
+                        case complete_value(Ctx, ElaboratedTy, Fields, ResVal) of
+                            {ok, Result, Errs} ->
+                                #done { upstream = Upstream,
+                                        key = Ref,
+                                        cancel = [],
+                                        demonitor = Monitor,
+                                        result = {ok, Result, Errs} };
+                            {error, Errs} ->
+                                #done { upstream = Upstream,
+                                        key = Ref,
+                                        cancel = [],
+                                        demonitor = Monitor,
+                                        result = {error, Errs} };
+                            #work { items = Items, demonitors = Ms } = Wrk ->
+                                NewRef = upstream_ref(Items),
+                                Wrk#work { change_ref = {Upstream, Ref, NewRef},
+                                           demonitors = [Monitor] ++ Ms}
+                        end;
+                    {defer, NewToken, DeferState} ->
+                        #work { items = Items } = Wrk = defer_field_closure(Ctx, ElaboratedTy, Fields, NewToken, DeferState),
                         NewRef = upstream_ref(Items),
-                        Wrk#work { change_ref = {Upstream, Ref, NewRef},
-                                   demonitors = [Monitor] ++ Ms}
+                        Wrk#work { change_ref = {Upstream, Ref, NewRef}}
                 end
         end,
     #work { items = [{Ref, Closure}],
@@ -479,11 +485,18 @@ field_closure(#ectx{ defer_target = Upstream } = Ctx,
                       end }.
 
 apply_chain(Val, []) ->
-    Val;
+    {go, Val};
 apply_chain(Val, [F|Fs]) ->
     case F(Val) of
         {ok, _Val} = Ok -> apply_chain(Ok, Fs);
-        {error, _Reason} = Error -> apply_chain(Error, Fs)
+        {error, _Reason} = Error -> apply_chain(Error, Fs);
+        {defer, Token} ->
+            {defer, Token, #{ apply => queue:from_list(Fs) }};
+        {defer, Token, #{ apply := ToApply} = M} ->
+            %% Insert the rest of the chain at the front in reverse
+            %% order, so the item deepest in the list goes in first.
+            NewQueue = lists:foldr(fun queue:in_r/2, Fs, ToApply),
+            {defer, Token, M#{ apply := NewQueue }}
     end.
 
 report_wrong_return(Obj, Name, Fun, Val) ->
