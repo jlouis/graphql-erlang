@@ -1,9 +1,10 @@
 -module(graphql).
 
-
 -include_lib("graphql/include/graphql.hrl").
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
+
+-compile({no_auto_import, [monitor/2]}).
 
 %% GraphQL Documents
 -export([
@@ -26,7 +27,9 @@
 %% Deferred execution
 -export([
          token/1, reply_cast/2,
-         sync/3
+         sync/3,
+         monitor/2,
+         map/2
          ]).
 
 %% Schema Definitions
@@ -47,6 +50,10 @@
 -export_type([json/0, param_context/0]).
 
 -type token() :: {'$graphql_token', pid(), reference(), reference()}.
+-type defer_map() :: #{ worker => pid(),
+                        timeout => non_neg_integer(),
+                        apply => [fun()]}.
+-type result() :: {ok, term()} | {error, term()} | {defer, token()} | {defer, token(), defer_map()}.
 -type name() :: {name, pos_integer(), binary()} | binary().
 -type document() :: #document{}.
 -type directive() :: #directive{}.
@@ -73,6 +80,27 @@ token(#{ defer_process := Proc, defer_request_id := ReqId }) ->
 
 sync(#{ defer_process := Proc, defer_request_id := ReqId }, Pid, Msg) ->
     Proc ! {'$graphql_sync', ReqId, Pid, Msg}.
+
+-spec monitor(pid(), result()) -> result().
+monitor(_Worker, {ok, Value}) ->
+    {ok, Value};
+monitor(_Worker, {error, Reason}) ->
+    {error, Reason};
+monitor(Worker, {defer, Token}) ->
+    monitor(Worker, {defer, Token, #{}});
+monitor(Worker, {defer, Token, Map}) when is_pid(Worker) ->
+    {defer, Token, Map#{ worker => Worker}}.
+
+map(F, {ok, Value}) ->
+    F({ok, Value});
+map(F, {error, Reason}) ->
+    F({error, Reason});
+map(F, {defer, Token}) ->
+    map(F, {defer, Token, #{}});
+map(F, {defer, Token, #{ apply := App} = M}) ->
+    {defer, Token, M#{ apply := queue:in(F, App)}};
+map(F, {defer, Token, #{} = M}) ->
+    {defer, Token, M#{ apply => queue:in(F, queue:new())}}.
 
 %% @private
 token_ref({'$graphql_token', _, _, Ref}) -> Ref.
