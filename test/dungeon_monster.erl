@@ -20,19 +20,34 @@ execute(Ctx, #monster { id = ID,
     case Field of
         <<"id">> -> graphql:throw(dungeon:wrap({monster, ID}));
         <<"name">> ->
-            ct:pal("Name Context Directives: ~p", [maps:get(field_directives, Ctx)]),
+            ct:log("Name Context Directives: ~p", [maps:get(field_directives, Ctx)]),
             NameToken = graphql:token(Ctx),
             spawn_link(fun() ->
                                graphql:reply_cast(NameToken, {ok, Name})
                        end),
-            {defer, NameToken};
+            graphql:map(fun({ok, N}) ->
+                                   {ok, <<N/binary, "!">>}
+                           end, {defer, NameToken});
         <<"color">> -> color(Color, Args);
         <<"hitpoints">> ->
             HPToken = graphql:token(Ctx),
+            HPToken2 = graphql:token(Ctx),
             spawn_link(fun() ->
                                graphql:reply_cast(HPToken, {ok, HP})
                        end),
-            {defer, HPToken};
+            D = {defer, HPToken},
+            X = graphql:map(fun({ok, HitPoints}) ->
+                                    V = {ok, term_to_binary(HitPoints)},
+                                    spawn_link(fun() ->
+                                                       graphql:reply_cast(HPToken2, V)
+                                               end),
+                                    {defer, HPToken2}
+                            end,
+                            D),
+            graphql:map(fun({ok, Packed}) ->
+                                {ok, binary_to_term(Packed)}
+                        end,
+                        X);
         <<"hp">> -> {ok, HP};
         <<"inventory">> ->
             Data = [dungeon:load(OID) || OID <- Inventory],

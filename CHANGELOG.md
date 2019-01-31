@@ -16,6 +16,13 @@ the compatibility issues you are likely to encounter.
   OTP 21 version, and if present, use the new stack-trace form. This
   ensures backwards compatibility as well as proper stack trace
   handling in new OTP releases.
+* New command `graphql:map/2`. Given a `Result` of the form `{ok, Val} |
+  {defer, Token}` the call to `graphql:map(F, Result)` will apply `F`
+  to the result. Either now, or in the case of a defer, when the defer
+  completes. This yields an alternative way to handle events which
+  cannot be completed right away. Long running work is usually better
+  handled in a spawned process, but simpler changes can be handled
+  within the context of the GraphQL process.
 * New command `graphql:sync/3`. Calling `graphql:sync(Ctx, Pid, Msg)`
   will place a message into the GraphQL mailbox. When this message
   occurs, we will send `Pid` a message `Msg`. This is useful for e.g.,
