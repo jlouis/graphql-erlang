@@ -20,7 +20,7 @@ execute(Ctx, #monster { id = ID,
     case Field of
         <<"id">> -> graphql:throw(dungeon:wrap({monster, ID}));
         <<"name">> ->
-            ct:pal("Name Context Directives: ~p", [maps:get(field_directives, Ctx)]),
+            ct:log("Name Context Directives: ~p", [maps:get(field_directives, Ctx)]),
             NameToken = graphql:token(Ctx),
             spawn_link(fun() ->
                                graphql:reply_cast(NameToken, {ok, Name})
