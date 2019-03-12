@@ -580,7 +580,7 @@ check_param_(Ctx, Val, Ty) when is_binary(Ty) ->
     check_param_(Ctx, Val, Tau);
 check_param_(Ctx, {var, ID}, Sigma) ->
     CtxP = add_path(Ctx, {var, ID}),
-    {ok, #vardef { ty = Tau}} = infer(Ctx, {var, ID}),
+    {ok, #vardef { ty = Tau }} = infer(Ctx, {var, ID}),
     ok = sub_input(CtxP, Tau, Sigma),
     {ok, {var, ID, Tau}};
 check_param_(Ctx, null, {non_null, _}) ->

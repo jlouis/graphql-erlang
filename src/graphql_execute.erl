@@ -956,16 +956,18 @@ resolve_args_(Ctx, [{ID, Val} | As], Acc) ->
 %%
 %% For a discussion about the Pet -> [Pet] coercion in the
 %% specification, see (Oct2016 Section 3.1.7)
-var_coerce(S, T, V) when is_binary(S)                 ->
-    X = graphql_schema:lookup(S),
-    var_coerce(X, T, V);
-var_coerce(S, T, V) when is_binary(T)                 ->
-    X = graphql_schema:lookup(T),
-    var_coerce(S, X, V);
-var_coerce(Tau, Tau, Value)                           -> Value;
+var_coerce(Tau, Sigma, V) when is_binary(Sigma)       ->
+    X = graphql_schema:lookup(Sigma),
+    var_coerce(Tau, X, V);
+var_coerce(Tau, Sigma, V) when is_binary(Tau)         ->
+    X = graphql_schema:lookup(Tau),
+    var_coerce(X, Sigma, V);
+var_coerce(Refl, Refl, Value)                         -> Value;
 var_coerce({non_null, Tau}, {non_null, Sigma}, Value) ->
     var_coerce(Tau, Sigma, Value);
 var_coerce({non_null, Tau}, Tau, Value)               -> Value;
+var_coerce({list, Tau}, {list, Sigma}, Values) ->
+    var_coerce(Tau, Sigma, Values);
 var_coerce(Tau, {list, SType}, Value)                 -> [var_coerce(Tau, SType, Value)].
 
 %% Produce a valid value for an argument.

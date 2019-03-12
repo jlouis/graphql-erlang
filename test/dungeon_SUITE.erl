@@ -671,7 +671,8 @@ scalar_as_expression_coerce(Config) ->
                                                     <<"attack">> := 7,
                                                     <<"shellScripting">> := 5,
                                                     <<"yell">> := <<"...">> }]}}}} =
-             run(Config, <<"IntroduceMonsterFatExpr">>, #{}),
+             run(Config, <<"IntroduceMonsterFatExpr">>, #{ <<"properties">> => [<<"MURLOC">>,
+                                                                                <<"MECH">>]}),
     true = (PF - 0.01) < 0.00001,
     ok.
 

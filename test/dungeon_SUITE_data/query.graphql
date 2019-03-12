@@ -352,14 +352,14 @@ mutation IntroduceMonsterFatFixedInput {
     }
 }
 
-mutation IntroduceMonsterFatExpr {
+mutation IntroduceMonsterFatExpr($properties : [Property]) {
   introduceMonster(input:
     { clientMutationId: "123",
       name: "Green Slime",
       color: "#1be215",
       hitpoints: 9001,
       mood: TRANQUIL,
-      properties: [MURLOC, MECH],
+      properties: $properties,
       stats: [{
         attack: 7,
         shellScripting: 5,
