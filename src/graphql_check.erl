@@ -285,7 +285,7 @@ check_directives(Ctx, OpType, Dirs) ->
 %% Check values against a type:
 %%
 %% Judge a type and a value. Used to verify a type judgement of the
-%% form 'G |- v <= T,e'' for a value 'v' and a type 'T'. Analysis has shown that
+%% form 'G |- v <== T,e'' for a value 'v' and a type 'T'. Analysis has shown that
 %% it is most efficient to make the case analysis follow 'v' over 'T'.
 check_value(Ctx, {name, _, N}, Sigma) ->
     check_value(Ctx, N, Sigma);
@@ -319,7 +319,7 @@ check_value(Ctx, {enum, N}, #enum_type { id = ID } = Sigma) ->
         not_found ->
             err(Ctx, {unknown_enum, N});
         ok ->
-            coerce(Ctx, N, Sigma);
+            {ok, {{enum, N}, Sigma}};
         {other_enums, Others} ->
             err(Ctx, {type_mismatch,
                        #{ document => Others,
@@ -334,16 +334,16 @@ check_value(Ctx, {input_object, _} = InputObj, Sigma) ->
                       #{ document => InputObj,
                          schema => Sigma }})
     end;
-check_value(Ctx, Val, #scalar_type{} = Sigma) ->
-    coerce(Ctx, Val, Sigma);
+check_value(_Ctx, Val, #scalar_type{} = Sigma) ->
+    {ok, {Val, Sigma}};
 check_value(Ctx, String, #enum_type{}) when is_binary(String) ->
     %% The spec (Jun2018, section 3.9 - Input Coercion) says that this
     %% is not allowed, unless given as a parameter. In this case, it
     %% is not given as a parameter, but is expanded in as a string in
     %% a query document. Reject.
     err(Ctx, enum_string_literal);
-check_value(Ctx, Val, #enum_type{} = Sigma) ->
-    coerce(Ctx, Val, Sigma);
+check_value(_Ctx, Val, #enum_type{} = Sigma) ->
+    {ok, {Val, Sigma}};
 check_value(Ctx, Val, Sigma) ->
     err(Ctx, {type_mismatch,
               #{ document => Val,
@@ -351,7 +351,7 @@ check_value(Ctx, Val, Sigma) ->
 
 check_input_obj(Ctx, {input_object, Obj},
                 #input_object_type{ fields = Fields }) ->
-    AssocList = [{coerce_name(K), V} || {K, V} <- Obj],
+    AssocList = [{name(K), V} || {K, V} <- Obj],
     case graphql_ast:uniq(AssocList) of
         {not_unique, Key} ->
             err(Ctx, {input_object_not_unique, Key});
@@ -388,10 +388,10 @@ check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
                      Next,
                      Acc#{ Name => Result }).
 
-check_input_obj_null(Ctx, null, {non_null, _}) ->
+check_input_obj_null(Ctx, undefined, {non_null, _}) ->
     err(Ctx, missing_non_null_param);
 check_input_obj_null(Ctx, Default, Ty) ->
-    {ok, R} = coerce_default_param(Ctx, Default, Ty),
+    {ok, R} = check_param(Ctx, Default, Ty),
     R.
 
 check_sset(Ctx, [], Ty) ->
@@ -564,10 +564,11 @@ check_params_(#ctx { vars = VE } = Ctx, OrigParams) ->
 %% null values, which are handled here.
 check_param(Ctx, not_found, Tau) ->
     case Tau of
-        #vardef { ty = {non_null, _}, default = null } ->
+        #vardef { ty = {non_null, _}, default = undefined } ->
             err(Ctx, missing_non_null_param);
         #vardef { default = Default, ty = Ty } ->
-            coerce_default_param(Ctx, Default, Ty)
+            %% @todo: fixup this one, it should inject a default parameter
+            check_param(Ctx, Default, Ty)
     end;
 check_param(Ctx, Val, #vardef { ty = Tau }) ->
     check_param_(Ctx, Val, Tau);
@@ -599,15 +600,15 @@ check_param_(Ctx, Lst, {list, Tau}) when is_list(Lst) ->
               {ok, V} = check_param_(Ctx, X, Tau),
               V
           end || X <- Lst]};
-check_param_(Ctx, Val, #scalar_type{} = Tau) ->
-    coerce(Ctx, Val, Tau);
+check_param_(_Ctx, Val, #scalar_type{} = Tau) ->
+    {ok, {Val, Tau}};
 check_param_(Ctx, {enum, Val}, #enum_type{} = Tau) when is_binary(Val) ->
     check_param_(Ctx, Val, Tau);
 check_param_(Ctx, Val, #enum_type { id = Ty } = Tau) when is_binary(Val) ->
     %% Determine the type of any enum term, and then coerce it
     case graphql_schema:validate_enum(Ty, Val) of
         ok ->
-            coerce(Ctx, Val, Tau);
+            {ok, {Val, Tau}};
         not_found ->
             err(Ctx, {enum_not_found, Ty, Val});
         {other_enums, OtherTys} ->
@@ -792,50 +793,11 @@ sub_output(Ctx, #union_type { id = SpreadID, types = SpreadMembers },
             err(Ctx, {no_common_object, SpreadID, ScopeID})
     end.
 
-%% -- COERCION OF INPUTS ---------------------------------------------------
+%% -- COERCION OF NAMES ---------------------------------------------------
 %%
 %%
-coerce_name(B) when is_binary(B) -> B;
-coerce_name(Name) -> graphql_ast:name(Name).
-
-%% This is a function which must go as soon as we have proper
-%% type checking on the default values in the schema type checker.
-%% There is absolutely no reason to do something like this then since
-%% it can never fail like this.
-coerce_default_param(#ctx { path = Path } = Ctx, Default, Ty) ->
-    try check_param(Ctx, Default, Ty) of
-        Result -> Result
-    catch
-        Class:Err ->
-            error_logger:error_report(
-              [{path, graphql_err:path(lists:reverse(Path))},
-               {default_value, Default},
-               {type, graphql_err:format_ty(Ty)},
-               {default_coercer_error, Class, Err}]),
-            err(Path, non_coercible_default)
-    end.
-
-coerce(Ctx, Val, #enum_type { id = ID, resolve_module = ResolveMod }) ->
-    case ResolveMod of
-        undefined ->
-            {ok, Val};
-        Mod ->
-            resolve_input(Ctx, ID, Val, Mod)
-    end;
-coerce(Ctx, Val, #scalar_type { id = ID, resolve_module = Mod }) ->
-    true = Mod /= undefined,
-    resolve_input(Ctx, ID, Val, Mod).
-
-resolve_input(Ctx, ID, Val, Mod) ->
-    try Mod:input(ID, Val) of
-        {ok, NewVal} -> {ok, NewVal};
-        {error, Reason} ->
-            err(Ctx, {input_coercion, ID, Val, Reason})
-    catch
-        Cl:Err ->
-            err_report({input_coercer, ID, Val}, Cl, Err),
-            err(Ctx, {input_coerce_abort, {Cl, Err}})
-    end.
+name(B) when is_binary(B) -> B;
+name(Name) -> graphql_ast:name(Name).
 
 %% -- INTERNAL FUNCTIONS ------------------------------------------------------
 
@@ -908,7 +870,7 @@ take_arg(Ctx, {Key, #schema_arg { ty = Tau,
         false ->
             %% Argument was not given. Resolve default value if any
             case {Tau, Default} of
-                {{non_null, _}, null} ->
+                {{non_null, _}, undefined} ->
                     err(Ctx, missing_non_null_param);
                 _ ->
                     {ok, {Key, #{ type => Tau, value => Default}}, Args}
@@ -934,14 +896,6 @@ operation(FunEnv, undefined, Params) ->
     end;
 operation(FunEnv, OpName, _Params) ->
     maps:get(OpName, FunEnv, not_found).
-
-%% Tell the error logger that something is off
-err_report(Term, Cl, Err) ->
-  error_logger:error_report(
-    [
-     Term,
-     {error, Cl, Err}
-    ]).
 
 %% Add a path component to the context
 -spec add_path(ctx(), Component :: term()) -> ctx().
