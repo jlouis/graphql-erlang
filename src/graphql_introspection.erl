@@ -182,7 +182,11 @@ render_input_value({K, #schema_arg { ty = Ty,
         <<"name">> => K,
         <<"description">> => Desc,
         <<"type">> => ?LAZY(render_type(Ty)),
-        <<"defaultValue">> => Default
+        <<"defaultValue">> =>
+              case Default of
+                  undefined -> null;
+                  _ -> Default
+              end
     }}.
 
 interface_implementors(ID) ->

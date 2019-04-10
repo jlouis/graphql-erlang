@@ -54,7 +54,7 @@
 -record(vardef,
         { id :: graphql:name(),
           ty :: graphql_type(),
-          default = null :: value()
+          default = undefined :: undefined | value()
         }).
 
 -record(op,
@@ -91,7 +91,7 @@
 -record(p_input_value,
         { id :: graphql:name(),
           description = undefined :: 'undefined' | binary(),
-          default = null :: any(),
+          default = undefined :: undefined | value(),
           directives = [] :: [graphql:directive()],          
           type :: graphql_type()
         }).

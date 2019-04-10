@@ -38,7 +38,7 @@
 %%% Algorithm:
 %%%
 %%% We use a bidirectional type checker. In general we handle two kinds of
-%%% typing constructs: G |- e => t (inference) and G |- e <= t,e' (checking)
+%%% typing constructs: G |- e ==> t (inference) and G |- e <= t,e' (checking)
 %%% The first of these gets G,e as inputs and derives a t. The second form
 %%% gets G, e, and t as inputs and derives e' which is an e annotated with
 %%% more information.
@@ -294,12 +294,18 @@ check_value(Ctx, {var, ID}, Sigma) ->
     {ok, #vardef { ty = Tau}} = infer(Ctx, {var, ID}),
     ok = sub_input(CtxP, Tau, Sigma),
     {ok, {var, ID, Tau}};
+check_value(Ctx, undefined, {non_null, _} = Sigma) ->
+    err(Ctx, {type_mismatch,
+              #{ document => undefined,
+                 schema => Sigma }});
 check_value(Ctx, null, {non_null, _} = Sigma) ->
     err(Ctx, {type_mismatch,
               #{ document => null,
                  schema => Sigma }});
 check_value(Ctx, Val, {non_null, Sigma}) ->
     check_value(Ctx, Val, Sigma);
+check_value(_Ctx, undefined, _Sigma) ->
+    {ok, null};
 check_value(_Ctx, null, _Sigma) ->
     %% Null values are accepted in every other context
     {ok, null};
@@ -388,6 +394,8 @@ check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
                      Next,
                      Acc#{ Name => Result }).
 
+check_input_obj_null(Ctx, undefined, {non_null, _}) ->
+    err(Ctx, missing_non_null_param);
 check_input_obj_null(Ctx, null, {non_null, _}) ->
     err(Ctx, missing_non_null_param);
 check_input_obj_null(Ctx, Default, Ty) ->
@@ -566,6 +574,10 @@ check_param(Ctx, not_found, Tau) ->
     case Tau of
         #vardef { ty = {non_null, _}, default = null } ->
             err(Ctx, missing_non_null_param);
+        #vardef { ty = {non_null, _}, default = undefined } ->
+            err(Ctx, missing_non_null_param);
+        #vardef { default = undefined, ty = Ty } ->
+            coerce_default_param(Ctx, null, Ty);
         #vardef { default = Default, ty = Ty } ->
             coerce_default_param(Ctx, Default, Ty)
     end;
@@ -802,6 +814,8 @@ coerce_name(Name) -> graphql_ast:name(Name).
 %% type checking on the default values in the schema type checker.
 %% There is absolutely no reason to do something like this then since
 %% it can never fail like this.
+coerce_default_param(Ctx, undefined, Ty) ->
+    coerce_default_param(Ctx, null, Ty);
 coerce_default_param(#ctx { path = Path } = Ctx, Default, Ty) ->
     try check_param(Ctx, Default, Ty) of
         Result -> Result
@@ -812,7 +826,7 @@ coerce_default_param(#ctx { path = Path } = Ctx, Default, Ty) ->
                {default_value, Default},
                {type, graphql_err:format_ty(Ty)},
                {default_coercer_error, Class, Err}]),
-            err(Path, non_coercible_default)
+            err(Ctx, non_coercible_default)
     end.
 
 coerce(Ctx, Val, #enum_type { id = ID, resolve_module = ResolveMod }) ->
