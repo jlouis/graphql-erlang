@@ -380,16 +380,15 @@ check_input_obj_(Ctx, Obj, [], Acc) ->
 check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
                                                  default = Default }} | Next],
                  Acc) ->
-    Result = case maps:get(Name, Obj, not_found) of
-                 not_found ->
-                     {ok, R} = check_not_found(add_path(Ctx, Name), Ty, Default),
-                     R;
-                 V ->
-                     CtxP = add_path(Ctx, Name),
-                     {ok, Tau} = infer_input_type(CtxP, Ty),
-                     {ok, R} = check_param(CtxP, V, Tau),
-                     R
-             end,
+    CtxP = add_path(Ctx, Name),
+    {ok, Result} =
+        case maps:get(Name, Obj, not_found) of
+            not_found ->
+                check_not_found(CtxP, Ty, Default);
+            V ->
+                {ok, Tau} = infer_input_type(CtxP, Ty),
+                check_param(CtxP, V, Tau)
+        end,
     check_input_obj_(Ctx,
                      maps:remove(Name, Obj),
                      Next,
