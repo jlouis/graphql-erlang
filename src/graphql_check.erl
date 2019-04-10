@@ -562,22 +562,24 @@ check_params_(#ctx { vars = VE } = Ctx, OrigParams) ->
                 CtxP = add_path(Ctx, Key),
                 {ok, Res} = case maps:get(Key, Parameters, not_found) of
                                 not_found ->
-                                    case {Tau, Default} of
-                                        {{non_null, _}, null} ->
-                                            err(CtxP, missing_non_null_param);
-                                        {{non_null, _}, undefined} ->
-                                            err(CtxP, missing_non_null_param);
-                                        {_, undefined} ->
-                                            coerce_default_param(CtxP, null, Tau);
-                                        {_, _} ->
-                                            coerce_default_param(CtxP, Default, Tau)
-                                    end;
+                                    check_params_not_found(CtxP, Tau, Default);
                                 Value ->
                                     check_param(CtxP, Value, Tau)
                             end,
                 Parameters#{ Key => Res}
         end,
     maps:fold(F, OrigParams, VE).
+
+%% Handle the case where the parameter isn't found in the system
+%% In this case, we handle nullability through this matching rule set
+check_params_not_found(Ctx, {non_null, _}, null) ->
+    err(Ctx, missing_non_null_param);
+check_params_not_found(Ctx, {non_null, _}, undefined) ->
+    err(Ctx, missing_non_null_param);
+check_params_not_found(Ctx, Tau, undefined) ->
+    coerce_default_param(Ctx, null, Tau);
+check_params_not_found(Ctx, Tau, Default) ->
+    coerce_default_param(Ctx, Default, Tau).
 
 %% When checking parameters, we must consider the case of default values.
 %% If a given parameter is not given, and there is a default, we can supply
