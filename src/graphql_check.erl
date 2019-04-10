@@ -559,10 +559,26 @@ check_params(FunEnv, OpName, Params) ->
 check_params_(#ctx { vars = VE } = Ctx, OrigParams) ->
     F = fun
             (Key, Tau, Parameters) ->
-                {ok, Val} = check_param(add_path(Ctx, Key),
-                                          maps:get(Key, Parameters, not_found),
-                                          Tau),
-                Parameters#{ Key => Val }
+                CtxP = add_path(Ctx, Key),
+                {ok, Res} = case maps:get(Key, Parameters, not_found) of
+                                not_found ->
+                                    case Tau of
+                                        #vardef { ty = {non_null, _}, default = null } ->
+                                            err(CtxP, missing_non_null_param);
+                                        #vardef { ty = {non_null, _}, default = undefined } ->
+                                            err(CtxP, missing_non_null_param);
+                                        #vardef { default = undefined, ty = Ty } ->
+                                            coerce_default_param(CtxP, null, Ty);
+                                        #vardef { default = Default, ty = Ty } ->
+                                            coerce_default_param(CtxP, Default, Ty)
+                                    end;
+                                Value ->
+                                    case Tau of
+                                        #vardef { ty = Tau0 } ->
+                                            check_param(CtxP, Value, Tau0)
+                                    end
+                            end,
+                Parameters#{ Key => Res}
         end,
     maps:fold(F, OrigParams, VE).
 
@@ -570,52 +586,37 @@ check_params_(#ctx { vars = VE } = Ctx, OrigParams) ->
 %% If a given parameter is not given, and there is a default, we can supply
 %% the default value in some cases. The spec requires special handling of
 %% null values, which are handled here.
-check_param(Ctx, not_found, Tau) ->
-    case Tau of
-        #vardef { ty = {non_null, _}, default = null } ->
-            err(Ctx, missing_non_null_param);
-        #vardef { ty = {non_null, _}, default = undefined } ->
-            err(Ctx, missing_non_null_param);
-        #vardef { default = undefined, ty = Ty } ->
-            coerce_default_param(Ctx, null, Ty);
-        #vardef { default = Default, ty = Ty } ->
-            coerce_default_param(Ctx, Default, Ty)
-    end;
-check_param(Ctx, Val, #vardef { ty = Tau }) ->
-    check_param_(Ctx, Val, Tau);
-check_param(Ctx, Val, Tau) ->
-    check_param_(Ctx, Val, Tau).
-
+%%
 %% Lift types up if needed
-check_param_(Ctx, Val, Ty) when is_binary(Ty) ->
+check_param(Ctx, Val, Ty) when is_binary(Ty) ->
     {ok, Tau} = infer_input_type(Ctx, Ty),
-    check_param_(Ctx, Val, Tau);
-check_param_(Ctx, {var, ID}, Sigma) ->
+    check_param(Ctx, Val, Tau);
+check_param(Ctx, {var, ID}, Sigma) ->
     CtxP = add_path(Ctx, {var, ID}),
     {ok, #vardef { ty = Tau }} = infer(Ctx, {var, ID}),
     ok = sub_input(CtxP, Tau, Sigma),
     {ok, {var, ID, Tau}};
-check_param_(Ctx, null, {non_null, _}) ->
+check_param(Ctx, null, {non_null, _}) ->
     err(Ctx, non_null);
-check_param_(Ctx, Val, {non_null, Tau}) ->
+check_param(Ctx, Val, {non_null, Tau}) ->
     %% Here, the value cannot be null due to the preceeding clauses
-    check_param_(Ctx, Val, Tau);
-check_param_(_Ctx, null, _Tau) ->
+    check_param(Ctx, Val, Tau);
+check_param(_Ctx, null, _Tau) ->
     {ok, null};
-check_param_(Ctx, Lst, {list, Tau}) when is_list(Lst) ->
+check_param(Ctx, Lst, {list, Tau}) when is_list(Lst) ->
     %% Build a dummy structure to match the recursor. Unwrap this
     %% structure before replacing the list parameter.
     %%
     %% @todo: Track the index here
     {ok, [begin
-              {ok, V} = check_param_(Ctx, X, Tau),
+              {ok, V} = check_param(Ctx, X, Tau),
               V
           end || X <- Lst]};
-check_param_(Ctx, Val, #scalar_type{} = Tau) ->
+check_param(Ctx, Val, #scalar_type{} = Tau) ->
     coerce(Ctx, Val, Tau);
-check_param_(Ctx, {enum, Val}, #enum_type{} = Tau) when is_binary(Val) ->
-    check_param_(Ctx, Val, Tau);
-check_param_(Ctx, Val, #enum_type { id = Ty } = Tau) when is_binary(Val) ->
+check_param(Ctx, {enum, Val}, #enum_type{} = Tau) when is_binary(Val) ->
+    check_param(Ctx, Val, Tau);
+check_param(Ctx, Val, #enum_type { id = Ty } = Tau) when is_binary(Val) ->
     %% Determine the type of any enum term, and then coerce it
     case graphql_schema:validate_enum(Ty, Val) of
         ok ->
@@ -625,17 +626,17 @@ check_param_(Ctx, Val, #enum_type { id = Ty } = Tau) when is_binary(Val) ->
         {other_enums, OtherTys} ->
             err(Ctx, {param_mismatch, {enum, Ty, OtherTys}})
     end;
-check_param_(Ctx, Obj, #input_object_type{} = Tau) when is_map(Obj) ->
+check_param(Ctx, Obj, #input_object_type{} = Tau) when is_map(Obj) ->
     %% When an object comes in through JSON for example, then the input object
     %% will be a map which is already unique in its fields. To handle this, turn
     %% the object into the same form as the one we use on query documents and pass
     %% it on. Note that the code will create a map later on once the input has been
     %% uniqueness-checked.
-    check_param_(Ctx, {input_object, maps:to_list(Obj)}, Tau);
-check_param_(Ctx, {input_object, KVPairs}, #input_object_type{} = Tau) ->
+    check_param(Ctx, {input_object, maps:to_list(Obj)}, Tau);
+check_param(Ctx, {input_object, KVPairs}, #input_object_type{} = Tau) ->
     check_input_obj(Ctx, {input_object, KVPairs}, Tau);
     %% Everything else are errors
-check_param_(Ctx, Val, Tau) ->
+check_param(Ctx, Val, Tau) ->
     err(Ctx, {param_mismatch, Val, Tau}).
 
 %% -- SUBTYPE/SUBSUMPTION ------------------------------------------------------
