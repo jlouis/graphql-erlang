@@ -382,7 +382,8 @@ check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
                  Acc) ->
     Result = case maps:get(Name, Obj, not_found) of
                  not_found ->
-                     check_input_obj_null(add_path(Ctx, Name), Default, Ty);
+                     {ok, R} = check_not_found(add_path(Ctx, Name), Ty, Default),
+                     R;
                  V ->
                      CtxP = add_path(Ctx, Name),
                      {ok, Tau} = infer_input_type(CtxP, Ty),
@@ -393,14 +394,6 @@ check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
                      maps:remove(Name, Obj),
                      Next,
                      Acc#{ Name => Result }).
-
-check_input_obj_null(Ctx, undefined, {non_null, _}) ->
-    err(Ctx, missing_non_null_param);
-check_input_obj_null(Ctx, null, {non_null, _}) ->
-    err(Ctx, missing_non_null_param);
-check_input_obj_null(Ctx, Default, Ty) ->
-    {ok, R} = coerce_default_param(Ctx, Default, Ty),
-    R.
 
 check_sset(Ctx, [], Ty) ->
     case Ty of
@@ -562,7 +555,7 @@ check_params_(#ctx { vars = VE } = Ctx, OrigParams) ->
                 CtxP = add_path(Ctx, Key),
                 {ok, Res} = case maps:get(Key, Parameters, not_found) of
                                 not_found ->
-                                    check_params_not_found(CtxP, Tau, Default);
+                                    check_not_found(CtxP, Tau, Default);
                                 Value ->
                                     check_param(CtxP, Value, Tau)
                             end,
@@ -572,13 +565,13 @@ check_params_(#ctx { vars = VE } = Ctx, OrigParams) ->
 
 %% Handle the case where the parameter isn't found in the system
 %% In this case, we handle nullability through this matching rule set
-check_params_not_found(Ctx, {non_null, _}, null) ->
+check_not_found(Ctx, {non_null, _}, null) ->
     err(Ctx, missing_non_null_param);
-check_params_not_found(Ctx, {non_null, _}, undefined) ->
+check_not_found(Ctx, {non_null, _}, undefined) ->
     err(Ctx, missing_non_null_param);
-check_params_not_found(Ctx, Tau, undefined) ->
+check_not_found(Ctx, Tau, undefined) ->
     coerce_default_param(Ctx, null, Tau);
-check_params_not_found(Ctx, Tau, Default) ->
+check_not_found(Ctx, Tau, Default) ->
     coerce_default_param(Ctx, Default, Tau).
 
 %% When checking parameters, we must consider the case of default values.
@@ -814,8 +807,6 @@ coerce_name(Name) -> graphql_ast:name(Name).
 %% type checking on the default values in the schema type checker.
 %% There is absolutely no reason to do something like this then since
 %% it can never fail like this.
-coerce_default_param(Ctx, undefined, Ty) ->
-    coerce_default_param(Ctx, null, Ty);
 coerce_default_param(#ctx { path = Path } = Ctx, Default, Ty) ->
     try check_param(Ctx, Default, Ty) of
         Result -> Result
