@@ -558,25 +558,22 @@ check_params(FunEnv, OpName, Params) ->
 %% type is valid.
 check_params_(#ctx { vars = VE } = Ctx, OrigParams) ->
     F = fun
-            (Key, Tau, Parameters) ->
+            (Key, #vardef { ty = Tau, default = Default}, Parameters) ->
                 CtxP = add_path(Ctx, Key),
                 {ok, Res} = case maps:get(Key, Parameters, not_found) of
                                 not_found ->
-                                    case Tau of
-                                        #vardef { ty = {non_null, _}, default = null } ->
+                                    case {Tau, Default} of
+                                        {{non_null, _}, null} ->
                                             err(CtxP, missing_non_null_param);
-                                        #vardef { ty = {non_null, _}, default = undefined } ->
+                                        {{non_null, _}, undefined} ->
                                             err(CtxP, missing_non_null_param);
-                                        #vardef { default = undefined, ty = Ty } ->
-                                            coerce_default_param(CtxP, null, Ty);
-                                        #vardef { default = Default, ty = Ty } ->
-                                            coerce_default_param(CtxP, Default, Ty)
+                                        {_, undefined} ->
+                                            coerce_default_param(CtxP, null, Tau);
+                                        {_, _} ->
+                                            coerce_default_param(CtxP, Default, Tau)
                                     end;
                                 Value ->
-                                    case Tau of
-                                        #vardef { ty = Tau0 } ->
-                                            check_param(CtxP, Value, Tau0)
-                                    end
+                                    check_param(CtxP, Value, Tau)
                             end,
                 Parameters#{ Key => Res}
         end,
