@@ -10,6 +10,17 @@ the compatibility issues you are likely to encounter.
 
 ## [Unreleased]
 
+### Compatibility
+
+* The error code `param_mismatch` was removed in lieu of
+  `type_mismatch` due to a rewrite in the type checker of error
+  handling.
+* The error code `non_null` will now report `type_mismatch` instead.
+* The error code `enum_not_found` will now be reported as
+  `unknown_enum`
+* If a string literal is given in place of an enum, the error code
+  will now be `enum_string_literal` rather than `enum_not_found`.
+
 ### Added
 
 * Add proper support for OTP release 21 (by getong, 18年梦醒). Detect the

@@ -929,9 +929,9 @@ null_input(Config) ->
                  [<<"TestNullInput">>,<<"room">>,
                   <<"id">>]}]} = run(Config, <<"test_null_input_2.graphql">>, <<"TestNullInput">>, #{}),
     %% The following bugs must fail because the value is null which is not allowed
-    #{ errors := [#{ extensions := #{ code := non_null }}]} =
+    #{ errors := [#{ extensions := #{ code := type_mismatch }}]} =
         run(Config, <<"test_null_input_3.graphql">>, <<"TestNullInput">>, #{}),
-    #{ errors := [#{ extensions := #{ code := non_null }}]} =
+    #{ errors := [#{ extensions := #{ code := type_mismatch }}]} =
         run(Config, <<"test_null_input_4.graphql">>, <<"TestNullInput">>,
             #{ <<"input">> =>
                    #{ <<"name">> => <<"Orc">>,
@@ -972,33 +972,27 @@ invalid_enums(Config) ->
       <<"mood">> => <<"AGGRESSIF">>
      },
     #{errors :=
-          [#{ extensions := #{ code := enum_not_found },
-              message := <<"The value <<\"AGGRESSIF\">> is not a valid enum value for type Mood">>,
+          [#{ extensions := #{ code := unknown_enum },
               path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}]} =
         run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input }),
     #{errors :=
-          [ #{ extensions := #{ code := enum_not_found },
-               message := <<"The value <<>> is not a valid enum value for type Mood">>,
+          [ #{ extensions := #{ code := unknown_enum },
                path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}]} =
         run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input#{ <<"mood">> => <<"">> }}),
     #{errors :=
-          [#{extensions := #{ code := enum_not_found },
-             message := <<"The value <<>> is not a valid enum value for type Mood">>,
+          [#{extensions := #{ code := unknown_enum },
              path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}]} =
           run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input#{ <<"mood">> => <<>> }}),
     #{errors :=
-      [#{extensions := #{ code := param_mismatch },
-         message := <<"The enum value matches types [Property] but was used in a context where an enum value of type Mood was expected">>,
+      [#{extensions := #{ code := type_mismatch },
          path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}]} =
         run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input#{ <<"mood">> => <<"DRAGON">> }}),
     #{ errors :=
-           [#{ extensions := #{  code := enum_not_found },
-               message := <<"The value <<\"AGGRESSIF\">> is not a valid enum value for type Mood">>,
+           [#{ extensions := #{  code := unknown_enum },
                path := [<<"IMonster">>,<<"introduceMonster">>, <<"input">>, <<"mood">>]}]} =
         run(Config, "invalid_enum_1.graphql", <<"IMonster">>, #{}),
     #{ errors :=
-           [#{ extensions := #{ code := enum_not_found },
-               message := <<"The value <<>> is not a valid enum value for type Mood">>,
+           [#{ extensions := #{ code := enum_string_literal },
                path := [<<"IMonster">>,<<"introduceMonster">>, <<"input">>, <<"mood">>]}]} =
         run(Config, "invalid_enum_2.graphql", <<"IMonster">>, #{}),
     ok.

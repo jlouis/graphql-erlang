@@ -61,7 +61,14 @@
         {
          path = [] :: [any()],
          vars = #{} :: #{ binary() => #vardef{} },
-         frags = #{} :: #{ binary() =>  #frag{} }
+         frags = #{} :: #{ binary() =>  #frag{} },
+
+         %% Current subcontext we are checking under. We are either
+         %% running in the "query context" of an input query to the system
+         %% or in the "variable context" of variables given as a JSON structure.
+         %%
+         %% The latter has different handling rules w.r.t, enumerated types
+         sub_context = query :: query | variable
         }).
 -type ctx() :: #ctx{}.
 -type polarity() :: '+' | '-' | '*'.
@@ -287,6 +294,9 @@ check_directives(Ctx, OpType, Dirs) ->
 %% Judge a type and a value. Used to verify a type judgement of the
 %% form 'G |- v <= T,e'' for a value 'v' and a type 'T'. Analysis has shown that
 %% it is most efficient to make the case analysis follow 'v' over 'T'.
+check_value(Ctx, Val, Ty) when is_binary(Ty) ->
+    {ok, Sigma} = infer_input_type(Ctx, Ty),
+    check_value(Ctx, Val, Sigma);
 check_value(Ctx, {name, _, N}, Sigma) ->
     check_value(Ctx, N, Sigma);
 check_value(Ctx, {var, ID}, Sigma) ->
@@ -331,6 +341,13 @@ check_value(Ctx, {enum, N}, #enum_type { id = ID } = Sigma) ->
                        #{ document => Others,
                           schema => Sigma }})
     end;
+check_value(Ctx, Obj, #input_object_type{} = Tau) when is_map(Obj) ->
+    %% When an object comes in through JSON for example, then the input object
+    %% will be a map which is already unique in its fields. To handle this, turn
+    %% the object into the same form as the one we use on query documents and pass
+    %% it on. Note that the code will create a map later on once the input has been
+    %% uniqueness-checked.
+    check_value(Ctx, {input_object, maps:to_list(Obj)}, Tau);
 check_value(Ctx, {input_object, _} = InputObj, Sigma) ->
     case Sigma of
         #input_object_type{} ->
@@ -342,12 +359,15 @@ check_value(Ctx, {input_object, _} = InputObj, Sigma) ->
     end;
 check_value(Ctx, Val, #scalar_type{} = Sigma) ->
     coerce(Ctx, Val, Sigma);
-check_value(Ctx, String, #enum_type{}) when is_binary(String) ->
+check_value(#ctx { sub_context = query } = Ctx, String, #enum_type{}) when is_binary(String) ->
     %% The spec (Jun2018, section 3.9 - Input Coercion) says that this
     %% is not allowed, unless given as a parameter. In this case, it
     %% is not given as a parameter, but is expanded in as a string in
     %% a query document. Reject.
     err(Ctx, enum_string_literal);
+check_value(#ctx { sub_context = variable } = Ctx, String, #enum_type{} = Tau) when is_binary(String) ->
+    %% In the case of a sub context for variables, we are allowed to handle the case
+    check_value(Ctx, {enum, String}, Tau);
 check_value(Ctx, Val, #enum_type{} = Sigma) ->
     coerce(Ctx, Val, Sigma);
 check_value(Ctx, Val, Sigma) ->
@@ -386,7 +406,7 @@ check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
                 check_not_found(CtxP, Ty, Default);
             V ->
                 {ok, Tau} = infer_input_type(CtxP, Ty),
-                check_param(CtxP, V, Tau)
+                check_value(CtxP, V, Tau)
         end,
     check_input_obj_(Ctx,
                      maps:remove(Name, Obj),
@@ -536,7 +556,8 @@ check_params(FunEnv, OpName, Params) ->
                 err(#ctx{}, {operation_not_found, OpName});
             VarEnv ->
                 Ctx = #ctx { vars = VarEnv,
-                             path = [OpName] },
+                             path = [OpName],
+                             sub_context = variable },
                 check_params_(Ctx, Params)
         end
     catch throw:{error, Path, Msg} ->
@@ -555,7 +576,7 @@ check_params_(#ctx { vars = VE } = Ctx, OrigParams) ->
                                 not_found ->
                                     check_not_found(CtxP, Tau, Default);
                                 Value ->
-                                    check_param(CtxP, Value, Tau)
+                                    check_value(CtxP, Value, Tau)
                             end,
                 Parameters#{ Key => Res}
         end,
@@ -571,63 +592,6 @@ check_not_found(Ctx, Tau, undefined) ->
     coerce_default_param(Ctx, null, Tau);
 check_not_found(Ctx, Tau, Default) ->
     coerce_default_param(Ctx, Default, Tau).
-
-%% When checking parameters, we must consider the case of default values.
-%% If a given parameter is not given, and there is a default, we can supply
-%% the default value in some cases. The spec requires special handling of
-%% null values, which are handled here.
-%%
-%% Lift types up if needed
-check_param(Ctx, Val, Ty) when is_binary(Ty) ->
-    {ok, Tau} = infer_input_type(Ctx, Ty),
-    check_param(Ctx, Val, Tau);
-check_param(Ctx, {var, ID}, Sigma) ->
-    CtxP = add_path(Ctx, {var, ID}),
-    {ok, #vardef { ty = Tau }} = infer(Ctx, {var, ID}),
-    ok = sub_input(CtxP, Tau, Sigma),
-    {ok, {var, ID, Tau}};
-check_param(Ctx, null, {non_null, _}) ->
-    err(Ctx, non_null);
-check_param(Ctx, Val, {non_null, Tau}) ->
-    %% Here, the value cannot be null due to the preceeding clauses
-    check_param(Ctx, Val, Tau);
-check_param(_Ctx, null, _Tau) ->
-    {ok, null};
-check_param(Ctx, Lst, {list, Tau}) when is_list(Lst) ->
-    %% Build a dummy structure to match the recursor. Unwrap this
-    %% structure before replacing the list parameter.
-    %%
-    %% @todo: Track the index here
-    {ok, [begin
-              {ok, V} = check_param(Ctx, X, Tau),
-              V
-          end || X <- Lst]};
-check_param(Ctx, Val, #scalar_type{} = Tau) ->
-    coerce(Ctx, Val, Tau);
-check_param(Ctx, {enum, Val}, #enum_type{} = Tau) when is_binary(Val) ->
-    check_param(Ctx, Val, Tau);
-check_param(Ctx, Val, #enum_type { id = Ty } = Tau) when is_binary(Val) ->
-    %% Determine the type of any enum term, and then coerce it
-    case graphql_schema:validate_enum(Ty, Val) of
-        ok ->
-            coerce(Ctx, Val, Tau);
-        not_found ->
-            err(Ctx, {enum_not_found, Ty, Val});
-        {other_enums, OtherTys} ->
-            err(Ctx, {param_mismatch, {enum, Ty, OtherTys}})
-    end;
-check_param(Ctx, Obj, #input_object_type{} = Tau) when is_map(Obj) ->
-    %% When an object comes in through JSON for example, then the input object
-    %% will be a map which is already unique in its fields. To handle this, turn
-    %% the object into the same form as the one we use on query documents and pass
-    %% it on. Note that the code will create a map later on once the input has been
-    %% uniqueness-checked.
-    check_param(Ctx, {input_object, maps:to_list(Obj)}, Tau);
-check_param(Ctx, {input_object, KVPairs}, #input_object_type{} = Tau) ->
-    check_input_obj(Ctx, {input_object, KVPairs}, Tau);
-    %% Everything else are errors
-check_param(Ctx, Val, Tau) ->
-    err(Ctx, {param_mismatch, Val, Tau}).
 
 %% -- SUBTYPE/SUBSUMPTION ------------------------------------------------------
 %%
@@ -806,7 +770,7 @@ coerce_name(Name) -> graphql_ast:name(Name).
 %% There is absolutely no reason to do something like this then since
 %% it can never fail like this.
 coerce_default_param(#ctx { path = Path } = Ctx, Default, Ty) ->
-    try check_param(Ctx, Default, Ty) of
+    try check_value(Ctx, Default, Ty) of
         Result -> Result
     catch
         Class:Err ->
