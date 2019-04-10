@@ -376,7 +376,6 @@ check_input_obj_(Ctx, Obj, [], Acc) ->
         0 -> Acc;
         K when K > 0 -> err(Ctx, {excess_fields_in_object, Obj})
     end;
-%% @todo: Clearly this has to change because Ty isn't known at this
 check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
                                                  default = Default }} | Next],
                  Acc) ->
