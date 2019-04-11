@@ -977,8 +977,10 @@ value(Ctx, #{ type := Ty, value := Val }) -> value(Ctx, Ty, Val).
 value(#ectx{ params = Params } = _Ctx, SType, {var, ID, DType}) ->
     %% Parameter expansion and type check is already completed
     %% at this stage
-    Value = maps:get(name(ID), Params),
-    var_coerce(DType, SType, Value);
+    case maps:get(name(ID), Params, not_found) of
+        Value ->
+            var_coerce(DType, SType, Value)
+    end;
 value(_Ctx, _Ty, null) ->
     null;
 value(Ctx, {non_null, Ty}, Val) ->

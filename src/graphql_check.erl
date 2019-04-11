@@ -403,7 +403,14 @@ check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
     {ok, Result} =
         case maps:get(Name, Obj, not_found) of
             not_found ->
-                check_not_found(CtxP, Ty, Default);
+                case check_not_found(CtxP, Ty, Default) of
+                    undefined ->
+                        coerce_default_param(CtxP, Default, Ty);
+                    default ->
+                        coerce_default_param(CtxP, Default, Ty);
+                    {ok, Res} ->
+                        {ok, Res}
+                end;
             V ->
                 {ok, Tau} = infer_input_type(CtxP, Ty),
                 check_value(CtxP, V, Tau)
@@ -572,13 +579,21 @@ check_params_(#ctx { vars = VE } = Ctx, OrigParams) ->
     F = fun
             (Key, #vardef { ty = Tau, default = Default}, Parameters) ->
                 CtxP = add_path(Ctx, Key),
-                {ok, Res} = case maps:get(Key, Parameters, not_found) of
-                                not_found ->
-                                    check_not_found(CtxP, Tau, Default);
-                                Value ->
-                                    check_value(CtxP, Value, Tau)
-                            end,
-                Parameters#{ Key => Res}
+                case maps:get(Key, Parameters, not_found) of
+                    not_found ->
+                        case check_not_found(CtxP, Tau, Default) of
+                            undefined ->
+                                Parameters;
+                            default ->
+                                {ok, Res} = coerce_default_param(CtxP, Default, Tau),
+                                Parameters#{ Key => Res };
+                            {ok, Res} ->
+                                Parameters#{ Key => Res }
+                        end;
+                    Value ->
+                        {ok, Res} = check_value(CtxP, Value, Tau),
+                        Parameters#{ Key => Res }
+                end
         end,
     maps:fold(F, OrigParams, VE).
 
@@ -588,10 +603,10 @@ check_not_found(Ctx, {non_null, _}, null) ->
     err(Ctx, missing_non_null_param);
 check_not_found(Ctx, {non_null, _}, undefined) ->
     err(Ctx, missing_non_null_param);
-check_not_found(Ctx, Tau, undefined) ->
-    coerce_default_param(Ctx, null, Tau);
-check_not_found(Ctx, Tau, Default) ->
-    coerce_default_param(Ctx, Default, Tau).
+check_not_found(_Ctx, _Tau, undefined) ->
+    undefined;
+check_not_found(_Ctx, _Tau, _Default) ->
+    default.
 
 %% -- SUBTYPE/SUBSUMPTION ------------------------------------------------------
 %%
