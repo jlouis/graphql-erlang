@@ -46,6 +46,11 @@ the compatibility issues you are likely to encounter.
 
 ### Fixed
 
+* Default variable value expansion has been fixed. If you have a
+  situation where a field-arg has a default value, you have supplied a
+  parameter for that value, say `foo(x: $k)` and you then omit `$k` in
+  your query, the underlying default (in this case the default for
+  `x`) is now picked up properly.
 * Re-instate the operation type in the callers context
 * Remove the occurrence of fragment names in `path` components of
   errors. These are not allowed per the Jun2018 specification and
