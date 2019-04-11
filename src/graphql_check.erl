@@ -303,7 +303,7 @@ check_value(Ctx, {var, ID}, Sigma) ->
     CtxP = add_path(Ctx, {var, ID}),
     {ok, #vardef { ty = Tau}} = infer(Ctx, {var, ID}),
     ok = sub_input(CtxP, Tau, Sigma),
-    {ok, {var, ID, Tau}};
+    {ok, #var { id = ID, ty = Tau }};
 check_value(Ctx, undefined, {non_null, _} = Sigma) ->
     err(Ctx, {type_mismatch,
               #{ document => undefined,
@@ -407,11 +407,9 @@ check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
             not_found ->
                 case check_not_found(CtxP, Ty, Default) of
                     undefined ->
-                        coerce_default_param(CtxP, Default, Ty);
+                        coerce_default_param(CtxP, null, Ty);
                     default ->
-                        coerce_default_param(CtxP, Default, Ty);
-                    {ok, Res} ->
-                        {ok, Res}
+                        coerce_default_param(CtxP, Default, Ty)
                 end;
             V ->
                 {ok, Tau} = infer_input_type(CtxP, Ty),
@@ -588,8 +586,6 @@ check_params_(#ctx { vars = VE } = Ctx, OrigParams) ->
                                 Parameters;
                             default ->
                                 {ok, Res} = coerce_default_param(CtxP, Default, Tau),
-                                Parameters#{ Key => Res };
-                            {ok, Res} ->
                                 Parameters#{ Key => Res }
                         end;
                     Value ->

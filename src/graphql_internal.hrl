@@ -59,6 +59,11 @@
           default = undefined :: undefined | value()
         }).
 
+-record(var,
+       { id :: graphql:name(),
+         ty :: graphql_type(),
+         default = undefined :: undefined | value() }).
+
 -record(op,
         { ty :: undefined | operation_type(),
           id = 'ROOT' :: graphql:name() | 'ROOT',
