@@ -444,7 +444,7 @@ populate(Config) ->
               #{<<"introduceMonster">> =>
                     #{<<"clientMutationId">> => <<"123">>,
                       <<"monster">> =>
-                          #{<<"color">> => <<"#ffffff">>,
+                          #{<<"color">> => <<"#FFFFFF">>,
                             <<"hitpoints">> => 1,
                             <<"id">> => <<"bW9uc3RlcjoxMDA5">>,
                             <<"mood">> => <<"DODGY">>,
@@ -825,6 +825,7 @@ fragment_over_union_interface(Config) ->
 find_monster(Config) ->
     Expected1 =
         lists:sort([#{<<"name">> => <<"goblin!">>},
+                    #{<<"name">> => <<"Teeny Tiny Mouse!">>},
                     #{<<"name">> => <<"Auxiliary Undead!">>},
                     #{<<"name">> => <<"goblin!">>},
                     #{<<"name">> => <<"goblin!">>},
@@ -886,6 +887,7 @@ find_monster_singleton(Config) ->
     Expected1 =
         lists:sort(
           [#{<<"name">> => <<"goblin!">>},
+           #{<<"name">> => <<"Teeny Tiny Mouse!">>},
            #{<<"name">> => <<"Auxiliary Undead!">>},
            #{<<"name">> => <<"goblin!">>},
            #{<<"name">> => <<"goblin!">>},

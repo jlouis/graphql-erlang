@@ -974,12 +974,13 @@ var_coerce(Tau, {list, SType}, Value)                 -> [var_coerce(Tau, SType,
 value(Ctx, {Ty, Val})                     -> value(Ctx, Ty, Val);
 value(Ctx, #{ type := Ty, value := Val }) -> value(Ctx, Ty, Val).
 
-value(#ectx{ params = Params }, SType, #var { id = ID, ty = DType }) ->
+value(#ectx{ params = Params }, SType, #var { id = ID, ty = DType,
+                                              default = Default }) ->
     %% Parameter expansion and type check is already completed
     %% at this stage
     case maps:get(name(ID), Params, not_found) of
         not_found ->
-            exit(no_default_yet);
+            var_coerce(DType, SType, Default);
         Value ->
             var_coerce(DType, SType, Value)
     end;

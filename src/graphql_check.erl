@@ -413,7 +413,13 @@ check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
                 end;
             V ->
                 {ok, Tau} = infer_input_type(CtxP, Ty),
-                check_value(CtxP, V, Tau)
+                case check_value(CtxP, V, Tau) of
+                    {ok, #var{} = Var} ->
+                        {ok, Coerced} = coerce_default_param(CtxP, Default, Ty),
+                        {ok, Var#var { default = Coerced }};
+                    {ok, Res} ->
+                        {ok, Res}
+                end
         end,
     check_input_obj_(Ctx,
                      maps:remove(Name, Obj),
