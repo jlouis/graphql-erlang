@@ -379,7 +379,7 @@ mutation IntroduceMonsterFatExpr($properties : [Property]) {
     }
 }
 
-mutation IntroduceMonsterNestedVar($mood : Mood!) {
+mutation IntroduceMonsterNestedVar($mood : Mood = AGGRESSIVE) {
   introduceMonster(input:
     { clientMutationId: "123",
       name: "Giant Spider",
@@ -391,6 +391,62 @@ mutation IntroduceMonsterNestedVar($mood : Mood!) {
         attack: 12,
         shellScripting: 0,
         yell: "I LOVE WEAVING!"
+      }]
+    }) {
+      clientMutationId,
+      monster {
+        ...FatMonsterFragment
+        plushFactor
+        stats {
+          attack
+          shellScripting
+          yell
+        }
+      }
+    }
+}
+
+mutation IntroduceMonsterDefaultNestedVar($mood : Mood = AGGRESSIVE) {
+  introduceMonster(input:
+    { clientMutationId: "123",
+      name: "Tiny Evil Cat",
+      color: "#444444", # Cats are very grey!
+      hitpoints: 9001,
+      mood: $mood,
+      properties: [BEAST],
+      plushFactor: 57.0,
+      stats: [{
+        attack: 1337,
+        shellScripting: 10,
+        yell: "Purrrrrrrrrrrrrr!"
+      }]
+    }) {
+      clientMutationId,
+      monster {
+        ...FatMonsterFragment
+        plushFactor
+        stats {
+          attack
+          shellScripting
+          yell
+        }
+      }
+    }
+}
+
+mutation IntroduceMonsterOptionalNestedVar($mood : Mood) {
+  introduceMonster(input:
+    { clientMutationId: "123",
+      name: "Teeny Tiny Mouse",
+      color: "#ffffff", # Makes your eyes bleed
+      hitpoints: 1,
+      mood: $mood,
+      properties: [BEAST],
+      plushFactor: 10.0,
+      stats: [{
+        attack: 1,
+        shellScripting: 1,
+        yell: "Meek!"
       }]
     }) {
       clientMutationId,

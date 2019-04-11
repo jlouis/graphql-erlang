@@ -315,6 +315,8 @@ check_value(Ctx, null, {non_null, _} = Sigma) ->
 check_value(Ctx, Val, {non_null, Sigma}) ->
     check_value(Ctx, Val, Sigma);
 check_value(_Ctx, undefined, _Sigma) ->
+    %% Values not given are currently defaulted to the value null
+    %% @todo: Lift this curse
     {ok, null};
 check_value(_Ctx, null, _Sigma) ->
     %% Null values are accepted in every other context

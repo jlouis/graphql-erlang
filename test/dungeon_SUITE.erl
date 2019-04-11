@@ -418,6 +418,47 @@ populate(Config) ->
 
     ExpectedNestedInput = run(Config, <<"IntroduceMonsterNestedVar">>, NestedInput),
 
+
+    ExpectedDefaultNestedInput =
+        #{data =>
+              #{<<"introduceMonster">> =>
+                    #{<<"clientMutationId">> => <<"123">>,
+                      <<"monster">> =>
+                          #{<<"color">> => <<"#444444">>,
+                            <<"hitpoints">> => 9001,
+                            <<"id">> => <<"bW9uc3RlcjoxMDA4">>,
+                            <<"mood">> => <<"AGGRESSIVE">>,
+                            <<"name">> => <<"Tiny Evil Cat">>,
+                            <<"plushFactor">> => 57.0,
+                            <<"properties">> => [<<"BEAST">>],
+                            <<"stats">> =>
+                                [#{<<"attack">> => 1337,
+                                   <<"shellScripting">> => 10,
+                                   <<"yell">> =>
+                                       <<"Purrrrrrrrrrrrrr!">>}]}}}},
+
+    ExpectedDefaultNestedInput = run(Config, <<"IntroduceMonsterDefaultNestedVar">>, #{}),
+
+    ExpectedOptionalNestedInput =
+        #{data =>
+              #{<<"introduceMonster">> =>
+                    #{<<"clientMutationId">> => <<"123">>,
+                      <<"monster">> =>
+                          #{<<"color">> => <<"#ffffff">>,
+                            <<"hitpoints">> => 1,
+                            <<"id">> => <<"bW9uc3RlcjoxMDA5">>,
+                            <<"mood">> => <<"DODGY">>,
+                            <<"name">> => <<"Teeny Tiny Mouse">>,
+                            <<"plushFactor">> => 10.0,
+                            <<"properties">> => [<<"BEAST">>],
+                            <<"stats">> =>
+                                [#{<<"attack">> => 1,
+                                   <<"shellScripting">> => 1,
+                                   <<"yell">> =>
+                                       <<"Meek!">>}]}}}},
+
+    ExpectedOptionalNestedInput = run(Config, <<"IntroduceMonsterOptionalNestedVar">>, #{}),
+
     ct:log("Check duplicate enum values (BEAST mood/property)"),
 
     DupEnumInput = #{
