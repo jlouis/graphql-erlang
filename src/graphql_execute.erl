@@ -980,7 +980,11 @@ value(#ectx{ params = Params }, SType, #var { id = ID, ty = DType,
     %% at this stage
     case maps:get(name(ID), Params, not_found) of
         not_found ->
-            var_coerce(DType, SType, Default);
+            case Default of
+                %% Coerce undefined values to "null"
+                undefined -> var_coerce(DType, SType, null);
+                _ -> var_coerce(DType, SType, Default)
+            end;
         Value ->
             var_coerce(DType, SType, Value)
     end;
