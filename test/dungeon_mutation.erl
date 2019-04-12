@@ -26,9 +26,13 @@ execute(_Ctx, _, <<"introduceMonster">>, #{ <<"input">> := Input }) ->
         false ->
             exit({bad_mood_value, M})
     end,
+    PlushFactor = case PF of
+                      null -> 0.01;
+                      PlushValue when is_float(PlushValue) -> PlushValue
+                  end,
     {atomic, Monster} = dungeon:insert(#monster {
     	properties = Props,
-    	plush_factor = PF,
+    	plush_factor = PlushFactor,
     	stats = Ss,
     	name = N,
     	color = C,

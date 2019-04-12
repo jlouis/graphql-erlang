@@ -418,7 +418,6 @@ populate(Config) ->
 
     ExpectedNestedInput = run(Config, <<"IntroduceMonsterNestedVar">>, NestedInput),
 
-
     ExpectedDefaultNestedInput =
         #{data =>
               #{<<"introduceMonster">> =>
@@ -458,6 +457,29 @@ populate(Config) ->
                                        <<"Meek!">>}]}}}},
 
     ExpectedOptionalNestedInput = run(Config, <<"IntroduceMonsterOptionalNestedVar">>, #{}),
+
+
+    ct:log("Check for proper null-handling"),
+
+    ExpectedNullHandling =
+        #{data =>
+              #{<<"introduceMonster">> =>
+                    #{<<"clientMutationId">> => <<"123">>,
+                      <<"monster">> =>
+                          #{<<"color">> => <<"#000">>,
+                            <<"hitpoints">> => 9002,
+                            <<"id">> => <<"bW9uc3RlcjoxMDEw">>,
+                            <<"mood">> => <<"DODGY">>,
+                            <<"name">> => <<"Tiny Black Hole">>,
+                            <<"plushFactor">> => 0.01,
+                            <<"properties">> => [<<"BEAST">>],
+                            <<"stats">> =>
+                                [#{<<"attack">> => 1,
+                                   <<"shellScripting">> => 1,
+                                   <<"yell">> =>
+                                       <<"...">>}]}}}},
+
+    ExpectedNullHandling = run(Config, <<"IntroduceMonsterNullHandling">>, #{}),
 
     ct:log("Check duplicate enum values (BEAST mood/property)"),
 
@@ -826,6 +848,7 @@ find_monster(Config) ->
     Expected1 =
         lists:sort([#{<<"name">> => <<"goblin!">>},
                     #{<<"name">> => <<"Teeny Tiny Mouse!">>},
+                    #{<<"name">> => <<"Tiny Black Hole!">>},
                     #{<<"name">> => <<"Auxiliary Undead!">>},
                     #{<<"name">> => <<"goblin!">>},
                     #{<<"name">> => <<"goblin!">>},
@@ -888,6 +911,7 @@ find_monster_singleton(Config) ->
         lists:sort(
           [#{<<"name">> => <<"goblin!">>},
            #{<<"name">> => <<"Teeny Tiny Mouse!">>},
+           #{<<"name">> => <<"Tiny Black Hole!">>},
            #{<<"name">> => <<"Auxiliary Undead!">>},
            #{<<"name">> => <<"goblin!">>},
            #{<<"name">> => <<"goblin!">>},

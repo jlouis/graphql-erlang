@@ -462,6 +462,33 @@ mutation IntroduceMonsterOptionalNestedVar($mood : Mood) {
     }
 }
 
+mutation IntroduceMonsterNullHandling($pf : Float) {
+  introduceMonster(input:
+    { clientMutationId: "123",
+      name: "Tiny Black Hole",
+      color: "#000000", # Makes your eyes bleed
+      hitpoints: 9002,
+      properties: [BEAST],
+      plushFactor: $pf,
+      stats: [{
+        attack: 1,
+        shellScripting: 1,
+        yell: "..."
+      }]
+    }) {
+      clientMutationId,
+      monster {
+        ...FatMonsterFragment
+        plushFactor
+        stats {
+          attack
+          shellScripting
+          yell
+        }
+      }
+    }
+}
+
 mutation IntroduceRoom($input: IntroduceRoomInput!) {
   introduceRoom(input: $input) {
     clientMutationId
