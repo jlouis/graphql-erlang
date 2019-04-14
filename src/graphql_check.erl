@@ -274,7 +274,7 @@ check_args_(Ctx, Args, [{N, #schema_arg { ty = ArgTy,
                 {{non_null, _}, null} ->
                     err(Ctx, missing_non_null_param);
                 _ ->
-                    {ok, Coerced} = check_value(CtxP, Default, Sigma),
+                    {ok, Coerced} = coerce_default_param(CtxP, Default, Sigma),
                     Res = {N, #{ type => Sigma,
                                  value => Coerced }},
                     check_args_(Ctx, Args, Next, [Res|Acc])
