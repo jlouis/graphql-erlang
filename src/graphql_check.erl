@@ -807,6 +807,8 @@ coerce_name(Name) -> graphql_ast:name(Name).
 %% type checking on the default values in the schema type checker.
 %% There is absolutely no reason to do something like this then since
 %% it can never fail like this.
+coerce_default_param(#ctx { }, undefined, _Ty) ->
+    {ok, undefined};
 coerce_default_param(#ctx { path = Path } = Ctx, Default, Ty) ->
     try check_value(Ctx, Default, Ty) of
         Result -> Result
