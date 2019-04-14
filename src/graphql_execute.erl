@@ -988,6 +988,8 @@ value(#ectx{ params = Params }, SType, #var { id = ID, ty = DType,
         Value ->
             var_coerce(DType, SType, Value)
     end;
+value(_Ctx, _Ty, undefined) ->
+    null;
 value(_Ctx, _Ty, null) ->
     null;
 value(Ctx, {non_null, Ty}, Val) ->

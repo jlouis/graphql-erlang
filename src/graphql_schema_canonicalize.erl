@@ -113,7 +113,7 @@ c_input_value_val(#{ type := _, description := _ } = M) ->
     c_arg_val(M). % these functions are currently identical
 
 default(#{ default := Def }) -> Def;
-default(#{ }) -> null.
+default(#{ }) -> undefined.
 
 c_field(K, V) ->
     {binarize(K), c_field_val(V)}.
