@@ -259,8 +259,12 @@ check_args_(Ctx, Args, [{N, #schema_arg { ty = ArgTy,
         {value, {_, Val}, RemainingArgs} ->
             %% Found argument with value Val
             Res = case check_value(CtxP, Val, Sigma) of
+                      {ok, #var{} = Var} ->
+                          {N, #{ type => Sigma,
+                                 value => Var#var { default = Default }}};
                       {ok, RVal} ->
-                          {N, #{ type => Sigma, value => RVal}}
+                          {N, #{ type => Sigma,
+                                 value => RVal}}
                   end,
             check_args_(Ctx, RemainingArgs, Next, [Res|Acc]);
         false ->
@@ -270,9 +274,9 @@ check_args_(Ctx, Args, [{N, #schema_arg { ty = ArgTy,
                 {{non_null, _}, null} ->
                     err(Ctx, missing_non_null_param);
                 _ ->
-                    Res = case check_value(CtxP, Default, Sigma) of
-                              {ok, RVal} -> {N, #{ type => Sigma, value => RVal}}
-                          end,
+                    {ok, Coerced} = check_value(CtxP, Default, Sigma),
+                    Res = {N, #{ type => Sigma,
+                                 value => Coerced }},
                     check_args_(Ctx, Args, Next, [Res|Acc])
             end
     end.
