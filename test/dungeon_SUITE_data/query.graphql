@@ -130,6 +130,14 @@ query MultipleMonsters($ids : [Id!]) {
     }
 }
 
+query GetMonster($id : ID!, $colorType : ColorType) {
+    monster(id: $id) {
+        id
+        name
+        color(colorType : $colorType)
+    }
+}
+
 query MultipleMonstersExpr {
     monsters(ids: ["bW9uc3Rlcjox", "bW9uc3Rlcjoy"]) {
         id

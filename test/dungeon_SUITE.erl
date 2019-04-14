@@ -55,51 +55,50 @@ end_per_testcase(_Case, _Config) ->
 groups() ->
     Dungeon =
         {dungeon, [],
-         [ unions
-         , defer
-         , union_errors
-         , error_handling
-         , scalar_output_coercion
-         , populate
-         , default_query
-         , direct_input
-         , fixed_input
-         , nested_input_object
-         , inline_fragment
-         , fragment_over_union_interface
-         , integer_in_float_context
-         , scalar_as_expression_coerce
-         , non_null_field
-         , complex_modifiers
-         , simple_field_merge
-         , nested_field_merge
-         , multiple_monsters_and_rooms
-         , include_directive
-         , introspection
-         , introspection_with_variable
-         , get_operation
-         , coercion_int_float
-         , replace_enum_representation
-         , auxiliary_data
-         , find_monster
-         , find_monster_singleton
-         , invalid_scalar_int_input
-         , introspect_default_value
-         ]},
+         [ unions,
+           defer,
+           union_errors,
+           error_handling,
+           scalar_output_coercion,
+           populate,
+           default_query,
+           direct_input,
+           fixed_input,
+           nested_input_object,
+           inline_fragment,
+           fragment_over_union_interface,
+           integer_in_float_context,
+           scalar_as_expression_coerce,
+           non_null_field,
+           complex_modifiers,
+           simple_field_merge,
+           nested_field_merge,
+           multiple_monsters_and_rooms,
+           include_directive,
+           introspection,
+           introspection_with_variable,
+           get_operation,
+           coercion_int_float,
+           replace_enum_representation,
+           auxiliary_data,
+           find_monster,
+           find_monster_singleton,
+           invalid_scalar_int_input,
+           introspect_default_value,
+           default_parameter ]},
     Errors =
         {errors, [],
-         [ unknown_variable
-         , null_input
-         , missing_fragment
-         , quoted_input_error
-         , input_coerce_error_exception
-         , input_coerce_error
-         , invalid_enums
-         , invalid_enum_result
-         , invalid_type_resolution
-         , duplicate_validation
-         , invalid_list_resolver
-         ]},
+         [ unknown_variable,
+           null_input,
+           missing_fragment,
+           quoted_input_error,
+           input_coerce_error_exception,
+           input_coerce_error,
+           invalid_enums,
+           invalid_enum_result,
+           invalid_type_resolution,
+           duplicate_validation,
+           invalid_list_resolver ]},
     %% Groups
     [ Dungeon
     , Errors
@@ -1092,4 +1091,18 @@ input_coerce_error_exception(Config) ->
                             <<"input">>,
                             <<"color">>]}]} =
         run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input }),
+    ok.
+
+default_parameter(Config) ->
+    ct:log("Run, and provide a colorType explicitly"),
+    #{ data :=
+           #{ <<"monster">> :=
+                  #{ <<"color">> := <<"#727272">>}}} =
+        run(Config, <<"GetMonster">>, #{ <<"id">> => <<"bW9uc3Rlcjox">>,
+                                         <<"colorType">> => <<"gray">> }),
+    ct:log("Run, and pick up the color type via the argument default"),
+    #{ data :=
+           #{ <<"monster">> :=
+                  #{ <<"color">> := <<"#41924B">>}}} =
+        run(Config, <<"GetMonster">>, #{ <<"id">> => <<"bW9uc3Rlcjox">> }),
     ok.
