@@ -20,8 +20,8 @@ input(<<"Color">>, X) ->
 output(<<"ColorType">>, X) ->
     {ok, X};
 output(<<"Color">>, #{ r := R, g := G, b := B}) ->
-    R1 = integer_to_binary(R, 16),
-    G1 = integer_to_binary(G, 16),
-    B1 = integer_to_binary(B, 16),
+    R1 = integer_to_binary(round(R), 16),
+    G1 = integer_to_binary(round(G), 16),
+    B1 = integer_to_binary(round(B), 16),
     {ok, <<"#", R1/binary, G1/binary, B1/binary>>}.
 
