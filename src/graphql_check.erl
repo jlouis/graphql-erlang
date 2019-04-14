@@ -247,20 +247,35 @@ check_args_(_Ctx, [], [], Acc) ->
     {ok, Acc};
 check_args_(Ctx, [_|_] = Args, [], _Acc) ->
     err(Ctx, {excess_args, Args});
-check_args_(Ctx, Args, [{N, #schema_arg { ty = TyName }} = SArg | Next], Acc) ->
+check_args_(Ctx, Args, [{N, #schema_arg { ty = ArgTy,
+                                          default = Default }}| Next], Acc) ->
     CtxP = add_path(Ctx, N),
-    {ok, Sigma} = infer_input_type(Ctx, TyName),
+    {ok, Sigma} = infer_input_type(Ctx, ArgTy),
 
-    {ok, {_, #{ type := ArgTy, value := Val}}, NextArgs} =
-        take_arg(CtxP, SArg, Args),
-    {ok, Tau} = infer_input_type(Ctx, ArgTy),
-
-    %% Verify type compabitility
-    ok =  sub_input(CtxP, Tau, Sigma),
-    Res = case check_value(CtxP, Val, Tau) of
-              {ok, RVal} -> {N, #{ type => Tau, value => RVal}}
-          end,
-    check_args_(Ctx, NextArgs, Next, [Res|Acc]).
+    case lists:keytake(N, 1, Args) of
+        {value, {_, null}, _} ->
+            %% You are currently not allowed to input null values
+            err(CtxP, {null_input, N});
+        {value, {_, Val}, RemainingArgs} ->
+            %% Found argument with value Val
+            Res = case check_value(CtxP, Val, Sigma) of
+                      {ok, RVal} ->
+                          {N, #{ type => Sigma, value => RVal}}
+                  end,
+            check_args_(Ctx, RemainingArgs, Next, [Res|Acc]);
+        false ->
+            case {Sigma, Default} of
+                {{non_null, _}, undefined} ->
+                    err(Ctx, missing_non_null_param);
+                {{non_null, _}, null} ->
+                    err(Ctx, missing_non_null_param);
+                _ ->
+                    Res = case check_value(CtxP, Default, Sigma) of
+                              {ok, RVal} -> {N, #{ type => Sigma, value => RVal}}
+                          end,
+                    check_args_(Ctx, Args, Next, [Res|Acc])
+            end
+    end.
 
 check_directive(Ctx, Context, #directive{ args = Args, id = ID} = D,
                 #directive_type { args = SArgs, locations = Locations } = Ty) ->
@@ -877,28 +892,6 @@ directive_location(#op { ty = Ty }) ->
         {query, _} -> 'QUERY';
         {mutation, _} -> 'MUTATION';
         {subscription, _} -> 'SUBSCRIPTION'
-    end.
-
-%% Pull out a value from a list of arguments. This is used to check
-%% we eventually cover all arguments properly since we can check if there
-%% are excess arguments in the end.
-take_arg(Ctx, {Key, #schema_arg { ty = Tau,
-                                  default = Default }}, Args) ->
-    case lists:keytake(Key, 1, Args) of
-        {value, {_, null}, _NextArgs} ->
-            %% You are currently not allowed to input null values
-            err(Ctx, {null_input, Key});
-        {value, {_, Val}, NextArgs} ->
-            %% Argument found, use it
-            {ok, {Key, #{ type => Tau, value => Val}}, NextArgs};
-        false ->
-            %% Argument was not given. Resolve default value if any
-            case {Tau, Default} of
-                {{non_null, _}, null} ->
-                    err(Ctx, missing_non_null_param);
-                _ ->
-                    {ok, {Key, #{ type => Tau, value => Default}}, Args}
-            end
     end.
 
 %% Determine the operation whih the call wants to run
