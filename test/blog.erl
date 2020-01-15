@@ -1,5 +1,5 @@
 -module(blog).
--include_lib("graphql/include/graphql.hrl").
+-include_lib("../include/graphql.hrl").
 
 -export([inject/0, execute/4]).
 

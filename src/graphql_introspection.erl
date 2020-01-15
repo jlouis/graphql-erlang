@@ -1,7 +1,7 @@
 -module(graphql_introspection).
 
 -include("graphql_schema.hrl").
--include_lib("graphql/include/graphql.hrl").
+-include_lib("../include/graphql.hrl").
 
 -export([inject/0, augment_root/1]).
 

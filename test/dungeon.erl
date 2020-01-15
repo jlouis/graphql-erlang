@@ -1,6 +1,6 @@
 -module(dungeon).
 -include_lib("common_test/include/ct.hrl").
--include_lib("graphql/include/graphql.hrl").
+-include_lib("../include/graphql.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
 -include("dungeon.hrl").
