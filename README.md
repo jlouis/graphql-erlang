@@ -31,6 +31,24 @@ missing some parts. The implementation plan is on a demand driven
 basis for Shopgun currently, in that we tend to implement things when
 there is a need for them.
 
+# Installation
+
+This package is also available in Hex as [graphql_erl](https://hex.pm/packages/graphql_erl).
+
+## Elixir
+
+Add `graphql_erl` to your list of dependencies in `mix.exs`:
+
+```elixir
+def deps do
+  [
+    {:graphql_erl, "~> 0.16.0"}
+  ]
+end
+```
+
+To use it, call `:graphql_erl.parse(query)` etc.
+
 # Documentation
 
 This is a big library. In order to ease development, we have provided
