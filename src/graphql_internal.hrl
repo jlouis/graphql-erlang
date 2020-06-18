@@ -28,7 +28,9 @@
 
 -record(field, {
 	id :: graphql:name(),
-	args = [] :: [any()],
+	args = [] :: [#{ type := graphql_type(),
+                        value := value(),
+                        default := undefined | value() }],
 	directives = [] :: [any()],
 	selection_set = [] :: [any()],
 	alias = undefined :: undefined | graphql:name(),
@@ -54,8 +56,13 @@
 -record(vardef,
         { id :: graphql:name(),
           ty :: graphql_type(),
-          default = null :: value()
+          default = undefined :: undefined | value()
         }).
+
+-record(var,
+       { id :: graphql:name(),
+         ty :: graphql_type(),
+         default = undefined :: undefined | value() }).
 
 -record(op,
         { ty :: undefined | operation_type(),
@@ -91,7 +98,7 @@
 -record(p_input_value,
         { id :: graphql:name(),
           description = undefined :: 'undefined' | binary(),
-          default = null :: any(),
+          default = undefined :: undefined | value(),
           directives = [] :: [graphql:directive()],          
           type :: graphql_type()
         }).

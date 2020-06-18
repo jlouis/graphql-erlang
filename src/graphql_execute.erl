@@ -397,7 +397,7 @@ execute_field(#ectx{ op_type = OpType,
             execute_field_await(Ctx, ElaboratedTy, Fields, Ref);
         {defer, Token, undefined} ->
             Monitor = undefined,
-            field_closure(Ctx, ElaboratedTy, Fields, Token, Monitor, DT);
+            field_closure(Ctx, ElaboratedTy, Fields, Token, Monitor, DT, queue:new());
         {defer, Token, DeferStateMap} when is_map(DeferStateMap) ->
             defer_field_closure(Ctx, ElaboratedTy, Fields, Token, DeferStateMap);
         ResolvedValue ->
@@ -418,11 +418,17 @@ defer_field_closure(#ectx{ defer_target = _Upstream,
               ElaboratedTy, Fields, Token, DeferStateMap) ->
     TimeOut = maps:get(timeout, DeferStateMap, DT),
     Worker = maps:get(worker, DeferStateMap, undefined),
+    ApplyChain = maps:get(apply, DeferStateMap, queue:new()),
     Monitor = build_monitor(Worker),
-    field_closure(Ctx, ElaboratedTy, Fields, Token, Monitor, TimeOut).
+    field_closure(Ctx, ElaboratedTy, Fields, Token, Monitor, TimeOut, ApplyChain).
 
 field_closure(#ectx{ defer_target = Upstream } = Ctx,
-              ElaboratedTy, Fields, Token, Monitor, TimeOut) ->
+              ElaboratedTy,
+              Fields,
+              Token,
+              Monitor,
+              TimeOut,
+              ApplyChain) ->
     Ref = graphql:token_ref(Token),
     Closure =
         fun
@@ -443,24 +449,31 @@ field_closure(#ectx{ defer_target = Upstream } = Ctx,
                       };
             (ResolverResult) ->
                 remove_monitor(Monitor),
-                ResVal = handle_resolver_result(ResolverResult),
-                case complete_value(Ctx, ElaboratedTy, Fields, ResVal) of
-                    {ok, Result, Errs} ->
-                        #done { upstream = Upstream,
-                                key = Ref,
-                                cancel = [],
-                                demonitor = Monitor,
-                                result = {ok, Result, Errs} };
-                    {error, Errs} ->
-                        #done { upstream = Upstream,
-                                key = Ref,
-                                cancel = [],
-                                demonitor = Monitor,
-                                result = {error, Errs} };
-                    #work { items = Items, demonitors = Ms } = Wrk ->
+                case apply_chain(ResolverResult, queue:to_list(ApplyChain)) of
+                    {go, AppliedResult} ->
+                        ResVal = handle_resolver_result(AppliedResult),
+                        case complete_value(Ctx, ElaboratedTy, Fields, ResVal) of
+                            {ok, Result, Errs} ->
+                                #done { upstream = Upstream,
+                                        key = Ref,
+                                        cancel = [],
+                                        demonitor = Monitor,
+                                        result = {ok, Result, Errs} };
+                            {error, Errs} ->
+                                #done { upstream = Upstream,
+                                        key = Ref,
+                                        cancel = [],
+                                        demonitor = Monitor,
+                                        result = {error, Errs} };
+                            #work { items = Items, demonitors = Ms } = Wrk ->
+                                NewRef = upstream_ref(Items),
+                                Wrk#work { change_ref = {Upstream, Ref, NewRef},
+                                           demonitors = [Monitor] ++ Ms}
+                        end;
+                    {defer, NewToken, DeferState} ->
+                        #work { items = Items } = Wrk = defer_field_closure(Ctx, ElaboratedTy, Fields, NewToken, DeferState),
                         NewRef = upstream_ref(Items),
-                        Wrk#work { change_ref = {Upstream, Ref, NewRef},
-                                   demonitors = [Monitor] ++ Ms}
+                        Wrk#work { change_ref = {Upstream, Ref, NewRef}}
                 end
         end,
     #work { items = [{Ref, Closure}],
@@ -470,6 +483,21 @@ field_closure(#ectx{ defer_target = Upstream } = Ctx,
                           undefined -> #{};
                           {M, _} -> #{ M => Ref }
                       end }.
+
+apply_chain(Val, []) ->
+    {go, Val};
+apply_chain(Val, [F|Fs]) ->
+    case F(Val) of
+        {ok, _Val} = Ok -> apply_chain(Ok, Fs);
+        {error, _Reason} = Error -> apply_chain(Error, Fs);
+        {defer, Token} ->
+            {defer, Token, #{ apply => queue:from_list(Fs) }};
+        {defer, Token, #{ apply := ToApply} = M} ->
+            %% Insert the rest of the chain at the front in reverse
+            %% order, so the item deepest in the list goes in first.
+            NewQueue = lists:foldr(fun queue:in_r/2, Fs, ToApply),
+            {defer, Token, M#{ apply := NewQueue }}
+    end.
 
 report_wrong_return(Obj, Name, Fun, Val) ->
     error_logger:error_msg(
@@ -928,27 +956,40 @@ resolve_args_(Ctx, [{ID, Val} | As], Acc) ->
 %%
 %% For a discussion about the Pet -> [Pet] coercion in the
 %% specification, see (Oct2016 Section 3.1.7)
-var_coerce(S, T, V) when is_binary(S)                 ->
-    X = graphql_schema:lookup(S),
-    var_coerce(X, T, V);
-var_coerce(S, T, V) when is_binary(T)                 ->
-    X = graphql_schema:lookup(T),
-    var_coerce(S, X, V);
-var_coerce(Tau, Tau, Value)                           -> Value;
+var_coerce(Tau, Sigma, V) when is_binary(Sigma)       ->
+    X = graphql_schema:lookup(Sigma),
+    var_coerce(Tau, X, V);
+var_coerce(Tau, Sigma, V) when is_binary(Tau)         ->
+    X = graphql_schema:lookup(Tau),
+    var_coerce(X, Sigma, V);
+var_coerce(Refl, Refl, Value)                         -> Value;
 var_coerce({non_null, Tau}, {non_null, Sigma}, Value) ->
     var_coerce(Tau, Sigma, Value);
 var_coerce({non_null, Tau}, Tau, Value)               -> Value;
+var_coerce({list, Tau}, {list, Sigma}, Values) ->
+    var_coerce(Tau, Sigma, Values);
 var_coerce(Tau, {list, SType}, Value)                 -> [var_coerce(Tau, SType, Value)].
 
 %% Produce a valid value for an argument.
 value(Ctx, {Ty, Val})                     -> value(Ctx, Ty, Val);
 value(Ctx, #{ type := Ty, value := Val }) -> value(Ctx, Ty, Val).
 
-value(#ectx{ params = Params } = _Ctx, SType, {var, ID, DType}) ->
+value(#ectx{ params = Params }, SType, #var { id = ID, ty = DType,
+                                              default = Default }) ->
     %% Parameter expansion and type check is already completed
     %% at this stage
-    Value = maps:get(name(ID), Params),
-    var_coerce(DType, SType, Value);
+    case maps:get(name(ID), Params, not_found) of
+        not_found ->
+            case Default of
+                %% Coerce undefined values to "null"
+                undefined -> var_coerce(DType, SType, null);
+                _ -> var_coerce(DType, SType, Default)
+            end;
+        Value ->
+            var_coerce(DType, SType, Value)
+    end;
+value(_Ctx, _Ty, undefined) ->
+    null;
 value(_Ctx, _Ty, null) ->
     null;
 value(Ctx, {non_null, Ty}, Val) ->

@@ -103,7 +103,7 @@ input IntroduceMonsterInput {
   name : String!
   color : Color!
   hitpoints : Int = 15
-  plushFactor : Float = 0.01
+  plushFactor : Float
   mood : Mood = DODGY
   properties : [Property] = []
   stats : [StatsInput]

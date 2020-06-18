@@ -38,7 +38,7 @@
 %%% Algorithm:
 %%%
 %%% We use a bidirectional type checker. In general we handle two kinds of
-%%% typing constructs: G |- e => t (inference) and G |- e <= t,e' (checking)
+%%% typing constructs: G |- e ==> t (inference) and G |- e <= t,e' (checking)
 %%% The first of these gets G,e as inputs and derives a t. The second form
 %%% gets G, e, and t as inputs and derives e' which is an e annotated with
 %%% more information.
@@ -61,7 +61,14 @@
         {
          path = [] :: [any()],
          vars = #{} :: #{ binary() => #vardef{} },
-         frags = #{} :: #{ binary() =>  #frag{} }
+         frags = #{} :: #{ binary() =>  #frag{} },
+
+         %% Current subcontext we are checking under. We are either
+         %% running in the "query context" of an input query to the system
+         %% or in the "variable context" of variables given as a JSON structure.
+         %%
+         %% The latter has different handling rules w.r.t, enumerated types
+         sub_context = query :: query | variable
         }).
 -type ctx() :: #ctx{}.
 -type polarity() :: '+' | '-' | '*'.
@@ -240,20 +247,39 @@ check_args_(_Ctx, [], [], Acc) ->
     {ok, Acc};
 check_args_(Ctx, [_|_] = Args, [], _Acc) ->
     err(Ctx, {excess_args, Args});
-check_args_(Ctx, Args, [{N, #schema_arg { ty = TyName }} = SArg | Next], Acc) ->
+check_args_(Ctx, Args, [{N, #schema_arg { ty = ArgTy,
+                                          default = Default }}| Next], Acc) ->
     CtxP = add_path(Ctx, N),
-    {ok, Sigma} = infer_input_type(Ctx, TyName),
+    {ok, Sigma} = infer_input_type(Ctx, ArgTy),
 
-    {ok, {_, #{ type := ArgTy, value := Val}}, NextArgs} =
-        take_arg(CtxP, SArg, Args),
-    {ok, Tau} = infer_input_type(Ctx, ArgTy),
-
-    %% Verify type compabitility
-    ok =  sub_input(CtxP, Tau, Sigma),
-    Res = case check_value(CtxP, Val, Tau) of
-              {ok, RVal} -> {N, #{ type => Tau, value => RVal}}
-          end,
-    check_args_(Ctx, NextArgs, Next, [Res|Acc]).
+    case lists:keytake(N, 1, Args) of
+        {value, {_, null}, _} ->
+            %% You are currently not allowed to input null values
+            err(CtxP, {null_input, N});
+        {value, {_, Val}, RemainingArgs} ->
+            %% Found argument with value Val
+            Res = case check_value(CtxP, Val, Sigma) of
+                      {ok, #var{} = Var} ->
+                          {N, #{ type => Sigma,
+                                 value => Var#var { default = Default }}};
+                      {ok, RVal} ->
+                          {N, #{ type => Sigma,
+                                 value => RVal}}
+                  end,
+            check_args_(Ctx, RemainingArgs, Next, [Res|Acc]);
+        false ->
+            case {Sigma, Default} of
+                {{non_null, _}, undefined} ->
+                    err(Ctx, missing_non_null_param);
+                {{non_null, _}, null} ->
+                    err(Ctx, missing_non_null_param);
+                _ ->
+                    {ok, Coerced} = coerce_default_param(CtxP, Default, Sigma),
+                    Res = {N, #{ type => Sigma,
+                                 value => Coerced }},
+                    check_args_(Ctx, Args, Next, [Res|Acc])
+            end
+    end.
 
 check_directive(Ctx, Context, #directive{ args = Args, id = ID} = D,
                 #directive_type { args = SArgs, locations = Locations } = Ty) ->
@@ -287,19 +313,30 @@ check_directives(Ctx, OpType, Dirs) ->
 %% Judge a type and a value. Used to verify a type judgement of the
 %% form 'G |- v <= T,e'' for a value 'v' and a type 'T'. Analysis has shown that
 %% it is most efficient to make the case analysis follow 'v' over 'T'.
+check_value(Ctx, Val, Ty) when is_binary(Ty) ->
+    {ok, Sigma} = infer_input_type(Ctx, Ty),
+    check_value(Ctx, Val, Sigma);
 check_value(Ctx, {name, _, N}, Sigma) ->
     check_value(Ctx, N, Sigma);
 check_value(Ctx, {var, ID}, Sigma) ->
     CtxP = add_path(Ctx, {var, ID}),
     {ok, #vardef { ty = Tau}} = infer(Ctx, {var, ID}),
     ok = sub_input(CtxP, Tau, Sigma),
-    {ok, {var, ID, Tau}};
+    {ok, #var { id = ID, ty = Tau }};
+check_value(Ctx, undefined, {non_null, _} = Sigma) ->
+    err(Ctx, {type_mismatch,
+              #{ document => undefined,
+                 schema => Sigma }});
 check_value(Ctx, null, {non_null, _} = Sigma) ->
     err(Ctx, {type_mismatch,
               #{ document => null,
                  schema => Sigma }});
 check_value(Ctx, Val, {non_null, Sigma}) ->
     check_value(Ctx, Val, Sigma);
+check_value(_Ctx, undefined, _Sigma) ->
+    %% Values not given are currently defaulted to the value null
+    %% @todo: Lift this curse
+    {ok, null};
 check_value(_Ctx, null, _Sigma) ->
     %% Null values are accepted in every other context
     {ok, null};
@@ -325,6 +362,13 @@ check_value(Ctx, {enum, N}, #enum_type { id = ID } = Sigma) ->
                        #{ document => Others,
                           schema => Sigma }})
     end;
+check_value(Ctx, Obj, #input_object_type{} = Tau) when is_map(Obj) ->
+    %% When an object comes in through JSON for example, then the input object
+    %% will be a map which is already unique in its fields. To handle this, turn
+    %% the object into the same form as the one we use on query documents and pass
+    %% it on. Note that the code will create a map later on once the input has been
+    %% uniqueness-checked.
+    check_value(Ctx, {input_object, maps:to_list(Obj)}, Tau);
 check_value(Ctx, {input_object, _} = InputObj, Sigma) ->
     case Sigma of
         #input_object_type{} ->
@@ -336,12 +380,15 @@ check_value(Ctx, {input_object, _} = InputObj, Sigma) ->
     end;
 check_value(Ctx, Val, #scalar_type{} = Sigma) ->
     coerce(Ctx, Val, Sigma);
-check_value(Ctx, String, #enum_type{}) when is_binary(String) ->
+check_value(#ctx { sub_context = query } = Ctx, String, #enum_type{}) when is_binary(String) ->
     %% The spec (Jun2018, section 3.9 - Input Coercion) says that this
     %% is not allowed, unless given as a parameter. In this case, it
     %% is not given as a parameter, but is expanded in as a string in
     %% a query document. Reject.
     err(Ctx, enum_string_literal);
+check_value(#ctx { sub_context = variable } = Ctx, String, #enum_type{} = Tau) when is_binary(String) ->
+    %% In the case of a sub context for variables, we are allowed to handle the case
+    check_value(Ctx, {enum, String}, Tau);
 check_value(Ctx, Val, #enum_type{} = Sigma) ->
     coerce(Ctx, Val, Sigma);
 check_value(Ctx, Val, Sigma) ->
@@ -370,29 +417,33 @@ check_input_obj_(Ctx, Obj, [], Acc) ->
         0 -> Acc;
         K when K > 0 -> err(Ctx, {excess_fields_in_object, Obj})
     end;
-%% @todo: Clearly this has to change because Ty isn't known at this
 check_input_obj_(Ctx, Obj, [{Name, #schema_arg { ty = Ty,
                                                  default = Default }} | Next],
                  Acc) ->
-    Result = case maps:get(Name, Obj, not_found) of
-                 not_found ->
-                     check_input_obj_null(add_path(Ctx, Name), Default, Ty);
-                 V ->
-                     CtxP = add_path(Ctx, Name),
-                     {ok, Tau} = infer_input_type(CtxP, Ty),
-                     {ok, R} = check_param(CtxP, V, Tau),
-                     R
-             end,
+    CtxP = add_path(Ctx, Name),
+    {ok, Result} =
+        case maps:get(Name, Obj, not_found) of
+            not_found ->
+                case check_not_found(CtxP, Ty, Default) of
+                    undefined ->
+                        coerce_default_param(CtxP, null, Ty);
+                    default ->
+                        coerce_default_param(CtxP, Default, Ty)
+                end;
+            V ->
+                {ok, Tau} = infer_input_type(CtxP, Ty),
+                case check_value(CtxP, V, Tau) of
+                    {ok, #var{} = Var} ->
+                        {ok, Coerced} = coerce_default_param(CtxP, Default, Ty),
+                        {ok, Var#var { default = Coerced }};
+                    {ok, Res} ->
+                        {ok, Res}
+                end
+        end,
     check_input_obj_(Ctx,
                      maps:remove(Name, Obj),
                      Next,
                      Acc#{ Name => Result }).
-
-check_input_obj_null(Ctx, null, {non_null, _}) ->
-    err(Ctx, missing_non_null_param);
-check_input_obj_null(Ctx, Default, Ty) ->
-    {ok, R} = coerce_default_param(Ctx, Default, Ty),
-    R.
 
 check_sset(Ctx, [], Ty) ->
     case Ty of
@@ -537,7 +588,8 @@ check_params(FunEnv, OpName, Params) ->
                 err(#ctx{}, {operation_not_found, OpName});
             VarEnv ->
                 Ctx = #ctx { vars = VarEnv,
-                             path = [OpName] },
+                             path = [OpName],
+                             sub_context = variable },
                 check_params_(Ctx, Params)
         end
     catch throw:{error, Path, Msg} ->
@@ -550,81 +602,34 @@ check_params(FunEnv, OpName, Params) ->
 %% type is valid.
 check_params_(#ctx { vars = VE } = Ctx, OrigParams) ->
     F = fun
-            (Key, Tau, Parameters) ->
-                {ok, Val} = check_param(add_path(Ctx, Key),
-                                          maps:get(Key, Parameters, not_found),
-                                          Tau),
-                Parameters#{ Key => Val }
+            (Key, #vardef { ty = Tau, default = Default}, Parameters) ->
+                CtxP = add_path(Ctx, Key),
+                case maps:get(Key, Parameters, not_found) of
+                    not_found ->
+                        case check_not_found(CtxP, Tau, Default) of
+                            undefined ->
+                                Parameters;
+                            default ->
+                                {ok, Res} = coerce_default_param(CtxP, Default, Tau),
+                                Parameters#{ Key => Res }
+                        end;
+                    Value ->
+                        {ok, Res} = check_value(CtxP, Value, Tau),
+                        Parameters#{ Key => Res }
+                end
         end,
     maps:fold(F, OrigParams, VE).
 
-%% When checking parameters, we must consider the case of default values.
-%% If a given parameter is not given, and there is a default, we can supply
-%% the default value in some cases. The spec requires special handling of
-%% null values, which are handled here.
-check_param(Ctx, not_found, Tau) ->
-    case Tau of
-        #vardef { ty = {non_null, _}, default = null } ->
-            err(Ctx, missing_non_null_param);
-        #vardef { default = Default, ty = Ty } ->
-            coerce_default_param(Ctx, Default, Ty)
-    end;
-check_param(Ctx, Val, #vardef { ty = Tau }) ->
-    check_param_(Ctx, Val, Tau);
-check_param(Ctx, Val, Tau) ->
-    check_param_(Ctx, Val, Tau).
-
-%% Lift types up if needed
-check_param_(Ctx, Val, Ty) when is_binary(Ty) ->
-    {ok, Tau} = infer_input_type(Ctx, Ty),
-    check_param_(Ctx, Val, Tau);
-check_param_(Ctx, {var, ID}, Sigma) ->
-    CtxP = add_path(Ctx, {var, ID}),
-    {ok, #vardef { ty = Tau}} = infer(Ctx, {var, ID}),
-    ok = sub_input(CtxP, Tau, Sigma),
-    {ok, {var, ID, Tau}};
-check_param_(Ctx, null, {non_null, _}) ->
-    err(Ctx, non_null);
-check_param_(Ctx, Val, {non_null, Tau}) ->
-    %% Here, the value cannot be null due to the preceeding clauses
-    check_param_(Ctx, Val, Tau);
-check_param_(_Ctx, null, _Tau) ->
-    {ok, null};
-check_param_(Ctx, Lst, {list, Tau}) when is_list(Lst) ->
-    %% Build a dummy structure to match the recursor. Unwrap this
-    %% structure before replacing the list parameter.
-    %%
-    %% @todo: Track the index here
-    {ok, [begin
-              {ok, V} = check_param_(Ctx, X, Tau),
-              V
-          end || X <- Lst]};
-check_param_(Ctx, Val, #scalar_type{} = Tau) ->
-    coerce(Ctx, Val, Tau);
-check_param_(Ctx, {enum, Val}, #enum_type{} = Tau) when is_binary(Val) ->
-    check_param_(Ctx, Val, Tau);
-check_param_(Ctx, Val, #enum_type { id = Ty } = Tau) when is_binary(Val) ->
-    %% Determine the type of any enum term, and then coerce it
-    case graphql_schema:validate_enum(Ty, Val) of
-        ok ->
-            coerce(Ctx, Val, Tau);
-        not_found ->
-            err(Ctx, {enum_not_found, Ty, Val});
-        {other_enums, OtherTys} ->
-            err(Ctx, {param_mismatch, {enum, Ty, OtherTys}})
-    end;
-check_param_(Ctx, Obj, #input_object_type{} = Tau) when is_map(Obj) ->
-    %% When an object comes in through JSON for example, then the input object
-    %% will be a map which is already unique in its fields. To handle this, turn
-    %% the object into the same form as the one we use on query documents and pass
-    %% it on. Note that the code will create a map later on once the input has been
-    %% uniqueness-checked.
-    check_param_(Ctx, {input_object, maps:to_list(Obj)}, Tau);
-check_param_(Ctx, {input_object, KVPairs}, #input_object_type{} = Tau) ->
-    check_input_obj(Ctx, {input_object, KVPairs}, Tau);
-    %% Everything else are errors
-check_param_(Ctx, Val, Tau) ->
-    err(Ctx, {param_mismatch, Val, Tau}).
+%% Handle the case where the parameter isn't found in the system
+%% In this case, we handle nullability through this matching rule set
+check_not_found(Ctx, {non_null, _}, null) ->
+    err(Ctx, missing_non_null_param);
+check_not_found(Ctx, {non_null, _}, undefined) ->
+    err(Ctx, missing_non_null_param);
+check_not_found(_Ctx, _Tau, undefined) ->
+    undefined;
+check_not_found(_Ctx, _Tau, _Default) ->
+    default.
 
 %% -- SUBTYPE/SUBSUMPTION ------------------------------------------------------
 %%
@@ -802,8 +807,10 @@ coerce_name(Name) -> graphql_ast:name(Name).
 %% type checking on the default values in the schema type checker.
 %% There is absolutely no reason to do something like this then since
 %% it can never fail like this.
+coerce_default_param(#ctx { }, undefined, _Ty) ->
+    {ok, undefined};
 coerce_default_param(#ctx { path = Path } = Ctx, Default, Ty) ->
-    try check_param(Ctx, Default, Ty) of
+    try check_value(Ctx, Default, Ty) of
         Result -> Result
     catch
         Class:Err ->
@@ -812,7 +819,7 @@ coerce_default_param(#ctx { path = Path } = Ctx, Default, Ty) ->
                {default_value, Default},
                {type, graphql_err:format_ty(Ty)},
                {default_coercer_error, Class, Err}]),
-            err(Path, non_coercible_default)
+            err(Ctx, non_coercible_default)
     end.
 
 coerce(Ctx, Val, #enum_type { id = ID, resolve_module = ResolveMod }) ->
@@ -891,28 +898,6 @@ directive_location(#op { ty = Ty }) ->
         {query, _} -> 'QUERY';
         {mutation, _} -> 'MUTATION';
         {subscription, _} -> 'SUBSCRIPTION'
-    end.
-
-%% Pull out a value from a list of arguments. This is used to check
-%% we eventually cover all arguments properly since we can check if there
-%% are excess arguments in the end.
-take_arg(Ctx, {Key, #schema_arg { ty = Tau,
-                                  default = Default }}, Args) ->
-    case lists:keytake(Key, 1, Args) of
-        {value, {_, null}, _NextArgs} ->
-            %% You are currently not allowed to input null values
-            err(Ctx, {null_input, Key});
-        {value, {_, Val}, NextArgs} ->
-            %% Argument found, use it
-            {ok, {Key, #{ type => Tau, value => Val}}, NextArgs};
-        false ->
-            %% Argument was not given. Resolve default value if any
-            case {Tau, Default} of
-                {{non_null, _}, null} ->
-                    err(Ctx, missing_non_null_param);
-                _ ->
-                    {ok, {Key, #{ type => Tau, value => Default}}, Args}
-            end
     end.
 
 %% Determine the operation whih the call wants to run

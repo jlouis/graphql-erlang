@@ -10,12 +10,30 @@ the compatibility issues you are likely to encounter.
 
 ## [Unreleased]
 
+### Compatibility
+
+* The error code `param_mismatch` was removed in lieu of
+  `type_mismatch` due to a rewrite in the type checker of error
+  handling.
+* The error code `non_null` will now report `type_mismatch` instead.
+* The error code `enum_not_found` will now be reported as
+  `unknown_enum`
+* If a string literal is given in place of an enum, the error code
+  will now be `enum_string_literal` rather than `enum_not_found`.
+
 ### Added
 
 * Add proper support for OTP release 21 (by getong, 18年梦醒). Detect the
   OTP 21 version, and if present, use the new stack-trace form. This
   ensures backwards compatibility as well as proper stack trace
   handling in new OTP releases.
+* New command `graphql:map/2`. Given a `Result` of the form `{ok, Val} |
+  {defer, Token}` the call to `graphql:map(F, Result)` will apply `F`
+  to the result. Either now, or in the case of a defer, when the defer
+  completes. This yields an alternative way to handle events which
+  cannot be completed right away. Long running work is usually better
+  handled in a spawned process, but simpler changes can be handled
+  within the context of the GraphQL process.
 * New command `graphql:sync/3`. Calling `graphql:sync(Ctx, Pid, Msg)`
   will place a message into the GraphQL mailbox. When this message
   occurs, we will send `Pid` a message `Msg`. This is useful for e.g.,
@@ -28,6 +46,11 @@ the compatibility issues you are likely to encounter.
 
 ### Fixed
 
+* Default variable value expansion has been fixed. If you have a
+  situation where a field-arg has a default value, you have supplied a
+  parameter for that value, say `foo(x: $k)` and you then omit `$k` in
+  your query, the underlying default (in this case the default for
+  `x`) is now picked up properly.
 * Re-instate the operation type in the callers context
 * Remove the occurrence of fragment names in `path` components of
   errors. These are not allowed per the Jun2018 specification and

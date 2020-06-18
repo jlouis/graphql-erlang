@@ -55,51 +55,50 @@ end_per_testcase(_Case, _Config) ->
 groups() ->
     Dungeon =
         {dungeon, [],
-         [ unions
-         , defer
-         , union_errors
-         , error_handling
-         , scalar_output_coercion
-         , populate
-         , default_query
-         , direct_input
-         , fixed_input
-         , nested_input_object
-         , inline_fragment
-         , fragment_over_union_interface
-         , integer_in_float_context
-         , scalar_as_expression_coerce
-         , non_null_field
-         , complex_modifiers
-         , simple_field_merge
-         , nested_field_merge
-         , multiple_monsters_and_rooms
-         , include_directive
-         , introspection
-         , introspection_with_variable
-         , get_operation
-         , coercion_int_float
-         , replace_enum_representation
-         , auxiliary_data
-         , find_monster
-         , find_monster_singleton
-         , invalid_scalar_int_input
-         , introspect_default_value
-         ]},
+         [ unions,
+           defer,
+           union_errors,
+           error_handling,
+           scalar_output_coercion,
+           populate,
+           default_query,
+           direct_input,
+           fixed_input,
+           nested_input_object,
+           inline_fragment,
+           fragment_over_union_interface,
+           integer_in_float_context,
+           scalar_as_expression_coerce,
+           non_null_field,
+           complex_modifiers,
+           simple_field_merge,
+           nested_field_merge,
+           multiple_monsters_and_rooms,
+           include_directive,
+           introspection,
+           introspection_with_variable,
+           get_operation,
+           coercion_int_float,
+           replace_enum_representation,
+           auxiliary_data,
+           find_monster,
+           find_monster_singleton,
+           invalid_scalar_int_input,
+           introspect_default_value,
+           default_parameter ]},
     Errors =
         {errors, [],
-         [ unknown_variable
-         , null_input
-         , missing_fragment
-         , quoted_input_error
-         , input_coerce_error_exception
-         , input_coerce_error
-         , invalid_enums
-         , invalid_enum_result
-         , invalid_type_resolution
-         , duplicate_validation
-         , invalid_list_resolver
-         ]},
+         [ unknown_variable,
+           null_input,
+           missing_fragment,
+           quoted_input_error,
+           input_coerce_error_exception,
+           input_coerce_error,
+           invalid_enums,
+           invalid_enum_result,
+           invalid_type_resolution,
+           duplicate_validation,
+           invalid_list_resolver ]},
     %% Groups
     [ Dungeon
     , Errors
@@ -125,11 +124,11 @@ run(Config, File, Q, Params) ->
 
 default_query(Config) ->
     ID = ?config(known_goblin_id_1, Config),
-    #{ data := #{ <<"goblin">> := #{ <<"id">> := ID, <<"name">> := <<"goblin">>, <<"hitpoints">> := 10 }}} =
+    #{ data := #{ <<"goblin">> := #{ <<"id">> := ID, <<"name">> := <<"goblin!">>, <<"hitpoints">> := 10 }}} =
         run(Config, <<"GoblinQuery">>, #{}),
-    #{ data := #{ <<"goblin">> := #{ <<"id">> := ID, <<"name">> := <<"goblin">>, <<"stats">> := [#{ <<"attack">> := 3 }] }}} =
+    #{ data := #{ <<"goblin">> := #{ <<"id">> := ID, <<"name">> := <<"goblin!">>, <<"stats">> := [#{ <<"attack">> := 3 }] }}} =
         run(Config, <<"MinGoblin">>, #{<<"minAttack">> => 0 }),
-    #{ data := #{ <<"goblin">> := #{ <<"id">> := ID, <<"name">> := <<"goblin">>, <<"stats">> := [] }}} =
+    #{ data := #{ <<"goblin">> := #{ <<"id">> := ID, <<"name">> := <<"goblin!">>, <<"stats">> := [] }}} =
         run(Config, <<"MinGoblin">>, #{<<"minAttack">> => 30 }),
     ok.
 
@@ -188,7 +187,7 @@ coercion_int_float(Config) ->
 
 get_operation(Config) ->
     GoblinId = ?config(known_goblin_id_1, Config),
-    Expected = #{ data => #{<<"monster">> => #{ <<"name">> => <<"goblin">> }}},
+    Expected = #{ data => #{<<"monster">> => #{ <<"name">> => <<"goblin!">> }}},
     Q1 = "{ monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { name }}",
     Expected = th:x(Config, Q1),
     Q2 = "query Q { monster(id: \"" ++ binary_to_list(GoblinId) ++ "\") { name }}",
@@ -211,7 +210,7 @@ include_directive(Config) ->
     #{ data := #{
          <<"goblin">> := #{
              <<"id">> := GoblinId,
-             <<"name">> := <<"goblin">>,
+             <<"name">> := <<"goblin!">>,
              <<"hitpoints">> := 10 }}} =
         run(Config, <<"GoblinQueryDirectives">>, #{ <<"fat">> => true }),
 
@@ -226,7 +225,7 @@ include_directive(Config) ->
     #{ data := #{
          <<"goblin">> := #{
              <<"id">> := GoblinId,
-             <<"name">> := <<"goblin">>,
+             <<"name">> := <<"goblin!">>,
              <<"hitpoints">> := 10 }}} =
         run(Config, <<"GoblinQueryDirectivesInline">>, #{ <<"fat">> => true }),
     ok.
@@ -239,21 +238,21 @@ unions(Config) ->
     Expected1 = #{ data => #{
                      <<"goblin">> => #{
                      <<"id">> => OpaqueId,
-                     <<"name">> => <<"goblin">>,
+                     <<"name">> => <<"goblin!">>,
                      <<"hitpoints">> => 10 }}},
     Expected1 = run(Config, <<"GoblinQuery">>, #{<<"id">> => OpaqueId}),
     ct:log("Same query, but on items"),
     Expected2 = #{ data => #{
                      <<"goblin">> => #{
                          <<"id">> => OpaqueId,
-                         <<"name">> => <<"goblin">>,
+                         <<"name">> => <<"goblin!">>,
                          <<"hitpoints">> => 10 }}},
     Expected2 = run(Config, <<"GoblinThingQuery">>, #{ <<"id">> => OpaqueId }),
     ct:log("Union expansions"),
     Expected3 = #{ data => #{ <<"things">> => [#{}]}},
     Expected3 = run(Config, <<"ThingQ1">>, #{ }),
 
-    Expected4 = #{ data => #{ <<"things">> => [#{ <<"__typename">> => <<"Monster">>, <<"name">> => <<"goblin">> }]}},
+    Expected4 = #{ data => #{ <<"things">> => [#{ <<"__typename">> => <<"Monster">>, <<"name">> => <<"goblin!">> }]}},
     Expected4 = run(Config, <<"ThingQ2">>, #{ }),
 
     Expected5 = #{ data => #{ <<"things">> => [#{ <<"__typename">> => <<"Monster">> }]}},
@@ -283,7 +282,7 @@ scalar_output_coercion(Config) ->
     #{ data := #{
         <<"goblin">> := #{
             <<"id">> := OpaqueId,
-            <<"name">> := <<"goblin">>,
+            <<"name">> := <<"goblin!">>,
             <<"color">> := <<"#41924B">>,
             <<"hitpoints">> := 10 }}} =
         run(Config, <<"ScalarOutputCoercion">>, #{ <<"id">> => OpaqueId }),
@@ -417,6 +416,69 @@ populate(Config) ->
                                        <<"I LOVE WEAVING!">>}]}}}},
 
     ExpectedNestedInput = run(Config, <<"IntroduceMonsterNestedVar">>, NestedInput),
+
+    ExpectedDefaultNestedInput =
+        #{data =>
+              #{<<"introduceMonster">> =>
+                    #{<<"clientMutationId">> => <<"123">>,
+                      <<"monster">> =>
+                          #{<<"color">> => <<"#444444">>,
+                            <<"hitpoints">> => 9001,
+                            <<"id">> => <<"bW9uc3RlcjoxMDA4">>,
+                            <<"mood">> => <<"AGGRESSIVE">>,
+                            <<"name">> => <<"Tiny Evil Cat">>,
+                            <<"plushFactor">> => 57.0,
+                            <<"properties">> => [<<"BEAST">>],
+                            <<"stats">> =>
+                                [#{<<"attack">> => 1337,
+                                   <<"shellScripting">> => 10,
+                                   <<"yell">> =>
+                                       <<"Purrrrrrrrrrrrrr!">>}]}}}},
+
+    ExpectedDefaultNestedInput = run(Config, <<"IntroduceMonsterDefaultNestedVar">>, #{}),
+
+    ExpectedOptionalNestedInput =
+        #{data =>
+              #{<<"introduceMonster">> =>
+                    #{<<"clientMutationId">> => <<"123">>,
+                      <<"monster">> =>
+                          #{<<"color">> => <<"#FFFFFF">>,
+                            <<"hitpoints">> => 1,
+                            <<"id">> => <<"bW9uc3RlcjoxMDA5">>,
+                            <<"mood">> => <<"DODGY">>,
+                            <<"name">> => <<"Teeny Tiny Mouse">>,
+                            <<"plushFactor">> => 10.0,
+                            <<"properties">> => [<<"BEAST">>],
+                            <<"stats">> =>
+                                [#{<<"attack">> => 1,
+                                   <<"shellScripting">> => 1,
+                                   <<"yell">> =>
+                                       <<"Meek!">>}]}}}},
+
+    ExpectedOptionalNestedInput = run(Config, <<"IntroduceMonsterOptionalNestedVar">>, #{}),
+
+
+    ct:log("Check for proper null-handling"),
+
+    ExpectedNullHandling =
+        #{data =>
+              #{<<"introduceMonster">> =>
+                    #{<<"clientMutationId">> => <<"123">>,
+                      <<"monster">> =>
+                          #{<<"color">> => <<"#000">>,
+                            <<"hitpoints">> => 9002,
+                            <<"id">> => <<"bW9uc3RlcjoxMDEw">>,
+                            <<"mood">> => <<"DODGY">>,
+                            <<"name">> => <<"Tiny Black Hole">>,
+                            <<"plushFactor">> => 0.01,
+                            <<"properties">> => [<<"BEAST">>],
+                            <<"stats">> =>
+                                [#{<<"attack">> => 1,
+                                   <<"shellScripting">> => 1,
+                                   <<"yell">> =>
+                                       <<"...">>}]}}}},
+
+    ExpectedNullHandling = run(Config, <<"IntroduceMonsterNullHandling">>, #{}),
 
     ct:log("Check duplicate enum values (BEAST mood/property)"),
 
@@ -671,7 +733,8 @@ scalar_as_expression_coerce(Config) ->
                                                     <<"attack">> := 7,
                                                     <<"shellScripting">> := 5,
                                                     <<"yell">> := <<"...">> }]}}}} =
-             run(Config, <<"IntroduceMonsterFatExpr">>, #{}),
+             run(Config, <<"IntroduceMonsterFatExpr">>, #{ <<"properties">> => [<<"MURLOC">>,
+                                                                                <<"MECH">>]}),
     true = (PF - 0.01) < 0.00001,
     ok.
 
@@ -782,14 +845,16 @@ fragment_over_union_interface(Config) ->
 
 find_monster(Config) ->
     Expected1 =
-        lists:sort([#{<<"name">> => <<"goblin">>},
-                    #{<<"name">> => <<"Auxiliary Undead">>},
-                    #{<<"name">> => <<"goblin">>},
-                    #{<<"name">> => <<"goblin">>},
-                    #{<<"name">> => <<"hobgoblin">>},
-                    #{<<"name">> => <<"Yellow Slime">>},
-                    #{<<"name">> => <<"goblin">>},
-                    #{<<"name">> => <<"goblin">>}]),
+        lists:sort([#{<<"name">> => <<"goblin!">>},
+                    #{<<"name">> => <<"Teeny Tiny Mouse!">>},
+                    #{<<"name">> => <<"Tiny Black Hole!">>},
+                    #{<<"name">> => <<"Auxiliary Undead!">>},
+                    #{<<"name">> => <<"goblin!">>},
+                    #{<<"name">> => <<"goblin!">>},
+                    #{<<"name">> => <<"hobgoblin!">>},
+                    #{<<"name">> => <<"Yellow Slime!">>},
+                    #{<<"name">> => <<"goblin!">>},
+                    #{<<"name">> => <<"goblin!">>}]),
     #{ data := #{<<"findMonsters">> := Out1 }} = run(Config, <<"FindQuery">>, #{}),
     Expected1 = lists:sort(Out1),
     #{ data := #{<<"findMonsters">> := Out2 }} = run(Config, <<"FindQueryParam">>, #{ <<"m">> => [<<"DODGY">>]}),
@@ -843,14 +908,16 @@ defer(Config) ->
 find_monster_singleton(Config) ->
     Expected1 =
         lists:sort(
-          [#{<<"name">> => <<"goblin">>},
-           #{<<"name">> => <<"Auxiliary Undead">>},
-           #{<<"name">> => <<"goblin">>},
-           #{<<"name">> => <<"goblin">>},
-           #{<<"name">> => <<"hobgoblin">>},
-           #{<<"name">> => <<"Yellow Slime">>},
-           #{<<"name">> => <<"goblin">>},
-           #{<<"name">> => <<"goblin">>}]),
+          [#{<<"name">> => <<"goblin!">>},
+           #{<<"name">> => <<"Teeny Tiny Mouse!">>},
+           #{<<"name">> => <<"Tiny Black Hole!">>},
+           #{<<"name">> => <<"Auxiliary Undead!">>},
+           #{<<"name">> => <<"goblin!">>},
+           #{<<"name">> => <<"goblin!">>},
+           #{<<"name">> => <<"hobgoblin!">>},
+           #{<<"name">> => <<"Yellow Slime!">>},
+           #{<<"name">> => <<"goblin!">>},
+           #{<<"name">> => <<"goblin!">>}]),
     #{ data := #{ <<"findMonsters">> := Out1 }} = run(Config, <<"FindQuerySingleton">>, #{}),
     Expected1 = lists:sort(Out1),
     #{ data := #{ <<"findMonsters">> := Out2 }} = run(Config, <<"FindQueryParamSingleton">>, #{ <<"m">> => <<"DODGY">>}),
@@ -886,7 +953,7 @@ auxiliary_data(Config) ->
     Expected = #{
       aux => [{my_auxiliary_data, true}],
       data => #{ <<"monster">> => #{ <<"id">> => OpaqueId
-                                   , <<"name">> => <<"Auxiliary Undead">>}
+                                   , <<"name">> => <<"Auxiliary Undead!">>}
                }
      },
     Expected = run(Config, <<"TestAuxiliaryData">>, #{<<"id">> => OpaqueId}).
@@ -928,9 +995,9 @@ null_input(Config) ->
                  [<<"TestNullInput">>,<<"room">>,
                   <<"id">>]}]} = run(Config, <<"test_null_input_2.graphql">>, <<"TestNullInput">>, #{}),
     %% The following bugs must fail because the value is null which is not allowed
-    #{ errors := [#{ extensions := #{ code := non_null }}]} =
+    #{ errors := [#{ extensions := #{ code := type_mismatch }}]} =
         run(Config, <<"test_null_input_3.graphql">>, <<"TestNullInput">>, #{}),
-    #{ errors := [#{ extensions := #{ code := non_null }}]} =
+    #{ errors := [#{ extensions := #{ code := type_mismatch }}]} =
         run(Config, <<"test_null_input_4.graphql">>, <<"TestNullInput">>,
             #{ <<"input">> =>
                    #{ <<"name">> => <<"Orc">>,
@@ -971,33 +1038,27 @@ invalid_enums(Config) ->
       <<"mood">> => <<"AGGRESSIF">>
      },
     #{errors :=
-          [#{ extensions := #{ code := enum_not_found },
-              message := <<"The value <<\"AGGRESSIF\">> is not a valid enum value for type Mood">>,
+          [#{ extensions := #{ code := unknown_enum },
               path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}]} =
         run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input }),
     #{errors :=
-          [ #{ extensions := #{ code := enum_not_found },
-               message := <<"The value <<>> is not a valid enum value for type Mood">>,
+          [ #{ extensions := #{ code := unknown_enum },
                path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}]} =
         run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input#{ <<"mood">> => <<"">> }}),
     #{errors :=
-          [#{extensions := #{ code := enum_not_found },
-             message := <<"The value <<>> is not a valid enum value for type Mood">>,
+          [#{extensions := #{ code := unknown_enum },
              path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}]} =
           run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input#{ <<"mood">> => <<>> }}),
     #{errors :=
-      [#{extensions := #{ code := param_mismatch },
-         message := <<"The enum value matches types [Property] but was used in a context where an enum value of type Mood was expected">>,
+      [#{extensions := #{ code := type_mismatch },
          path := [<<"IntroduceMonster">>,<<"input">>,<<"mood">>]}]} =
         run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input#{ <<"mood">> => <<"DRAGON">> }}),
     #{ errors :=
-           [#{ extensions := #{  code := enum_not_found },
-               message := <<"The value <<\"AGGRESSIF\">> is not a valid enum value for type Mood">>,
+           [#{ extensions := #{  code := unknown_enum },
                path := [<<"IMonster">>,<<"introduceMonster">>, <<"input">>, <<"mood">>]}]} =
         run(Config, "invalid_enum_1.graphql", <<"IMonster">>, #{}),
     #{ errors :=
-           [#{ extensions := #{ code := enum_not_found },
-               message := <<"The value <<>> is not a valid enum value for type Mood">>,
+           [#{ extensions := #{ code := enum_string_literal },
                path := [<<"IMonster">>,<<"introduceMonster">>, <<"input">>, <<"mood">>]}]} =
         run(Config, "invalid_enum_2.graphql", <<"IMonster">>, #{}),
     ok.
@@ -1030,4 +1091,18 @@ input_coerce_error_exception(Config) ->
                             <<"input">>,
                             <<"color">>]}]} =
         run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input }),
+    ok.
+
+default_parameter(Config) ->
+    ct:log("Run, and provide a colorType explicitly"),
+    #{ data :=
+           #{ <<"monster">> :=
+                  #{ <<"color">> := <<"#727272">>}}} =
+        run(Config, <<"GetMonster">>, #{ <<"id">> => <<"bW9uc3Rlcjox">>,
+                                         <<"colorType">> => <<"gray">> }),
+    ct:log("Run, and pick up the color type via the argument default"),
+    #{ data :=
+           #{ <<"monster">> :=
+                  #{ <<"color">> := <<"#41924B">>}}} =
+        run(Config, <<"GetMonster">>, #{ <<"id">> => <<"bW9uc3Rlcjox">> }),
     ok.

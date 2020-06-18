@@ -3,7 +3,9 @@
 -export([input/2, output/2]).
 
 input(_, true) -> {ok, true};
+input(_, <<"true">>) -> {ok, true};
 input(_, false) -> {ok, false};
+input(_, <<"false">>) -> {ok, false};
 input(_, _) -> {error, not_bool}.
 
 output(<<"Bool">>, true)                 -> {ok, true};
