@@ -209,6 +209,7 @@ Directive -> '@' Name Arguments :
 
 KeywordName -> 'query' : keyword('$1').
 KeywordName -> 'mutation' : keyword('$1').
+KeywordName -> 'subscription' : keyword('$1').
 KeywordName -> 'fragment' : keyword('$1').
 KeywordName -> 'type' : keyword('$1').
 KeywordName -> 'implements' : keyword('$1').
