@@ -1,6 +1,6 @@
 {application,graphql,
              [{description,"Application for handling GraphQL queries"},
-              {vsn,"0.16.0"},
+              {vsn,"0.16.1"},
               {registered,[]},
               {applications,[kernel,stdlib]},
               {mod,{graphql_app,[]}},
