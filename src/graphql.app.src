@@ -1,22 +1,15 @@
-{application, graphql,
- [{description, "Application for handling GraphQL queries"},
-  {vsn, "0.15.0"},
-  {registered, []},
-  {applications,
-   [kernel,
-    stdlib
-   ]},
-  {mod, {graphql_app, []}},
-  {env,[]},
-  {modules, []},
-  {registered, [graphql_schema]},
-
-  {pkg_name, "graphql_erl"},
-  {maintainers, ["Jesper Louis Andersen",
-                 "Martin Gausby"]},
-  {licenses, ["Apache 2.0"]},
-  {links, [
-    {"Github", "https://github.com/shopgun/graphql-erlang"},
-    {"Tutorial", "https://shopgun.github.io/graphql-erlang-tutorial/"}]}
- ]}.
-
+{application,graphql,
+             [{description,"Application for handling GraphQL queries"},
+              {vsn,"0.16.0"},
+              {registered,[]},
+              {applications,[kernel,stdlib]},
+              {mod,{graphql_app,[]}},
+              {env,[]},
+              {modules,[]},
+              {registered,[graphql_schema]},
+              {pkg_name,"graphql_erl"},
+              {maintainers,["Jesper Louis Andersen","Martin Gausby"]},
+              {licenses,["Apache 2.0"]},
+              {links,[{"Github","https://github.com/shopgun/graphql-erlang"},
+                      {"Tutorial",
+                       "https://shopgun.github.io/graphql-erlang-tutorial/"}]}]}.
