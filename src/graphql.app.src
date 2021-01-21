@@ -10,6 +10,6 @@
               {pkg_name,"graphql_erl"},
               {maintainers,["Jesper Louis Andersen","Martin Gausby"]},
               {licenses,["Apache 2.0"]},
-              {links,[{"Github","https://github.com/shopgun/graphql-erlang"},
+              {links,[{"Github","https://github.com/jlouis/graphql-erlang"},
                       {"Tutorial",
-                       "https://shopgun.github.io/graphql-erlang-tutorial/"}]}]}.
+                       "https://jlouis.github.io/graphql-erlang-tutorial/"}]}]}.
