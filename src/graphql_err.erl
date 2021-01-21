@@ -15,7 +15,7 @@
 abort(Path, Msg) ->
     abort(Path, uncategorized, Msg).
 
--spec abort([any()], any()) -> no_return().
+-spec abort([any()], any(), any()) -> no_return().
 abort(Path, Phase, Msg) ->
    Err = mk(Path, Phase, Msg),
    throw({error, Err}).

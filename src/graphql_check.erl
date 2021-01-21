@@ -38,7 +38,7 @@
 %%% Algorithm:
 %%%
 %%% We use a bidirectional type checker. In general we handle two kinds of
-%%% typing constructs: G |- e ==> t (inference) and G |- e <= t,e' (checking)
+%%% typing constructs: `G |- e ==> t' (inference) and `G |- e <== t, e' (checking)
 %%% The first of these gets G,e as inputs and derives a t. The second form
 %%% gets G, e, and t as inputs and derives e' which is an e annotated with
 %%% more information.
@@ -75,7 +75,7 @@
 
 -type ty() :: schema_type() | schema_object().
 -type ty_name() :: binary().
-%% -type clause() :: op() | frag_spread() | frag().
+
 %% This is a bidirectional type checker. It proceeds by running three
 %% kinds of functions: synth(Gamma, E) -> {ok, T} | {error, Reason}
 %% which synthesizes a given type out of its constituent parts.
