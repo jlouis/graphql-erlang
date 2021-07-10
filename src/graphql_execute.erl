@@ -7,6 +7,7 @@
 -compile(inline).
 -compile(inline_list_funcs).
 -compile({inline_size, 50}).
+-compile({no_auto_import,[alias/1]}).
 
 -export([x/1, x/2]).
 -export([builtin_input_coercer/1]).
