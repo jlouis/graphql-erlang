@@ -2,7 +2,8 @@
 
 -export([input/2, output/2]).
 
-input(_, X) -> {ok, X}.
+input(_, B) when is_binary(B) -> {ok, B};
+input(_, _) -> {error, not_string}.
 
 %% According to the specification, Jun2018, we should
 %% accept coercion as long as we are not "loosing information"
