@@ -14,7 +14,8 @@ input(Ty, X) when is_float(X) ->
     end;
 input(_, X) when is_integer(X), X > ?MAX_INT -> {error, not_int32_value};
 input(_, X) when is_integer(X), X < ?MIN_INT -> {error, not_int32_value};
-input(_, X) -> {ok, X}.
+input(_, X) when is_integer(X) -> {ok, X};
+input(_, _X)  -> {error, not_integer}.
 
 output(<<"Int">>, I) when is_integer(I) ->
     if
