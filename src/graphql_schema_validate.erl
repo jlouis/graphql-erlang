@@ -3,7 +3,7 @@
 -include("graphql_schema.hrl").
 -include("graphql.hrl").
 
--export([x/0, root/1]).
+-export([x/1, root/2]).
 
 -define (DIRECTIVE_LOCATIONS, [
     'QUERY', 'MUTATION', 'SUBSCRIPTION', 'FIELD', 'FRAGMENT_DEFINITION',
@@ -11,20 +11,20 @@
     'FIELD_DEFINITION', 'ARGUMENT_DEFINITION', 'INTERFACE', 'UNION',
     'ENUM', 'ENUM_VALUE', 'INPUT_OBJECT', 'INPUT_FIELD_DEFINITION']).
 
--spec root(#root_schema{}) -> #root_schema{}.
-root(#root_schema{ query = Q,
+-spec root(endpoint_context(), #root_schema{}) -> #root_schema{}.
+root(Ep, #root_schema{ query = Q,
                    mutation = M,
                    subscription = S} = Root) ->
-    ok = x(),
-    {ok, QC} = root_lookup(Q, query),
-    {ok, MC} = root_lookup(M, mutation),
-    {ok, SC} = root_lookup(S, subscription),
+    ok = x(Ep),
+    {ok, QC} = root_lookup(Ep, Q, query),
+    {ok, MC} = root_lookup(Ep, M, mutation),
+    {ok, SC} = root_lookup(Ep, S, subscription),
     Root#root_schema { query = QC,
                        mutation = MC,
                        subscription = SC }.
 
 
-root_lookup(undefined, Type) ->
+root_lookup(Ep, undefined, Type) ->
     %% If given an undefined entry, try to use the default
     %% and inject it. Make mention that we are using a default
     %% Value
@@ -33,28 +33,28 @@ root_lookup(undefined, Type) ->
               mutation -> <<"Mutation">>;
               subscription -> <<"Subscription">>
           end,
-    root_lookup_(Val, Type, default);
-root_lookup(Val, Type) ->
-    root_lookup_(Val, Type, direct).
+    root_lookup_(Ep, Val, Type, default);
+root_lookup(Ep, Val, Type) ->
+    root_lookup_(Ep, Val, Type, direct).
 
 %% Root lookup rules are as follows:
 %% - Queries MUST exist and it has to be the default value if nothing has
 %%   been added
 %% - Directly written Mutations and Subscriptions MUST exist
 %% - Try to coerce otherwise 
-root_lookup_(Q, Type, Def) ->
-    case graphql_schema:lookup(Q) of
+root_lookup_(Ep, Q, Type, Def) ->
+    case graphql_schema:lookup(Ep, Q) of
         not_found when Type == query -> err({schema_without_query, Q});
         not_found when Def == direct -> err({schema_missing_type, Q});
         not_found -> {ok, undefined};
         #object_type{} -> {ok, Q}
     end.
 
--spec x() -> ok.
-x() ->
-    Objects = graphql_schema:all(),
+-spec x(endpoint_context()) -> ok.
+x(Ep) ->
+    Objects = graphql_schema:all(Ep),
     try
-        [x(Obj) || Obj <- Objects],
+        [x(Ep, Obj) || Obj <- Objects],
         ok
     catch
         throw:Error ->
@@ -66,8 +66,8 @@ x() ->
             exit(Error)
     end.
 
-x(Obj) ->
-    try validate(Obj) of
+x(Ep, Obj) ->
+    try validate(Ep, Obj) of
         ok -> ok
     catch
         throw:{invalid, Reason} ->
@@ -75,34 +75,34 @@ x(Obj) ->
     end.
 
 
-validate(#scalar_type {} = X) -> scalar_type(X);
-validate(#root_schema {} = X) -> root_schema(X);
-validate(#object_type {} = X) -> object_type(X);
-validate(#enum_type {} = X) -> enum_type(X);
-validate(#interface_type {} = X) -> interface_type(X);
-validate(#union_type {} = X) -> union_type(X);
-validate(#input_object_type {} = X) -> input_object_type(X);
-validate(#directive_type{} = X) -> directive_type(X).
+validate(Ep, #scalar_type {} = X) -> scalar_type(Ep, X);
+validate(Ep, #root_schema {} = X) -> root_schema(Ep, X);
+validate(Ep, #object_type {} = X) -> object_type(Ep, X);
+validate(Ep, #enum_type {} = X) -> enum_type(Ep, X);
+validate(Ep, #interface_type {} = X) -> interface_type(Ep, X);
+validate(Ep, #union_type {} = X) -> union_type(Ep, X);
+validate(Ep, #input_object_type {} = X) -> input_object_type(Ep, X);
+validate(Ep, #directive_type{} = X) -> directive_type(Ep, X).
 
-scalar_type(#scalar_type {directives = Ds}) ->
-    is_valid_directives(Ds, 'SCALAR'),
+scalar_type(Ep, #scalar_type {directives = Ds}) ->
+    is_valid_directives(Ep, Ds, 'SCALAR'),
     ok.
 
-enum_type(#enum_type { directives = Ds, values = Vs }) ->
-    is_valid_directives(Ds, 'ENUM'),
-    all(fun schema_enum_value/1, maps:to_list(Vs)),
+enum_type(Ep, #enum_type { directives = Ds, values = Vs }) ->
+    is_valid_directives(Ep, Ds, 'ENUM'),
+    all(Ep, fun schema_enum_value/2, maps:to_list(Vs)),
     ok.
 
-input_object_type(#input_object_type { fields = FS, directives = Ds }) ->
-    all(fun schema_input_type_arg/1, maps:to_list(FS)),
-    is_valid_directives(Ds, 'INPUT_OBJECT'),
+input_object_type(Ep, #input_object_type { fields = FS, directives = Ds }) ->
+    all(Ep, fun schema_input_type_arg/2, maps:to_list(FS)),
+    is_valid_directives(Ep, Ds, 'INPUT_OBJECT'),
     ok.
 
-union_type(#union_type { types = [] } = Union) ->
+union_type(_Ep, #union_type { types = [] } = Union) ->
     err({empty_union, Union});
-union_type(#union_type { types = Types, directives = Ds }) ->
-    all(fun is_union_type/1, Types),
-    is_valid_directives(Ds, 'UNION'),
+union_type(Ep, #union_type { types = Types, directives = Ds }) ->
+    all(Ep, fun is_union_type/2, Types),
+    is_valid_directives(Ep, Ds, 'UNION'),
     case unique([name(T) || T <- Types]) of
         ok ->
             ok;
@@ -110,60 +110,60 @@ union_type(#union_type { types = Types, directives = Ds }) ->
             err({union_not_unique, X})
     end.
 
-interface_type(#interface_type { fields= FS, directives = Ds }) ->
-    all(fun schema_field/1, maps:to_list(FS)),
-    is_valid_directives(Ds, 'INTERFACE'),
+interface_type(Ep, #interface_type { fields= FS, directives = Ds }) ->
+    all(Ep, fun schema_field/2, maps:to_list(FS)),
+    is_valid_directives(Ep, Ds, 'INTERFACE'),
     ok.
 
-object_type(#object_type {
+object_type(Ep, #object_type {
 	fields = FS,
 	interfaces = IFaces,
     directives = Ds} = Obj) ->
-    all(fun is_interface/1, IFaces),
-    all(fun(IF) -> implements(lookup(IF), Obj) end, IFaces),
-    all(fun schema_field/1, maps:to_list(FS)),
-    is_valid_directives(Ds, 'OBJECT'),
+    all(Ep, fun is_interface/2, IFaces),
+    all(Ep, fun(Ctx, IF) -> implements(lookup(Ctx, IF), Obj) end, IFaces),
+    all(Ep, fun schema_field/2, maps:to_list(FS)),
+    is_valid_directives(Ep, Ds, 'OBJECT'),
     ok.
 
-directive_type(#directive_type {
+directive_type(Ep, #directive_type {
         args = _Args,
         locations = Locations
         }) ->
-    all(fun is_directive_location/1, Locations),
+    all(Ep, fun is_directive_location/2, Locations),
     ok.
     
 
-root_schema(#root_schema {
+root_schema(Ep, #root_schema {
                query = Q,
                mutation = M,
                subscription = S,
                interfaces = IFaces,
                directives = Ds }) ->
-    is_object(Q),
-    undefined_object(M),
-    undefined_object(S),
-    all(fun is_interface/1, IFaces),
-    is_valid_directives(Ds, 'SCHEMA'),
+    is_object(Ep, Q),
+    undefined_object(Ep, M),
+    undefined_object(Ep, S),
+    all(Ep, fun is_interface/2, IFaces),
+    is_valid_directives(Ep, Ds, 'SCHEMA'),
     ok.
     
-schema_field({_, #schema_field { ty = Ty, args = Args, directives = Ds }}) ->
-    all(fun schema_input_type_arg/1, maps:to_list(Args)),
-    type(Ty),
-    is_valid_directives(Ds, 'FIELD_DEFINITION'),
+schema_field(Ep, {_, #schema_field { ty = Ty, args = Args, directives = Ds }}) ->
+    all(Ep, fun schema_input_type_arg/2, maps:to_list(Args)),
+    type(Ep, Ty),
+    is_valid_directives(Ep, Ds, 'FIELD_DEFINITION'),
     ok.
 
-schema_input_type_arg({_, #schema_arg { ty = Ty }}) ->
+schema_input_type_arg(Ep, {_, #schema_arg { ty = Ty }}) ->
     %% TODO: Default check!
     %% TODO: argument definition directive check
-    input_type(Ty),
+    input_type(Ep, Ty),
     ok.
 
-schema_enum_value({_, #enum_value { directives = Ds }}) ->
-    is_valid_directives(Ds, 'ENUM_VALUE'),
+schema_enum_value(Ep, {_, #enum_value { directives = Ds }}) ->
+    is_valid_directives(Ep, Ds, 'ENUM_VALUE'),
     ok.
 
-undefined_object(undefined) -> ok;
-undefined_object(Obj) -> is_object(Obj).
+undefined_object(_Ep, undefined) -> ok;
+undefined_object(Ep, Obj) -> is_object(Ep, Obj).
 
 implements(#interface_type { fields = IFFields } = IFace,
            #object_type { fields = ObjFields }) ->
@@ -195,31 +195,31 @@ implements_field_check([{IK, _} | _] = IL, [{OK, _} | OS]) when IK > OK ->
 implements_field_check([{IK, _} | _], [{OK, _} | _]) when IK < OK ->
     {error, {field_not_found_in_object, IK}}.
     
-is_interface(IFace) ->
-    case lookup(IFace) of
+is_interface(Ep, IFace) ->
+    case lookup(Ep, IFace) of
         #interface_type{} -> ok;
         _ -> err({not_interface, IFace})
     end.
 
-is_object(Obj) ->
-    case lookup(Obj) of
+is_object(Ep, Obj) ->
+    case lookup(Ep, Obj) of
         #object_type{} -> ok;
         _ -> err({not_object, Obj})
     end.
 
-is_union_type(Obj) ->
-    case lookup(Obj) of
+is_union_type(Ep, Obj) ->
+    case lookup(Ep, Obj) of
         #object_type{} -> ok;
         _ -> err({not_union_type, Obj})
     end.
 
-is_valid_directives(Dirs, Location) ->
-    all(fun(D) -> is_valid_directive(D, Location) end, Dirs).
+is_valid_directives(Ep, Dirs, Location) ->
+    all(Ep, fun(Ctx, D) -> is_valid_directive(Ctx, D, Location) end, Dirs).
 
-is_valid_directive(#directive{ id = Id }, Location) ->
-    is_valid_directive(name(Id), Location);
-is_valid_directive(Dir, Location) ->
-    try lookup(Dir) of
+is_valid_directive(Ep, #directive{ id = Id }, Location) ->
+    is_valid_directive(Ep, name(Id), Location);
+is_valid_directive(Ep, Dir, Location) ->
+    try lookup(Ep, Dir) of
         #directive_type{ id = Id, locations = Locations } ->
             case lists:member(Location, Locations) of
                 true -> ok;
@@ -235,16 +235,16 @@ is_valid_directive(Dir, Location) ->
             err({not_directive, Dir})
     end.
 
-is_directive_location(Loc) ->
+is_directive_location(_Ep, Loc) ->
     case lists:member(Loc, ?DIRECTIVE_LOCATIONS) of
         true -> ok;
         false -> err({not_directive_location, Loc})
     end.
 
-type({non_null, T}) -> type(T);
-type({list, T}) -> type(T);
-type(X) when is_binary(X) ->
-    case lookup(X) of
+type(Ep, {non_null, T}) -> type(Ep, T);
+type(Ep, {list, T}) -> type(Ep, T);
+type(Ep, X) when is_binary(X) ->
+    case lookup(Ep, X) of
         #input_object_type {} ->
             err({invalid_output_type, X});
 
@@ -252,10 +252,10 @@ type(X) when is_binary(X) ->
             ok
     end.
 
-input_type({non_null, T}) -> input_type(T);
-input_type({list, T}) -> input_type(T);
-input_type(X) when is_binary(X) ->
-    case lookup(X) of
+input_type(Ep, {non_null, T}) -> input_type(Ep, T);
+input_type(Ep, {list, T}) -> input_type(Ep, T);
+input_type(Ep, X) when is_binary(X) ->
+    case lookup(Ep, X) of
         #input_object_type {} -> ok;
         #enum_type {} -> ok;
         #scalar_type {} -> ok;
@@ -263,13 +263,13 @@ input_type(X) when is_binary(X) ->
             err({invalid_input_type, X})
     end.
 
-all(_F, []) -> ok;
-all(F, [E|Es]) ->
-    ok = F(E),
-    all(F, Es).
+all(_Ep, _F, []) -> ok;
+all(Ep, F, [E|Es]) ->
+    ok = F(Ep, E),
+    all(Ep, F, Es).
 
-lookup(Key) ->
-    case graphql_schema:lookup(Key) of
+lookup(Ep, Key) ->
+    case graphql_schema:lookup(Ep, Key) of
         not_found -> err({not_found, Key});
         X -> X
     end.

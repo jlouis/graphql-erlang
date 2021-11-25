@@ -8,7 +8,7 @@
 -compile(inline_list_funcs).
 -compile({inline_size, 50}).
 
--export([x/1, x/2]).
+-export([x/2, x/3]).
 -export([builtin_input_coercer/1]).
 -type source() :: reference().
 -type demonitor() :: {reference(), pid()} .
@@ -43,6 +43,8 @@
          %% tree? Updated as we process different parts of the tree
          defer_target = top_level :: top_level | reference(),
 
+         endpoint_ctx :: endpoint_context(),
+
          %% The callers context given to the execute call
          ctx = #{} :: #{ atom() => term() }
         }).
@@ -74,12 +76,12 @@
           work = #{} :: #{ source() => defer_closure() },
           timeout :: non_neg_integer() }).
 
--spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
-x(X) -> x(#{ params => #{} }, X).
+-spec x(endpoint_context(), graphql:ast()) -> #{ atom() => graphql:json() }.
+x(Ep, X) -> x(Ep, #{  params => #{} }, X).
 
--spec x(term(), graphql:ast()) -> #{ atom() => graphql:json() }.
-x(Ctx, X) ->
-    Canon = canon_context(Ctx),
+-spec x(endpoint_context(), term(), graphql:ast()) -> #{ atom() => graphql:json() }.
+x(Ep, Ctx, X) ->
+    Canon = canon_context(Ep, Ctx),
     execute_request(Canon, X).
 
 execute_request(InitialCtx, #document { definitions = Operations }) ->
@@ -517,13 +519,16 @@ format_directives([#directive { id = N, args = Args }|Ds]) ->
 resolve_field_value(#ectx { op_type = OpType,
                             ctx = CallerContext,
                             defer_process = Proc,
-                            defer_request_id = ReqId },
+                            defer_request_id = ReqId,
+                            endpoint_ctx = Ep
+                          },
                     #object_type { id = OID,
                                    directives = ODirectives} = ObjectType,
                     Value, Name, FDirectives, Fun, Args) ->
     AnnotatedCallerCtx =
         CallerContext#{ op_type => OpType,
                         field => Name,
+                        endpoint_ctx => Ep,
                         field_directives => format_directives(FDirectives),
                         object_type => OID,
                         object_directives => format_directives(ODirectives),
@@ -571,11 +576,11 @@ handle_resolver_result({defer, Token, DeferStateMap}) ->
     {defer, Token, DeferStateMap};
 handle_resolver_result(_Unknown) -> wrong.
 
-complete_value(Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
+complete_value(Ctx = #ectx{endpoint_ctx = Ep}, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
     error_logger:warning_msg(
       "Canary: Type lookup during value completion for: ~p~n",
       [Ty]),
-    SchemaType = graphql_schema:get(Ty),
+    SchemaType = graphql_schema:get(Ep, Ty),
     complete_value(Ctx, SchemaType, Fields, {ok, Value});
 complete_value(#ectx{ defer_target = Upstream } = Ctx,
                {non_null, InnerTy}, Fields, Result) ->
@@ -611,7 +616,7 @@ complete_value(Ctx, {list, InnerTy}, Fields, {ok, Value}) ->
     complete_value_list(Ctx, InnerTy, Fields, Value);
 complete_value(Ctx, #scalar_type { id = ID, resolve_module = RM }, _Fields, {ok, Value}) ->
     complete_value_scalar(Ctx, ID, RM, Value);
-complete_value(Ctx, #enum_type { id = ID,
+complete_value(Ctx = #ectx{endpoint_ctx = Ep}, #enum_type { id = ID,
                                         resolve_module = RM},
                _Fields, {ok, Value}) ->
     case complete_value_scalar(Ctx, ID, RM, Value) of
@@ -619,7 +624,7 @@ complete_value(Ctx, #enum_type { id = ID,
             {ok, null, Errors};
         {ok, Result, Errors} ->
 
-            case graphql_schema:validate_enum(ID, Result) of
+            case graphql_schema:validate_enum(Ep, ID, Result) of
                 ok ->
                     {ok, Result, Errors};
                 {other_enums, _EnumTypes} ->
@@ -639,20 +644,20 @@ complete_value(Ctx, _Ty, _Fields, {error, Reason}) ->
     null(Ctx, Reason).
 
 %% Complete an abstract value
-complete_value_abstract(Ctx, Resolver, Fields, {ok, Value}) ->
-    case resolve_abstract_type(Resolver, Value) of
+complete_value_abstract(Ctx = #ectx{endpoint_ctx = Ep}, Resolver, Fields, {ok, Value}) ->
+    case resolve_abstract_type(Ep, Resolver, Value) of
         {ok, ResolvedType} ->
             complete_value(Ctx, ResolvedType, Fields, {ok, Value});
         {error, Reason} ->
             null(Ctx, Reason)
     end.
 
-resolve_abstract_type(Module, Value) when is_atom(Module) ->
-    resolve_abstract_type(fun Module:execute/1, Value);
-resolve_abstract_type(Resolver, Value) when is_function(Resolver, 1) ->
+resolve_abstract_type(Ep, Module, Value) when is_atom(Module) ->
+    resolve_abstract_type(Ep, fun Module:execute/1, Value);
+resolve_abstract_type(Ep, Resolver, Value) when is_function(Resolver, 1) ->
     try Resolver(Value) of
         {ok, Ty} ->
-            Obj = #object_type{} = graphql_schema:get(binarize(Ty)),
+            Obj = #object_type{} = graphql_schema:get(Ep, binarize(Ty)),
             {ok, Obj};
         {error, Reason} ->
             {error, {type_resolver_error, Reason}}
@@ -956,25 +961,25 @@ resolve_args_(Ctx, [{ID, Val} | As], Acc) ->
 %%
 %% For a discussion about the Pet -> [Pet] coercion in the
 %% specification, see (Oct2016 Section 3.1.7)
-var_coerce(Tau, Sigma, V) when is_binary(Sigma)       ->
-    X = graphql_schema:lookup(Sigma),
-    var_coerce(Tau, X, V);
-var_coerce(Tau, Sigma, V) when is_binary(Tau)         ->
-    X = graphql_schema:lookup(Tau),
-    var_coerce(X, Sigma, V);
-var_coerce(Refl, Refl, Value)                         -> Value;
-var_coerce({non_null, Tau}, {non_null, Sigma}, Value) ->
-    var_coerce(Tau, Sigma, Value);
-var_coerce({non_null, Tau}, Tau, Value)               -> Value;
-var_coerce({list, Tau}, {list, Sigma}, Values) ->
-    var_coerce(Tau, Sigma, Values);
-var_coerce(Tau, {list, SType}, Value)                 -> [var_coerce(Tau, SType, Value)].
+var_coerce(Ep, Tau, Sigma, V) when is_binary(Sigma)       ->
+    X = graphql_schema:lookup(Ep, Sigma),
+    var_coerce(Ep, Tau, X, V);
+var_coerce(Ep, Tau, Sigma, V) when is_binary(Tau)         ->
+    X = graphql_schema:lookup(Ep, Tau),
+    var_coerce(Ep, X, Sigma, V);
+var_coerce(_Ep, Refl, Refl, Value)                         -> Value;
+var_coerce(Ep, {non_null, Tau}, {non_null, Sigma}, Value) ->
+    var_coerce(Ep, Tau, Sigma, Value);
+var_coerce(_Ep, {non_null, Tau}, Tau, Value)               -> Value;
+var_coerce(Ep, {list, Tau}, {list, Sigma}, Values) ->
+    var_coerce(Ep, Tau, Sigma, Values);
+var_coerce(Ep, Tau, {list, SType}, Value)                 -> [var_coerce(Ep, Tau, SType, Value)].
 
 %% Produce a valid value for an argument.
 value(Ctx, {Ty, Val})                     -> value(Ctx, Ty, Val);
 value(Ctx, #{ type := Ty, value := Val }) -> value(Ctx, Ty, Val).
 
-value(#ectx{ params = Params }, SType, #var { id = ID, ty = DType,
+value(#ectx{params = Params, endpoint_ctx = Ep}, SType, #var { id = ID, ty = DType,
                                               default = Default }) ->
     %% Parameter expansion and type check is already completed
     %% at this stage
@@ -982,11 +987,11 @@ value(#ectx{ params = Params }, SType, #var { id = ID, ty = DType,
         not_found ->
             case Default of
                 %% Coerce undefined values to "null"
-                undefined -> var_coerce(DType, SType, null);
-                _ -> var_coerce(DType, SType, Default)
+                undefined -> var_coerce(Ep, DType, SType, null);
+                _ -> var_coerce(Ep, DType, SType, Default)
             end;
         Value ->
-            var_coerce(DType, SType, Value)
+            var_coerce(Ep, DType, SType, Value)
     end;
 value(_Ctx, _Ty, undefined) ->
     null;
@@ -1000,7 +1005,7 @@ value(Ctx, {list, Ty}, Val) ->
                L when is_list(L)  -> L
            end,
     [value(Ctx, Ty, V) || V <- Vals];
-value(Ctx, Ty, Val) ->
+value(Ctx = #ectx{endpoint_ctx = Ep}, Ty, Val) ->
     case Ty of
         #input_object_type { fields = FieldEnv } ->
             Obj = case Val of
@@ -1016,7 +1021,7 @@ value(Ctx, Ty, Val) ->
         #enum_type {} ->
             Val;
         Bin when is_binary(Bin) ->
-            LoadedTy = graphql_schema:get(Bin),
+            LoadedTy = graphql_schema:get(Ep, Bin),
             value(Ctx, LoadedTy, Val)
     end.
 
@@ -1040,9 +1045,10 @@ alias(#field { alias = Alias }) -> name(Alias).
 field_type(#field { schema = SF }) -> SF.
 
 %% -- CONTEXT CANONICALIZATION ------------
-canon_context(#{ params := Params } = Ctx) ->
+canon_context(Ep, #{ params := Params } = Ctx) ->
     CParams = canon_params(Params),
     #ectx { params = CParams,
+            endpoint_ctx = Ep,
             ctx = Ctx#{ params := CParams} }.
 
 canon_params(Ps) ->

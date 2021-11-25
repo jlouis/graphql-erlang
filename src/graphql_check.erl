@@ -54,11 +54,12 @@
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
--export([check/1, check_params/3]).
--export([funenv/1]).
+-export([check/2, check_params/4]).
+-export([funenv/2]).
 
 -record(ctx,
         {
+         endpoint_ctx :: endpoint_context(),
          path = [] :: [any()],
          vars = #{} :: #{ binary() => #vardef{} },
          frags = #{} :: #{ binary() =>  #frag{} },
@@ -90,42 +91,42 @@
 %% Elaborate a type and also determine its polarity. This is used for
 %% input and output types
 -spec infer_type(ctx(), ty_name() | ty()) -> {ok, {polarity(), ty()}}.
-infer_type(Ctx, Tau) ->
-    case infer_type(Tau) of
+infer_type(Ctx = #ctx{endpoint_ctx = Ep}, Tau) ->
+    case infer_type_(Ep, Tau) of
         {error, Reason} ->
             err(Ctx, Reason);
         {Polarity, TauPrime} ->
             {ok, {Polarity, TauPrime}}
     end.
 
--spec infer_type(ty_name() | ty()) -> {polarity(), ty()} | {error, Reason :: term()}.
-infer_type({non_null, Ty}) ->
-    case infer_type(Ty) of
+-spec infer_type_(endpoint_context(), ty_name() | ty()) -> {polarity(), ty()} | {error, Reason :: term()}.
+infer_type_(Ep, {non_null, Ty}) ->
+    case infer_type_(Ep, Ty) of
         {error, Reason} -> {error, Reason};
         {Polarity, V} -> {Polarity, {non_null, V}}
     end;
-infer_type({list, Ty}) ->
-    case infer_type(Ty) of
+infer_type_(Ep, {list, Ty}) ->
+    case infer_type_(Ep, Ty) of
         {error, Reason} -> {error, Reason};
         {Polarity, V} -> {Polarity, {list, V}}
     end;
-infer_type({scalar, Name}) ->
-    #scalar_type{} = Ty = graphql_schema:get(Name),
-    {_polarity, Ty} = infer_type(Ty);
+infer_type_(Ep, {scalar, Name}) ->
+    #scalar_type{} = Ty = graphql_schema:get(Ep, Name),
+    {_polarity, Ty} = infer_type_(Ep, Ty);
 %% NonPolar
-infer_type(#scalar_type{} = Ty) -> {'*', Ty};
-infer_type({enum, _} = E) -> {'*', E};
-infer_type(#enum_type{} = Ty) -> {'*', Ty};
+infer_type_(_Ep, #scalar_type{} = Ty) -> {'*', Ty};
+infer_type_(_Ep, {enum, _} = E) -> {'*', E};
+infer_type_(_Ep, #enum_type{} = Ty) -> {'*', Ty};
 %% Positive
-infer_type(#input_object_type{} = Ty) -> {'+', Ty};
+infer_type_(_Ep, #input_object_type{} = Ty) -> {'+', Ty};
 %% Negative
-infer_type(#object_type{} = Ty) -> {'-', Ty};
-infer_type(#interface_type{} = Ty) -> {'-', Ty};
-infer_type(#union_type{} = Ty) -> {'-', Ty};
+infer_type_(_Ep, #object_type{} = Ty) -> {'-', Ty};
+infer_type_(_Ep, #interface_type{} = Ty) -> {'-', Ty};
+infer_type_(_Ep, #union_type{} = Ty) -> {'-', Ty};
 %% Lookup
-infer_type({name, _, N}) -> infer_type(N);
-infer_type(N) when is_binary(N) ->
-    case graphql_schema:lookup(N) of
+infer_type_(Ep, {name, _, N}) -> infer_type_(Ep, N);
+infer_type_(Ep, N) when is_binary(N) ->
+    case graphql_schema:lookup(Ep, N) of
         not_found -> {error, {not_found, N}};
         %% Non-polar types
         #enum_type{} = Enum -> {'*', Enum};
@@ -163,20 +164,20 @@ infer_output_type(Ctx, Ty) ->
 %% Given a context and some graphql expression, we derive
 %% a valid type for that expression. This is mostly handled by
 %% a lookup into the environment.
-infer(Ctx, #directive { id = ID }) ->
+infer(Ctx = #ctx{ endpoint_ctx = Ep}, #directive { id = ID }) ->
     Name = graphql_ast:name(ID),
-    case graphql_schema:lookup(Name) of
+    case graphql_schema:lookup(Ep, Name) of
         #directive_type{} = Tau -> {ok, Tau};
         not_found -> err(Ctx, {unknown_directive, Name})
     end;
-infer(Ctx, #op { ty = Ty } = Op) ->
+infer(Ctx = #ctx{endpoint_ctx = Ep}, #op { ty = Ty } = Op) ->
     CtxP = add_path(Ctx, Op),
-    case graphql_schema:lookup('ROOT') of
+    case graphql_schema:lookup(Ep, 'ROOT') of
         not_found ->
             err(Ctx, no_root_schema);
         Schema ->
             Root = graphql_schema:resolve_root_type(Ty, Schema),
-            case graphql_schema:lookup(Root) of
+            case graphql_schema:lookup(Ep, Root) of
                 not_found ->
                     err(CtxP, {type_not_found, Root});
                 #object_type{} = Tau ->
@@ -351,8 +352,8 @@ check_value(Ctx, Val, {list, Sigma}) ->
     %% should be treated as if it were wrapped in a singleton type
     %% if we are in list-context
     check_value(Ctx, [Val], {list, Sigma});
-check_value(Ctx, {enum, N}, #enum_type { id = ID } = Sigma) ->
-    case graphql_schema:validate_enum(ID, N) of
+check_value(Ctx = #ctx{endpoint_ctx = Ep}, {enum, N}, #enum_type { id = ID } = Sigma) ->
+    case graphql_schema:validate_enum(Ep, ID, N) of
         not_found ->
             err(Ctx, {unknown_enum, N});
         ok ->
@@ -543,19 +544,18 @@ check(Ctx, #op { vardefs = VDefs, directives = Dirs, selection_set = SSet } = Op
 
 %% To check a document, establish a default context and
 %% check the document.
-check(#document{} = Doc) ->
-    try check_(Doc) of Res -> Res
+check(Ep, #document{} = Doc) ->
+    try check_(Ep, Doc) of Res -> Res
     catch throw:{error, Path, Msg} ->
             graphql_err:abort(Path, type_check, Msg)
     end.
 
-check_(#document{ definitions = Defs } = Doc) ->
+check_(Ep, #document{ definitions = Defs } = Doc) ->
     Fragments = lists:filter(
                   fun(#frag{}) -> true; (_) -> false end,
                   Defs),
-    FragEnv = fragenv(Fragments),
-    CtxP = #ctx{},
-    Ctx = CtxP#ctx { frags = FragEnv },
+    FragEnv = fragenv(Ep, Fragments),
+    Ctx = #ctx{endpoint_ctx = Ep, frags = FragEnv},
     COps = [begin
                 {ok, Type} = infer(Ctx, Op),
                 {ok, COp} = check(Ctx, Op, Type),
@@ -563,7 +563,7 @@ check_(#document{ definitions = Defs } = Doc) ->
             end || Op <- Defs],
     {ok, #{
            ast => Doc#document { definitions = COps },
-           fun_env => funenv(COps) }}.
+           fun_env => funenv(Ep, COps) }}.
 
 
 %% GraphQL queries are really given in two stages. One stage is the
@@ -580,14 +580,16 @@ check_(#document{ definitions = Defs } = Doc) ->
 %% This is the entry-point when checking parameters for an already parsed,
 %% type checked and internalized query. It serves to verify that a requested
 %% operation and its parameters matches the types in the operation referenced
-check_params(FunEnv, OpName, Params) ->
+check_params(Ep, FunEnv, OpName, Params) ->
     try
         case operation(FunEnv, OpName, Params) of
             undefined -> #{};
             not_found ->
-                err(#ctx{}, {operation_not_found, OpName});
+                err(#ctx{endpoint_ctx = Ep},
+                    {operation_not_found, OpName});
             VarEnv ->
-                Ctx = #ctx { vars = VarEnv,
+                Ctx = #ctx { endpoint_ctx = Ep,
+                             vars = VarEnv,
                              path = [OpName],
                              sub_context = variable },
                 check_params_(Ctx, Params)
@@ -739,10 +741,10 @@ sub_output(Ctx, #interface_type { id = IID },
 %% Interface Tau subsumes interface Sigma if they have concrete
 %% objects in common. This means there is at least one valid expansion,
 %% so this should be allowed.
-sub_output(Ctx, #interface_type { id = SpreadID },
+sub_output(Ctx = #ctx{endpoint_ctx = Ep}, #interface_type { id = SpreadID },
                      #interface_type { id = ScopeID }) ->
-    Taus = graphql_schema:lookup_interface_implementors(SpreadID),
-    Sigmas = graphql_schema:lookup_interface_implementors(ScopeID),
+    Taus = graphql_schema:lookup_interface_implementors(Ep, SpreadID),
+    Sigmas = graphql_schema:lookup_interface_implementors(Ep, ScopeID),
     case ordsets:intersection(
            ordsets:from_list(Taus),
            ordsets:from_list(Sigmas)) of
@@ -753,9 +755,9 @@ sub_output(Ctx, #interface_type { id = SpreadID },
     end;
 %% Interfaces subsume unions, if the union has at least one member
 %% who implements the interface.
-sub_output(Ctx, #interface_type { id = SpreadID },
+sub_output(Ctx = #ctx{endpoint_ctx = Ep}, #interface_type { id = SpreadID },
                      #union_type{ id = ScopeID, types = ScopeMembers }) ->
-    Taus = graphql_schema:lookup_interface_implementors(SpreadID),
+    Taus = graphql_schema:lookup_interface_implementors(Ep, SpreadID),
     case ordsets:intersection(
            ordsets:from_list(Taus),
            ordsets:from_list(ScopeMembers)) of
@@ -774,9 +776,9 @@ sub_output(Ctx, #union_type { id = UID, types = UMembers },
 %% Unions subsume interfaces iff there is an intersection between
 %% what members the union has and what the implementors of the interface
 %% are.
-sub_output(Ctx, #union_type { id = SpreadID, types = SpreadMembers },
+sub_output(Ctx = #ctx{endpoint_ctx = Ep}, #union_type { id = SpreadID, types = SpreadMembers },
                      #interface_type { id = ScopeID }) ->
-    Sigmas = graphql_schema:lookup_interface_implementors(ScopeID),
+    Sigmas = graphql_schema:lookup_interface_implementors(Ep, ScopeID),
     case ordsets:intersection(
            ordsets:from_list(SpreadMembers),
            ordsets:from_list(Sigmas)) of
@@ -872,24 +874,26 @@ varenv(VarList) ->
       [{graphql_ast:name(Var), Def} || #vardef { id = Var } = Def <- VarList]).
 
 %% Build a funenv
-funenv(Ops) ->
+funenv(Ep, Ops) ->
     F = fun
         (#frag{}, FE) -> FE;
         (#op { id = ID, vardefs = VDefs }, FE) ->
             Name = graphql_ast:name(ID),
-            {ok, VarEnv} = var_defs(#ctx{}, maps:values(VDefs)),
+            Ctx = #ctx{endpoint_ctx = Ep},
+            {ok, VarEnv} = var_defs(Ctx, maps:values(VDefs)),
             FE#{ Name => VarEnv }
     end,
     lists:foldl(F, #{}, Ops).
 
-annotate_frag(#frag { ty = Ty } = Frag) ->
-    {ok, Tau} = infer_output_type(#ctx{}, Ty),
+annotate_frag(Ep, #frag { ty = Ty } = Frag) ->
+    Ctx = #ctx{endpoint_ctx = Ep},
+    {ok, Tau} = infer_output_type(Ctx, Ty),
     Frag#frag { schema = Tau }.
 
 %% Build a fragenv
-fragenv(Frags) ->
+fragenv(Ep, Frags) ->
     maps:from_list(
-      [{graphql_ast:name(ID), annotate_frag(Frg)} || #frag { id = ID } = Frg <- Frags]).
+      [{graphql_ast:name(ID), annotate_frag(Ep, Frg)} || #frag { id = ID } = Frg <- Frags]).
 
 %% Figure out what kind of directive location we are in
 directive_location(#op { ty = Ty }) ->

@@ -3,32 +3,34 @@
 -include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
--export([inject/2]).
+-export([inject/3]).
 
-inject(BaseMapping, {ok, #document { definitions = Entries}}) ->
+inject(Ep, BaseMapping, {ok, #document { definitions = Entries}}) ->
     Mapping = handle_mapping(BaseMapping),
     {SchemaEntries, Other} = lists:partition(fun schema_defn/1, Entries),
     report_other_entries(Other),
-    Defs = [mk(Mapping, E) || E <- SchemaEntries],
+    Defs = [mk(Ep, Mapping, E) || E <- SchemaEntries],
     case lists:keytake(schema, 1, Defs) of
         false ->
-            [inject(Def) || Def <- Defs];
+            [inject(Ep, Def) || Def <- Defs];
         {value, Root, Rest} ->
             %% Guard against multiple schema defs
             false = lists:keytake(schema, 1, Rest),
-            [inject(R) || R <- Rest],
-            inject_root(Root)
+            [inject(Ep, R) || R <- Rest],
+            inject_root(Ep, Root)
     end,
     ok.
 
-mk(#{}, #p_schema_definition { directives = Directives,
-                               defs = RootOps }) ->
+mk(_Ep, #{}, #p_schema_definition { directives = Directives,
+                                       defs = RootOps }) ->
     {schema,
      #{ defs => maps:from_list([root_op(R) || R <- RootOps]),
         directives => Directives }};
-mk(#{ scalars := Sc }, #p_scalar { description = Desc,
-                                   directives = Directives,
-                                   id = ID }) ->
+mk(_Ep,
+   #{ scalars := Sc },
+   #p_scalar { description = Desc,
+               directives = Directives,
+               id = ID }) ->
     Name = name(ID),
     Mod = mapping(Name, Sc),
     {scalar, #{
@@ -37,20 +39,23 @@ mk(#{ scalars := Sc }, #p_scalar { description = Desc,
        description => description(Desc),
        resolve_module => Mod
       }};
-mk(#{ unions := Us }, #p_union { id = ID,
-                                 directives = Directives,
-                                 description = Desc,
-                                 members = Ms }) ->
+mk(Ep,
+   #{ unions := Us }, 
+   #p_union { id = ID,
+              directives = Directives,
+              description = Desc,
+              members = Ms }) ->
     Name = name(ID),
     Mod = mapping(Name, Us),
-    Types = [handle_type(M) || M <- Ms],
+    Types = [handle_type(Ep, M) || M <- Ms],
     {union, #{
        id => Name,
        description => description(Desc),
        directives => Directives,
        resolve_module => Mod,
        types => Types }};
-mk(#{ objects := OM },
+mk(Ep,
+   #{ objects := OM },
    #p_object { id = ID,
                description = Desc,
                directives = Directives,
@@ -58,7 +63,7 @@ mk(#{ objects := OM },
                interfaces = Impls }) ->
     Name = name(ID),
     Mod = mapping(Name, OM),
-    Fields = fields(Fs),
+    Fields = fields(Ep, Fs),
     Implements = [name(I) || I <- Impls],
     {object, #{
        id => Name,
@@ -67,7 +72,8 @@ mk(#{ objects := OM },
        directives => Directives,
        resolve_module => Mod,
        interfaces => Implements }};
-mk(#{ enums := En },
+mk(_Ep,
+   #{ enums := En },
    #p_enum {id = ID,
             directives = Directives,
             description = Desc,
@@ -81,27 +87,29 @@ mk(#{ enums := En },
        directives => Directives,
        values => Variants,
        resolve_module => Mod }};
-mk(_Map,
+mk(Ep,
+   _Map,
    #p_input_object { id = ID,
                      description = Desc,
                      directives = Directives,
                      defs = Ds }) ->
     Name = name(ID),
-    Defs = input_defs(Ds),
+    Defs = input_defs(Ep, Ds),
     {input_object,
      #{
        id => Name,
        description => description(Desc),
        directives => Directives,
        fields => Defs }};
-mk(#{ interfaces := IF },
+mk(Ep, 
+   #{ interfaces := IF },
    #p_interface { id = ID,
                   description = Description,
                   directives = Directives,
                   fields = FS }) ->
     Name = name(ID),
     Mod = mapping(Name, IF),
-    Fields = fields(FS),
+    Fields = fields(Ep, FS),
     {interface,
      #{
        id => Name,
@@ -110,7 +118,8 @@ mk(#{ interfaces := IF },
        directives => Directives,
        fields => Fields
       }};
-mk(#{},
+mk(Ep,
+   #{},
     #p_directive{ id = ID,
                   description = Description,
                   args = Args,
@@ -120,22 +129,22 @@ mk(#{},
         #{
             id => Name,
             description => description(Description),
-            args => handle_args(Args),
+            args => handle_args(Ep, Args),
             locations => Locations
         }}.
 
 
-fields(Raw) ->
-    maps:from_list([field(R) || R <- Raw]).
+fields(Ep, Raw) ->
+    maps:from_list([field(Ep, R) || R <- Raw]).
 
-input_defs(Raw) ->
-    maps:from_list([input_def(D) || D <- Raw]).
+input_defs(Ep, Raw) ->
+    maps:from_list([input_def(Ep, D) || D <- Raw]).
 
-inject_root(Root) ->
-    graphql:insert_root(Root).
+inject_root(Ep, Root) ->
+    graphql:insert_root(Ep, Root).
 
-inject(Def) ->
-    case graphql:insert_schema_definition(Def) of
+inject(Ep, Def) ->
+    case graphql:insert_schema_definition(Ep, Def) of
         ok ->
             ok;
         {error, {already_exists, Entry}} ->
@@ -176,20 +185,20 @@ name({name, _, N}) -> N.
 description(undefined) -> <<"No description provided">>;
 description(D) -> D.
 
-input_def(#p_input_value { id = ID,
+input_def(Ep, #p_input_value { id = ID,
                            description = Desc,
                            directives = Directives,
                            default = Default,
                            type = Type }) ->
     Name = name(ID),
     K = binary_to_atom(Name, utf8),
-    V = #{ type => handle_type(Type),
+    V = #{ type => handle_type(Ep, Type),
            default => Default,
            directives => Directives,
            description =>description(Desc) },
     {K, V}.
 
-field(#p_field_def{ id = ID,
+field(Ep, #p_field_def{ id = ID,
                     description = Desc,
                     directives = Directives,
                     type = T,
@@ -197,10 +206,10 @@ field(#p_field_def{ id = ID,
     Name = name(ID),
     %% We assume schemas are always under our control, so this is safe
     K = binary_to_atom(Name, utf8),
-    V = #{ type => handle_type(T),
+    V = #{ type => handle_type(Ep, T),
            description => description(Desc),
            directives => Directives,
-           args => handle_args(Args)},
+           args => handle_args(Ep, Args)},
     {K, V}.
 
 root_op(#p_root_operation { op_type = OpType,
@@ -211,8 +220,8 @@ root_op(#p_root_operation { op_type = OpType,
         {subscription, _} -> {subscription, name(Name)}
     end.
 
-handle_args(Args) ->
-    maps:from_list([input_def(A) || A <- Args]).
+handle_args(Ep, Args) ->
+    maps:from_list([input_def(Ep, A) || A <- Args]).
 
 variants(Vs) ->
     F = fun
@@ -231,13 +240,13 @@ mapi(F, L) -> mapi(F, L, 0).
 mapi(_F, [], _) -> [];
 mapi(F,  [X|Xs], K) -> [F(X, K) | mapi(F, Xs, K+1)].
 
-handle_type({non_null, T}) -> {non_null, handle_type(T)};
-handle_type({list, T}) -> {list, handle_type(T)};
-handle_type({name, _, T}) -> binary_to_atom(T, utf8);
-handle_type({scalar, Name}) ->
-    #scalar_type{} = Ty = graphql_schema:get(Name),
-    handle_type(Ty);
-handle_type(#scalar_type{ id = Id }) -> binary_to_atom(Id, utf8).
+handle_type(Ep, {non_null, T}) -> {non_null, handle_type(Ep, T)};
+handle_type(Ep, {list, T}) -> {list, handle_type(Ep, T)};
+handle_type(_Ep, {name, _, T}) -> binary_to_atom(T, utf8);
+handle_type(Ep, {scalar, Name}) ->
+    #scalar_type{} = Ty = graphql_schema:get(Ep, Name),
+    handle_type(Ep, Ty);
+handle_type(_Ep, #scalar_type{ id = Id }) -> binary_to_atom(Id, utf8).
 
 mapping(Name, Map) ->
     case maps:get(Name, Map, undefined) of
