@@ -3,7 +3,7 @@
 -include("graphql_schema.hrl").
 -include_lib("graphql/include/graphql.hrl").
 
--export([inject/0, augment_root/1]).
+-export([inject/1, augment_root/2]).
 
 -export([execute/4]).
 
@@ -17,11 +17,12 @@
     subscription_type/4
 ]).
 
--spec augment_root(QueryObj) -> ok
-  when QueryObj :: binary().
+-spec augment_root(Ep, QueryObj) -> ok
+  when Ep :: endpoint_context(),
+       QueryObj :: binary().
 
-augment_root(QName) ->
-    #object_type{ fields = Fields } = Obj = graphql_schema:get(QName),
+augment_root(Ep, QName) ->
+    #object_type{ fields = Fields } = Obj = graphql_schema:get(Ep, QName),
     Schema = #schema_field {
                 ty = {non_null, <<"__Schema">>},
                 description = <<"The introspection schema">>,
@@ -40,64 +41,64 @@ augment_root(QName) ->
                                              <<"__schema">> => Schema,
                                              <<"__type">> => Type
                                             }},
-    ok = graphql_schema:insert(Augmented, #{}),
+    ok = graphql_schema:insert(Ep, Augmented, #{}),
     ok.
 
-schema_resolver(_Ctx, none, _, #{}) ->
+schema_resolver(_Ctx = #{endpoint_ctx := Ep}, none, _, #{}) ->
     {ok, #{ <<"directives">> =>
-                [directive(include),
-                 directive(skip)]}}.
+                [directive(Ep, include),
+                 directive(Ep, skip)]}}.
 
-type_resolver(_Ctx, none, _, #{ <<"name">> := N }) ->
-    case graphql_schema:lookup(N) of
+type_resolver(_Ctx = #{endpoint_ctx := Ep}, none, _, #{ <<"name">> := N }) ->
+    case graphql_schema:lookup(Ep, N) of
         not_found -> {ok, null};
-        Ty -> render_type(Ty)
+        Ty -> render_type(Ep, Ty)
     end.
 
-query_type(_Ctx, _Obj, _, _) ->
-    #root_schema{ query = QType } = graphql_schema:get('ROOT'),
-    render_type(QType).
+query_type(_Ctx = #{endpoint_ctx := Ep}, _Obj, _, _) ->
+    #root_schema{ query = QType } = graphql_schema:get(Ep, 'ROOT'),
+    render_type(Ep, QType).
 
-mutation_type(_Ctx, _Obj, _, _) ->
-    #root_schema { mutation = MType } = graphql_schema:get('ROOT'),
+mutation_type(_Ctx = #{endpoint_ctx := Ep}, _Obj, _, _) ->
+    #root_schema { mutation = MType } = graphql_schema:get(Ep, 'ROOT'),
     case MType of
         undefined -> {ok, null};
-        MT -> render_type(MT)
+        MT -> render_type(Ep, MT)
     end.
 
-subscription_type(_Ctx, _Obj, _, _) ->
-    #root_schema { subscription = SType } = graphql_schema:get('ROOT'),
+subscription_type(_Ctx = #{endpoint_ctx := Ep}, _Obj, _, _) ->
+    #root_schema { subscription = SType } = graphql_schema:get(Ep, 'ROOT'),
     case SType of
         undefined -> {ok, null};
-        ST -> render_type(ST)
+        ST -> render_type(Ep, ST)
     end.
 
-schema_types(_Ctx, _Obj, _, _Args) ->
+schema_types(_Ctx = #{endpoint_ctx := Ep}, _Obj, _, _Args) ->
     Pass = fun
         (#root_schema{}) -> false;
         (#directive_type{}) -> false;
         (_) -> true
     end,
-    Types = [X || X <- graphql_schema:all(), Pass(X)],
-    {ok, [render_type(Ty) || Ty <- Types]}.
+    Types = [X || X <- graphql_schema:all(Ep), Pass(X)],
+    {ok, [render_type(Ep, Ty) || Ty <- Types]}.
 
 %% Main renderer. Calls out to the subsets needed
-render_type(Name) when is_binary(Name) ->
-    case graphql_schema:lookup(Name) of
+render_type(Ep, Name) when is_binary(Name) ->
+    case graphql_schema:lookup(Ep, Name) of
         not_found ->
            throw({not_found, Name});
-       Ty -> render_type(Ty)
+       Ty -> render_type(Ep, Ty)
     end;
-render_type(Ty) -> {ok, #{
+render_type(Ep, Ty) -> {ok, #{
     <<"kind">> => type_kind(Ty),
     <<"name">> => type_name(Ty),
     <<"description">> => type_description(Ty),
-    <<"fields">> => type_fields(Ty),
-    <<"interfaces">> => type_interfaces(Ty),
-    <<"possibleTypes">> => type_possibilities(Ty),
+    <<"fields">> => type_fields(Ep, Ty),
+    <<"interfaces">> => type_interfaces(Ep, Ty),
+    <<"possibleTypes">> => type_possibilities(Ep, Ty),
     <<"enumValues">> => type_enum_values(Ty),
-    <<"inputFields">> => type_input_fields(Ty),
-    <<"ofType">> => type_unwrap(Ty) }}.
+    <<"inputFields">> => type_input_fields(Ep, Ty),
+    <<"ofType">> => type_unwrap(Ep, Ty) }}.
 
 type_kind(#scalar_type{}) -> <<"SCALAR">>;
 type_kind(#object_type {}) -> <<"OBJECT">>;
@@ -124,15 +125,15 @@ type_description(#enum_type{ description = D}) -> D;
 type_description(#scalar_type{ description = D}) -> D;
 type_description(_) -> null.
 
-type_interfaces(#object_type{ interfaces = IFs }) ->
-    ?LAZY({ok, [render_type(Ty) || Ty <- IFs]});
-type_interfaces(_) -> null.
+type_interfaces(Ep, #object_type{ interfaces = IFs }) ->
+    ?LAZY({ok, [render_type(Ep, Ty) || Ty <- IFs]});
+type_interfaces(_, _) -> null.
 
-type_possibilities(#interface_type { id = ID }) ->
-    ?LAZY(interface_implementors(ID));
-type_possibilities(#union_type { types = Types }) ->
-    ?LAZY({ok, [render_type(Ty) || Ty <- Types]});
-type_possibilities(_) -> null.
+type_possibilities(Ep, #interface_type { id = ID }) ->
+    ?LAZY(interface_implementors(Ep, ID));
+type_possibilities(Ep, #union_type { types = Types }) ->
+    ?LAZY({ok, [render_type(Ep, Ty) || Ty <- Types]});
+type_possibilities(_Ep, _) -> null.
 
 type_enum_values(#enum_type { values = VMap }) ->
     [begin
@@ -141,25 +142,25 @@ type_enum_values(#enum_type { values = VMap }) ->
      end || V <- maps:to_list(VMap)];
 type_enum_values(_) -> null.
 
-type_unwrap({list, Ty}) -> {ok, U} = render_type(Ty), U;
-type_unwrap({non_null, Ty}) -> {ok, U} = render_type(Ty), U;
-type_unwrap(_) -> null.
+type_unwrap(Ep, {list, Ty}) -> {ok, U} = render_type(Ep, Ty), U;
+type_unwrap(Ep, {non_null, Ty}) -> {ok, U} = render_type(Ep, Ty), U;
+type_unwrap(_, _) -> null.
 
-type_input_fields(#input_object_type{ fields = FS }) ->
-    ?LAZY({ok, [render_input_value(F) || F <- maps:to_list(FS)]});
-type_input_fields(_) -> null.
+type_input_fields(Ep, #input_object_type{ fields = FS }) ->
+    ?LAZY({ok, [render_input_value(Ep, F) || F <- maps:to_list(FS)]});
+type_input_fields(_, _) -> null.
 
-type_fields(#object_type { fields = FS }) ->
-    ?LAZY({ok, [render_field(F) || F <- maps:to_list(FS), interesting_field(F)]});
-type_fields(#interface_type { fields = FS }) ->
-    ?LAZY({ok, [render_field(F) || F <- maps:to_list(FS), interesting_field(F)]});
-type_fields(_) -> null.
+type_fields(Ep, #object_type { fields = FS }) ->
+    ?LAZY({ok, [render_field(Ep, F) || F <- maps:to_list(FS), interesting_field(F)]});
+type_fields(Ep, #interface_type { fields = FS }) ->
+    ?LAZY({ok, [render_field(Ep, F) || F <- maps:to_list(FS), interesting_field(F)]});
+type_fields(_, _) -> null.
 
 interesting_field({<<"__schema">>, #schema_field {}}) -> false;
 interesting_field({<<"__type">>, #schema_field{}}) -> false;
 interesting_field({_, _}) -> true.
 
-render_field({Name, #schema_field {
+render_field(Ep, {Name, #schema_field {
                        description = Desc,
                        args = Args,
                        ty = Ty,
@@ -169,19 +170,19 @@ render_field({Name, #schema_field {
     {ok, #{
         <<"name">> => Name,
         <<"description">> => Desc,
-        <<"args">> => ?LAZY({ok, [render_input_value(IV) || IV <- maps:to_list(Args)]}),
-        <<"type">> => ?LAZY(render_type(Ty)),
+        <<"args">> => ?LAZY({ok, [render_input_value(Ep, IV) || IV <- maps:to_list(Args)]}),
+        <<"type">> => ?LAZY(render_type(Ep, Ty)),
         <<"isDeprecated">> => IsDeprecated,
         <<"deprecationReason">> => DeprecationReason
       }}.
 
-render_input_value({K, #schema_arg { ty = Ty,
+render_input_value(Ep, {K, #schema_arg { ty = Ty,
                                      description = Desc,
                                      default = Default }}) ->
     {ok, #{
         <<"name">> => K,
         <<"description">> => Desc,
-        <<"type">> => ?LAZY(render_type(Ty)),
+        <<"type">> => ?LAZY(render_type(Ep, Ty)),
         <<"defaultValue">> =>
               case Default of
                   undefined -> null;
@@ -189,12 +190,12 @@ render_input_value({K, #schema_arg { ty = Ty,
               end
     }}.
 
-interface_implementors(ID) ->
+interface_implementors(Ep, ID) ->
     Pass = fun
         (#object_type { interfaces = IFs }) -> lists:member(ID, IFs);
         (_) -> false
     end,
-    {ok, [render_type(Ty) || Ty <- graphql_schema:all(), Pass(Ty)]}.
+    {ok, [render_type(Ep, Ty) || Ty <- graphql_schema:all(Ep), Pass(Ty)]}.
 
 render_enum_value({_Value, #enum_value{
                               val = Key,
@@ -215,8 +216,8 @@ render_deprecation(Reason) when is_binary(Reason) ->
     {true, Reason}.
 
 %% -- SCHEMA DEFINITION -------------------------------------------------------
--spec inject() -> ok.
-inject() ->
+-spec inject(endpoint_context()) -> ok.
+inject(Ep) ->
     Schema = {object, #{
                 id => '__Schema',
                 resolve_module => ?MODULE,
@@ -408,19 +409,19 @@ inject() ->
                              'FRAGMENT_SPREAD' => #{ value => 5, description => "Fragment spread" },
                              'INLINE_FRAGMENT' => #{ value => 6, description => "Inline fragments" }
                             }}},
-    ok = graphql:insert_schema_definition(DirectiveLocation),
-    ok = graphql:insert_schema_definition(Directive),
-    ok = graphql:insert_schema_definition(TypeKind),
-    ok = graphql:insert_schema_definition(Enum),
-    ok = graphql:insert_schema_definition(InputValue),
-    ok = graphql:insert_schema_definition(Field),
-    ok = graphql:insert_schema_definition(Type),
-    ok = graphql:insert_schema_definition(Schema),
+    ok = graphql:insert_schema_definition(Ep, DirectiveLocation),
+    ok = graphql:insert_schema_definition(Ep, Directive),
+    ok = graphql:insert_schema_definition(Ep, TypeKind),
+    ok = graphql:insert_schema_definition(Ep, Enum),
+    ok = graphql:insert_schema_definition(Ep, InputValue),
+    ok = graphql:insert_schema_definition(Ep, Field),
+    ok = graphql:insert_schema_definition(Ep, Type),
+    ok = graphql:insert_schema_definition(Ep, Schema),
     ok.
 
 %% @todo: Look up the directive in the schema and then use that lookup as a way to render the
 %% following part. Most notably, locations can be mapped from the directive type.
-directive(Kind) ->
+directive(Ep, Kind) ->
     {Name, Desc} =
         case Kind of
             include ->
@@ -430,7 +431,7 @@ directive(Kind) ->
                 {<<"skip">>,
                  <<"exclude a selection on a conditional variable">>}
         end,
-    {ok, Bool} = render_type(<<"Bool">>),
+    {ok, Bool} = render_type(Ep, <<"Bool">>),
 
     #{
        <<"name">> => Name,

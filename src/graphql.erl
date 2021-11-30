@@ -9,10 +9,12 @@
 %% GraphQL Documents
 -export([
          parse/1,
-         type_check/1, type_check_params/3,
-         insert_root/1,
+         type_check/1, type_check/2,
+         type_check_params/3, type_check_params/4,
+         insert_root/1, insert_root/2,
          validate/1,
-         execute/1, execute/2
+         execute/1, execute/2, execute/3,
+         get_endpoint/1
         ]).
 
 -export([
@@ -34,9 +36,9 @@
 
 %% Schema Definitions
 -export([
-         load_schema/2,
-         insert_schema_definition/1,
-         validate_schema/0
+         load_schema/2, load_schema/3,
+         insert_schema_definition/1, insert_schema_definition/2,
+         validate_schema/0, validate_schema/1
 ]).
 
 %% Internal
@@ -47,7 +49,7 @@
 
 -type schema_definition() :: {atom(), #{ atom() => term() }}.
 
--export_type([json/0, param_context/0]).
+-export_type([json/0, param_context/0, endpoint_context/0]).
 
 -type token() :: {'$graphql_token', pid(), reference(), reference()}.
 -type defer_map() :: #{ worker => pid(),
@@ -126,14 +128,18 @@ parse(Input) when is_list(Input) ->
             {error, {scanner_error, Err}}
     end.
 
-load_schema(Mapping, Input) when is_binary(Input) ->
-    load_schema(Mapping, binary_to_list(Input));
-load_schema(Mapping, Input) when is_list(Input) ->
+load_schema(Mapping, Input) ->
+    Ep = graphql_schema:get_endpoint_ctx(),
+    load_schema(Ep, Mapping, Input).
+
+load_schema(Ep, Mapping, Input) when is_binary(Input) ->
+    load_schema(Ep, Mapping, binary_to_list(Input));
+load_schema(Ep, Mapping, Input) when is_list(Input) ->
     case graphql_scanner:string(Input) of
         {ok, Tokens, _EndLine} ->
             case graphql_parser:parse(Tokens) of
                 {ok, _} = Result ->
-                    graphql_schema_parse:inject(Mapping, Result);
+                    graphql_schema_parse:inject(Ep, Mapping, Result);
                 {error, Err} ->
                     {error, Err}
             end;
@@ -147,11 +153,22 @@ validate(AST) ->
 
 -spec type_check(document()) -> {ok, #{ atom() => term() }}.
 type_check(AST) ->
-    graphql_check:check(AST).
+    Ep = graphql_schema:get_endpoint_ctx(),
+    type_check(Ep, AST).
+
+-spec type_check(endpoint_context(), document()) -> {ok, #{ atom() => term() }}.
+type_check(Ep, AST) ->
+    graphql_check:check(Ep, AST).
+
 
 -spec type_check_params(any(), any(), any()) -> param_context().
 type_check_params(FunEnv, OpName, Vars) ->
-    graphql_check:check_params(FunEnv, OpName, Vars).
+    Ep = graphql_schema:get_endpoint_ctx(),
+    type_check_params(Ep, FunEnv, OpName, Vars).
+
+-spec type_check_params(endpoint_context(), any(), any(), any()) -> param_context().
+type_check_params(Ep, FunEnv, OpName, Vars) ->
+    graphql_check:check_params(Ep, FunEnv, OpName, Vars).
 
 -spec execute(document()) -> #{ atom() => json() }.
 execute(AST) ->
@@ -159,29 +176,54 @@ execute(AST) ->
     execute(Ctx, AST).
 
 -spec execute(context(), document()) -> #{ atom() => json() }.
-execute(#{default_timeout := _DT } = Ctx, AST) ->
-    graphql_execute:x(Ctx, AST);
 execute(Ctx, AST) ->
-    case graphql_execute:x(Ctx#{ default_timeout => ?DEFAULT_TIMEOUT}, AST) of
+    Ep = graphql_schema:get_endpoint_ctx(),
+    execute(Ep, Ctx, AST).
+
+-spec execute(endpoint_context(), context(), document()) -> #{ atom() => json() }.
+execute(Ep, #{default_timeout := _DT } = Ctx, AST) ->
+    graphql_execute:x(Ep, Ctx, AST);
+execute(Ep, Ctx, AST) ->
+    case graphql_execute:x(Ep, Ctx#{ default_timeout => ?DEFAULT_TIMEOUT}, AST) of
         #{ errors := Errs } = Result ->
             Result#{ errors := graphql_err:format_errors(Ctx, Errs) };
         Result -> Result
     end.
+
+-spec get_endpoint(atom()) -> endpoint_context().
+get_endpoint(Name) ->
+    graphql_schema:get_endpoint_ctx(Name).
 
 %% @doc insert_schema_definition/1 loads a schema definition into the Graph Schema
 %% @end
 -spec insert_schema_definition(schema_definition()) -> ok | {error, Reason}
   when Reason :: term().
 insert_schema_definition(Defn) ->
-    graphql_schema:load(Defn).
+    Ep = graphql_schema:get_endpoint_ctx(),
+    insert_schema_definition(Ep, Defn).
+
+-spec insert_schema_definition(endpoint_context(), schema_definition()) -> ok | {error, Reason}
+  when Reason :: term().
+insert_schema_definition(Ep, Defn) ->
+    graphql_schema:load(Ep, Defn).
 
 -spec insert_root(schema_definition()) -> ok.
 insert_root(Defn) ->
+    Ep = graphql_schema:get_endpoint_ctx(),
+    insert_root(Ep, Defn).
+
+-spec insert_root(endpoint_context(), schema_definition()) -> ok.
+insert_root(Ep, Defn) ->
     Root = graphql_schema_canonicalize:x(Defn),
-    Schema = graphql_schema_validate:root(Root),
-    graphql_schema:load_schema(Schema).
+    Schema = graphql_schema_validate:root(Ep, Root),
+    graphql_schema:load_schema(Ep, Schema).
 
 %% STUB for now
 -spec validate_schema() -> ok | {error, any()}.
 validate_schema() ->
-    graphql_schema_validate:x().
+    Ep = graphql_schema:get_endpoint_ctx(),
+    graphql_schema_validate:x(Ep).
+
+-spec validate_schema(endpoint_context()) -> ok | {error, any()}.
+validate_schema(Ep) ->
+    graphql_schema_validate:x(Ep).

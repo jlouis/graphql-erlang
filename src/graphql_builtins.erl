@@ -2,10 +2,10 @@
 
 -include("graphql_schema.hrl").
 
--export([standard_types_inject/0, standard_directives_inject/0]).
+-export([standard_types_inject/1, standard_directives_inject/1]).
 
--spec standard_types_inject() -> ok.
-standard_types_inject() ->
+-spec standard_types_inject(endpoint_context()) -> ok.
+standard_types_inject(Ep) ->
     String = {scalar, #{
     	id => 'String',
     	description => <<"UTF-8 Text Strings"/utf8>> }},
@@ -21,15 +21,15 @@ standard_types_inject() ->
     ID = {scalar, #{
     	id => 'ID',
     	description => <<"Representation of an opaque ID in the system. Always returned/given as strings, but clients are not allowed to deconstruct them. The server might change them as it sees fit later on, and the clients must be able to handle this situation."/utf8>> }},
-    ok = graphql:insert_schema_definition(String),
-    ok = graphql:insert_schema_definition(Float),
-    ok = graphql:insert_schema_definition(Int),
-    ok = graphql:insert_schema_definition(Bool),
-    ok = graphql:insert_schema_definition(ID),
+    ok = graphql:insert_schema_definition(Ep, String),
+    ok = graphql:insert_schema_definition(Ep, Float),
+    ok = graphql:insert_schema_definition(Ep, Int),
+    ok = graphql:insert_schema_definition(Ep, Bool),
+    ok = graphql:insert_schema_definition(Ep, ID),
     ok.
 
--spec standard_directives_inject() -> ok.
-standard_directives_inject() ->
+-spec standard_directives_inject(endpoint_context()) -> ok.
+standard_directives_inject(Ep) ->
     SkipDirective = {directive, #{
         id => <<"skip">>,
         description => <<"Allows excluding a field depending on argument">>,
@@ -60,7 +60,7 @@ standard_directives_inject() ->
             default => <<"No longer supported">>,
             description => <<"A message to the developer on why this field is deprecated and what to use instead">> }}
         }},
-    ok = graphql:insert_schema_definition(SkipDirective),
-    ok = graphql:insert_schema_definition(IncludeDirective),
-    ok = graphql:insert_schema_definition(DeprecatedDirective),
+    ok = graphql:insert_schema_definition(Ep, SkipDirective),
+    ok = graphql:insert_schema_definition(Ep, IncludeDirective),
+    ok = graphql:insert_schema_definition(Ep, DeprecatedDirective),
     ok.

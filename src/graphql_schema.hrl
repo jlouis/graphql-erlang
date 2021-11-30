@@ -126,3 +126,7 @@
 -record(document,
         { definitions :: [any()]
         }).
+
+-record(endpoint_context, {name :: atom(), pid :: pid(), enums_tab :: atom(), objects_tab :: atom()}).
+
+-type endpoint_context() :: #endpoint_context{}.
