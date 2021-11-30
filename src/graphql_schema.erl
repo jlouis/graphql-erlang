@@ -112,11 +112,11 @@ insert_new_(#endpoint_context{pid = Pid}, Rec) ->
     end.
 
 -spec all(endpoint_context()) -> [any()].
-all(#endpoint_context{objectsTab = ObjectsTab}) ->
+all(#endpoint_context{objects_tab = ObjectsTab}) ->
     ets:match_object(ObjectsTab, '_').
 
 -spec get(endpoint_context(), binary() | 'ROOT') -> schema_object().
-get(#endpoint_context{objectsTab = ObjectsTab}, ID) ->
+get(#endpoint_context{objects_tab = ObjectsTab}, ID) ->
     case ets:lookup(ObjectsTab, ID) of
        [S] -> S;
        _ -> exit(schema_not_found)
@@ -126,7 +126,7 @@ get(#endpoint_context{objectsTab = ObjectsTab}, ID) ->
 %% or nothing at all.
 
 -spec validate_enum(endpoint_context(), binary(), binary()) -> ok | not_found | {other_enums, [#enum_type{}]}.
-validate_enum(Ep=#endpoint_context{enumsTab = EnumsTab}, EnumID, EnumValue) ->
+validate_enum(Ep=#endpoint_context{enums_tab = EnumsTab}, EnumID, EnumValue) ->
     try ets:lookup_element(EnumsTab, EnumValue, 2) of
         #{EnumID := _} -> ok;
         EnumIDsMap ->
@@ -146,7 +146,7 @@ validate_enum(Ep=#endpoint_context{enumsTab = EnumsTab}, EnumID, EnumValue) ->
 %% with QLC in order to make a working system.
 
 -spec lookup_interface_implementors(endpoint_context(), binary()) -> [binary()].
-lookup_interface_implementors(#endpoint_context{objectsTab = ObjectsTab}, IFaceID) ->
+lookup_interface_implementors(#endpoint_context{objects_tab = ObjectsTab}, IFaceID) ->
     QH = qlc:q([Obj#object_type.id
                 || Obj <- ets:table(ObjectsTab),
                    element(1, Obj) == object_type,
@@ -155,7 +155,7 @@ lookup_interface_implementors(#endpoint_context{objectsTab = ObjectsTab}, IFaceI
 
 
 -spec lookup(endpoint_context(), binary() | 'ROOT') -> schema_object() | not_found.
-lookup(#endpoint_context{objectsTab = ObjectsTab}, ID) ->
+lookup(#endpoint_context{objects_tab = ObjectsTab}, ID) ->
     case ets:lookup(ObjectsTab, ID) of
        [S] -> S;
        _ -> not_found
@@ -194,8 +194,8 @@ register_schema(Name) ->
 
     #endpoint_context{name = Name,
                       pid = self(),
-                      enumsTab = EnumsTab,
-                      objectsTab = ObjectsTab}.
+                      enums_tab = EnumsTab,
+                      objects_tab = ObjectsTab}.
 
 
 -spec handle_cast(any(), S) -> {noreply, S}
@@ -234,7 +234,7 @@ handle_call({insert_new, X}, _From, #state{context=Ep}=State) ->
             {reply, ets:insert_new(Tab, X), State}
     end;
 handle_call(reset, _From,
-            #state{context = #endpoint_context{objectsTab = Tab}} = State) ->
+            #state{context = #endpoint_context{objects_tab = Tab}} = State) ->
     true = ets:delete_all_objects(Tab),
     {reply, ok, State};
 handle_call(get_endpoint_ctx, _From, State) ->
@@ -256,21 +256,21 @@ code_change(_OldVsn, State, _Aux) -> {ok, State}.
 %% -- INTERNAL FUNCTIONS -------------------------
 
 %% determine_table/1 figures out the table an object belongs to
-determine_table(#endpoint_context{objectsTab = Objs},
+determine_table(#endpoint_context{objects_tab = Objs},
                 #root_schema{}) -> Objs;
-determine_table(#endpoint_context{objectsTab = Objs},
+determine_table(#endpoint_context{objects_tab = Objs},
                 #object_type{}) -> Objs;
-determine_table(#endpoint_context{objectsTab = Objs, enumsTab = Enums},
+determine_table(#endpoint_context{objects_tab = Objs, enums_tab = Enums},
                 #enum_type{}) -> {enum, Objs, Enums};
-determine_table(#endpoint_context{objectsTab = Objs},
+determine_table(#endpoint_context{objects_tab = Objs},
                 #interface_type{}) -> Objs;
-determine_table(#endpoint_context{objectsTab = Objs},
+determine_table(#endpoint_context{objects_tab = Objs},
                 #scalar_type{}) -> Objs;
-determine_table(#endpoint_context{objectsTab = Objs},
+determine_table(#endpoint_context{objects_tab = Objs},
                 #input_object_type{}) -> Objs;
-determine_table(#endpoint_context{objectsTab = Objs},
+determine_table(#endpoint_context{objects_tab = Objs},
                 #union_type{}) -> Objs;
-determine_table(#endpoint_context{objectsTab = Objs},
+determine_table(#endpoint_context{objects_tab = Objs},
                 #directive_type{}) -> Objs;
 determine_table(_, _) -> {error, unknown}.
 
