@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/shopgun/graphql-erlang.svg?branch=develop)](https://travis-ci.org/shopgun/graphql-erlang)
+[![Build Status](https://github.com/jlouis/graphql-erlang/actions/workflows/test.yml/badge.svg)](https://github.com/jlouis/graphql-erlang/actions/workflows/test.yml)
 
 # A GraphQL Server library - in Erlang
 
