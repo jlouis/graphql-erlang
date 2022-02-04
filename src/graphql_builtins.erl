@@ -38,7 +38,7 @@ standard_directives_inject() ->
         args => #{ <<"if">> => #{
             type => 'Bool',
             default => false,
-            description => <<"Wether or not the item should be skipped">> }}
+            description => <<"Whether or not the item should be skipped">> }}
         }},
     IncludeDirective = {directive, #{
         id => <<"include">>,
@@ -48,7 +48,7 @@ standard_directives_inject() ->
         args => #{ <<"if">> => #{
             type => 'Bool',
             default => false,
-            description => <<"Wether or not the item should be included">> }}
+            description => <<"Whether or not the item should be included">> }}
         }},
     DeprecatedDirective = {directive, #{
         id => <<"deprecated">>,

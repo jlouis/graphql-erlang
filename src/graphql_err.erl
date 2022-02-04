@@ -256,7 +256,7 @@ type_check_err_msg({excess_args, Args}) ->
     io_lib:format("The argument list contains unknown arguments ~p", [Args]);
 type_check_err_msg({type_mismatch, #{ document := Doc, schema := Sch }}) ->
     ["Type mismatch. The query document has a value/variable of type (",
-     graphql_err:format_ty(Doc), ") but the schema expectes type (", graphql_err:format_ty(Sch), ")"];
+     graphql_err:format_ty(Doc), ") but the schema expects type (", graphql_err:format_ty(Sch), ")"];
 type_check_err_msg({type_mismatch, #{ id := ID, document := Doc, schema := Sch }}) ->
     ["Type mismatch on (", ID, "). The query document has a value/variable of type (",
       graphql_err:format_ty(Doc), ") but the schema expects type (", graphql_err:format_ty(Sch), ")"];
@@ -296,7 +296,7 @@ type_check_err_msg({not_union_member, SpreadTy, UnionTy}) ->
 type_check_err_msg({not_interface_embedder, SpreadTy, ScopeTy}) ->
     io_lib:format(
       "The spread type ~ts is an interface. "
-      "Yet the scope type ~ts does not impelement this interface.",
+      "Yet the scope type ~ts does not implement this interface.",
       [SpreadTy, ScopeTy]);
 type_check_err_msg({not_union_embedder, SpreadTy, ScopeTy}) ->
     io_lib:format(

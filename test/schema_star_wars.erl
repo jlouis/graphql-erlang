@@ -38,7 +38,7 @@ inject() ->
     
     Root = {root, #{
               query => 'Query',
-              interaces => []
+              interfaces => []
              }},
     ok = graphql:insert_schema_definition(Root),
     ok.

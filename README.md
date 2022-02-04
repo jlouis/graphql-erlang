@@ -403,7 +403,7 @@ run(Doc, OpName, Vars, Req, State) ->
 
 In this GraphQL implementation, the default value for keys are type
 `binary()`. This choice is deliberate, since it makes the code more
-resistent to `atom()` overflow and also avoids some conversions
+resistant to `atom()` overflow and also avoids some conversions
 between `binary()` and `atom()` values in the system. A later version
 of the library might redesign this aspect, but we are somewhat stuck
 with it for now.

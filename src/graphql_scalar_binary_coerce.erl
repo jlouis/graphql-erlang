@@ -5,7 +5,7 @@
 input(_, X) -> {ok, X}.
 
 %% According to the specification, Jun2018, we should
-%% accept coercion as long as we are not "loosing information"
+%% accept coercion as long as we are not "losing information"
 %% in the process
 output(_,B) when is_binary(B) ->
     %% Standard case where the code provided a String value

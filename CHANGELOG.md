@@ -64,7 +64,7 @@ Nothing here yet
 
 ## [0.15.0] 2018-12-02 Hex.pm release
 
-### Compatiblity
+### Compatibility
 
 * The default errors use `code` in its errors: `#{ path => .., message
   => .., extensions => #{ code => .. }}`, which follows the
@@ -338,7 +338,7 @@ is a smaller one:
 * Feature: Support 3-tuple responses in GraphQL resolvers. Tuples of the form
   `{ok, Result, [Terms]}` are now allowed, and the given Terms will
   be collected in the final response in an unspecified order. This
-  allows resolvers to send back auxilliary data through the graph
+  allows resolvers to send back auxiliary data through the graph
   system and handle these at the top level later on. This
   functionality is currently *experimental* until we figure out if
   there is a simpler solution to the problem of getting side-channel
