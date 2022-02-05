@@ -76,7 +76,7 @@ query GoblinQuery($id : Id! = "bW9uc3Rlcjox") {
   }
 }
 
-query GoblinQueryDirectives($id : Id! = "bW9uc3Rlcjox", $fat : Bool!) {
+query GoblinQueryDirectives($id : Id! = "bW9uc3Rlcjox", $fat : Boolean!) {
   goblin: monster(id: $id) {
     id
     name @include(if: $fat)
@@ -84,7 +84,7 @@ query GoblinQueryDirectives($id : Id! = "bW9uc3Rlcjox", $fat : Bool!) {
   }
 }
 
-query GoblinQueryDirectivesInline($id : Id! = "bW9uc3Rlcjox", $fat : Bool!) {
+query GoblinQueryDirectivesInline($id : Id! = "bW9uc3Rlcjox", $fat : Boolean!) {
   goblin: monster(id: $id) {
     id
     ... @include(if: $fat) {
