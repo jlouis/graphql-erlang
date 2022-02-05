@@ -394,7 +394,7 @@ check_value(Ctx, Val, #enum_type{} = Sigma) ->
 check_value(Ctx, Val, Sigma) ->
     err(Ctx, {type_mismatch,
               #{ document => Val,
-                 schmema => Sigma }}).
+                 schema => Sigma }}).
 
 check_input_obj(Ctx, {input_object, Obj},
                 #input_object_type{ fields = Fields }) ->
