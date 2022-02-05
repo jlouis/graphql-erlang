@@ -8,7 +8,7 @@ inject() ->
                    description => ["Input Object for testing uniqueness"],
                    fields => #{
                      field => #{
-                       type => 'Bool!',
+                       type => 'Boolean!',
                        description => "A bool field" }}}},
     ok = graphql:insert_schema_definition(TestField),
     DogCommand = {enum, #{
@@ -46,7 +46,7 @@ inject() ->
     		nickname => #{ type => 'String', description => "Nickname of the dog, if any" },
     		barkVolume => #{ type => 'Int', description => "Bark volume in dB" },
     		doesKnowCommand => #{
-    			type => 'Bool!',
+    			type => 'Boolean!',
     			description => "Does the dog know a specific command?",
     			args => #{
     				dogCommand => #{
@@ -54,11 +54,11 @@ inject() ->
     					description => "The dog command we want to ask for" }}
     		},
     		isHouseTrained => #{
-    			type => 'Bool!',
+    			type => 'Boolean!',
     			description => "Is the dog house trained",
     			args => #{
     				atOtherHomes => #{
-    					type => 'Bool',
+    					type => 'Boolean',
     					description => "Is the query including other homes?" }}
     		},
     		owner => #{
@@ -108,7 +108,7 @@ inject() ->
     		nickname => #{
     			type => 'String', description => "The nickname of the cat, if any" },
     		doesKnowCommand => #{
-    			type => 'Bool!',
+    			type => 'Boolean!',
     			description => "Does the cat know of a specific command type",
     			args => #{
     				catCommand => #{
@@ -157,10 +157,10 @@ inject() ->
     				y => #{ type => 'Int!', description => "The Y arg"}
     			}},
     		booleanArgField => #{
-    			type => 'Bool',
+    			type => 'Boolean',
     			description => "Test of a boolean arg field",
     			args => #{
-    				booleanArg => #{ type => 'Bool', description => "The Bool Arg" }
+    				booleanArg => #{ type => 'Boolean', description => "The Bool Arg" }
     			}},
     		floatArgField => #{
     			type => 'Float',
@@ -175,18 +175,18 @@ inject() ->
     				intArg => #{type => 'Int', description => "The Int Arg" }
     			}},
     		nonNullBooleanArgField => #{
-    			type => 'Bool!',
+    			type => 'Boolean!',
     			description => "Test of non-null args",
     			args => #{
     				nonNullBooleanArg => #{
-    					type => 'Bool!',
+    					type => 'Boolean!',
     					description => "The non-null bool arg" }
     			}},
 		booleanListArgField => #{
-			type => ['Bool'],
+			type => ['Boolean'],
 			description => "Test lists of bools",
 			args => #{
-				booleanListArg => #{ type => {non_null, ['Bool']}, description => "The list of bools"}
+				booleanListArg => #{ type => {non_null, ['Boolean']}, description => "The list of bools"}
 			}}
     }}},
     ok = graphql:insert_schema_definition(Arguments),
@@ -198,7 +198,7 @@ inject() ->
            fields => #{
              arguments => #{ type => 'Arguments', description => "More complicated Argument cases" },
              field =>
-                 #{ type => 'Bool',
+                 #{ type => 'Boolean',
                     description => "Test for input object uniqueness",
                     args => #{
                       arg => #{

@@ -262,7 +262,7 @@ inject() ->
                   description => "The fields in the object/interface",
                   args => #{
                     includeDeprecated => #{
-                      type => 'Bool',
+                      type => 'Boolean',
                       description => "Should deprecated fields be included or not",
                       default => false
                      }}},
@@ -282,7 +282,7 @@ inject() ->
                   description => "The possible values of an Enum",
                   args => #{
                     includeDeprecated => #{
-                      type => 'Bool',
+                      type => 'Boolean',
                       description => "Should deprecated fields be included or not",
                       default => false
                      }}},
@@ -313,7 +313,7 @@ inject() ->
                    type => '__Type',
                    description => "The type of the given field" },
                  isDeprecated => #{
-                   type => 'Bool!',
+                   type => 'Boolean!',
                    description => "True if the field is deprecated, false otherwise" },
                  deprecationReason => #{
                    type => 'String',
@@ -349,7 +349,7 @@ inject() ->
                   type => 'String',
                   description => "The description of the value" },
                 isDeprecated => #{
-                  type => 'Bool!',
+                  type => 'Boolean!',
                   description => "True if this is a deprecated field" },
                 deprecationReason => #{
                   type => 'String',
@@ -384,13 +384,13 @@ inject() ->
                        type => {non_null, ['__DirectiveLocation!']},
                        description => "Where the directives can be used" },
                      onOperation => #{
-                        type => 'Bool',
+                        type => 'Boolean',
                         description => "Not documented yet" },
                      onFragment => #{
-                        type => 'Bool',
+                        type => 'Boolean',
                         description => "Not documented yet" },
                      onField => #{
-                        type => 'Bool',
+                        type => 'Boolean',
                         description => "Not documented yet" },
                      args => #{
                        type => {non_null, ['__InputValue!']},
@@ -430,7 +430,7 @@ directive(Kind) ->
                 {<<"skip">>,
                  <<"exclude a selection on a conditional variable">>}
         end,
-    {ok, Bool} = render_type(<<"Bool">>),
+    {ok, Bool} = render_type(<<"Boolean">>),
 
     #{
        <<"name">> => Name,

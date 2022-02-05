@@ -55,7 +55,7 @@ inject() ->
                          type => 'ID!',
                          description => "The ID of the article" },
                        isPublished => #{
-                         type => 'Bool',
+                         type => 'Boolean',
                          description => "True is the article has been published"},
                        author => #{
                          type => 'Author',

@@ -193,7 +193,7 @@ scalar_resolve(#{ resolve_module := ModuleResolver })
 
 scalar_resolve(#{ id := 'ID'})     -> graphql_scalar_binary_coerce;
 scalar_resolve(#{ id := 'String'}) -> graphql_scalar_binary_coerce;
-scalar_resolve(#{ id := 'Bool'})   -> graphql_scalar_bool_coerce;
+scalar_resolve(#{ id := 'Boolean'})   -> graphql_scalar_bool_coerce;
 scalar_resolve(#{ id := 'Int'})    -> graphql_scalar_integer_coerce;
 scalar_resolve(#{ id := 'Float'})  -> graphql_scalar_float_coerce;
 scalar_resolve(_)                  -> graphql_enum_coerce.
