@@ -5,6 +5,7 @@
 
 execute(#monster{}) -> {ok, 'Monster'};
 execute(#dice{}) -> {ok, 'Dice'};
+execute(#item{}) -> {ok, 'Item'};
 execute(kraken) -> {error, kraken};
 execute(X) ->
     case dungeon:unwrap(X) of

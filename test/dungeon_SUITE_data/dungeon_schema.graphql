@@ -167,7 +167,14 @@ type QueryRoot {
   roll(delay: Int) : Dice
 }
 
+type SubscriptionRoot {
+  monsterIntroduced(mood: Mood) : Monster
+  thingIntroduced : Thing
+  break(reason: String): Monster
+}
+
 schema {
   query : QueryRoot
   mutation : MutationRoot
+  subscription: SubscriptionRoot
 }

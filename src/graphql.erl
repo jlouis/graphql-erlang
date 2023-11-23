@@ -12,7 +12,8 @@
          type_check/1, type_check_params/3,
          insert_root/1,
          validate/1,
-         execute/1, execute/2
+         execute/1, execute/2,
+         handle_subscription_event/4
         ]).
 
 -export([
@@ -45,9 +46,17 @@
 -type json() :: number() | binary() | true | false | null | #{ binary() | atom() => json() } | [json()] .
 -type param_context() :: json().
 
+-type error() :: #{message := binary(),
+                   path => [binary()],
+                   extensions => map()}.
+-type execute_result() :: #{data => graphql:json(),
+                            subscription => {subscription_value(), subscription_ctx()},
+                            errors => [error()],
+                            aux => [any()]}.
+
 -type schema_definition() :: {atom(), #{ atom() => term() }}.
 
--export_type([json/0, param_context/0]).
+-export_type([json/0, param_context/0, execute_result/0, error/0]).
 
 -type token() :: {'$graphql_token', pid(), reference(), reference()}.
 -type defer_map() :: #{ worker => pid(),
@@ -57,10 +66,15 @@
 -type name() :: {name, pos_integer(), binary()} | binary().
 -type document() :: #document{}.
 -type directive() :: #directive{}.
--export_type([directive/0,
 
+-type subscription_value() :: any().
+-type subscription_ctx() :: graphql_execute:subscription_ctx().
+
+-export_type([directive/0,
               token/0,
-              schema_field/0]).
+              schema_field/0,
+              subscription_value/0,
+              subscription_ctx/0]).
 
 -define(DEFAULT_TIMEOUT, 3000).
 
@@ -153,12 +167,12 @@ type_check(AST) ->
 type_check_params(FunEnv, OpName, Vars) ->
     graphql_check:check_params(FunEnv, OpName, Vars).
 
--spec execute(document()) -> #{ atom() => json() }.
+-spec execute(document()) -> execute_result().
 execute(AST) ->
     Ctx = #{ params => #{}, default_timeout => ?DEFAULT_TIMEOUT },
     execute(Ctx, AST).
 
--spec execute(context(), document()) -> #{ atom() => json() }.
+-spec execute(context(), document()) -> execute_result().
 execute(#{default_timeout := _DT } = Ctx, AST) ->
     graphql_execute:x(Ctx, AST);
 execute(Ctx, AST) ->
@@ -167,6 +181,18 @@ execute(Ctx, AST) ->
             Result#{ errors := graphql_err:format_errors(Ctx, Errs) };
         Result -> Result
     end.
+
+%% @doc Executes subscription MapSourceToResponseEvent step
+%% `subscription_value()' and `subscription_ctx()' are the values returned as
+%% `#{subscription := {SubValue, SubCtx}} = graphql:execute(...)'
+%% A tuple `{Subscription, Event}' will be passed as 2nd argument to the `execute/4' callback
+%%
+%% @param ExtraCtx additional map fields that needs to be added to execution context
+%% @param Event arbitrary event that was produced by the subscription
+-spec handle_subscription_event(context(), subscription_value(), subscription_ctx(), any()) ->
+          execute_result().
+handle_subscription_event(ExtraCtx, Subscription, SubscriptionCtx, Event) ->
+    graphql_execute:x_subscription_event(ExtraCtx, Subscription, SubscriptionCtx, Event).
 
 %% @doc insert_schema_definition/1 loads a schema definition into the Graph Schema
 %% @end

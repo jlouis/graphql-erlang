@@ -12,6 +12,7 @@
 
 -export([crash/2, err/2]).
 
+-spec abort([any()], any()) -> no_return().
 abort(Path, Msg) ->
     abort(Path, uncategorized, Msg).
 

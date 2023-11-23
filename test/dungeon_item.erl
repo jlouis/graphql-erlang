@@ -8,7 +8,7 @@ execute(_Ctx, #item { id = ID,
                       contents = Contents,
                       description = Description } = Item, Field, _) ->
     case Field of
-        <<"id">> -> {ok, dungeon:wrap({item, ID})};
+        <<"id">> -> dungeon:wrap({item, ID});
         <<"name">> -> {ok, Name};
         <<"description">> -> {ok, Description};
         <<"weight">> ->
