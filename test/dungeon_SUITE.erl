@@ -1,5 +1,6 @@
 -module(dungeon_SUITE).
 -include_lib("common_test/include/ct.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -compile([export_all, nowarn_export_all]).
 
@@ -85,7 +86,11 @@ groups() ->
            find_monster_singleton,
            invalid_scalar_int_input,
            introspect_default_value,
-           default_parameter ]},
+           default_parameter,
+           subscribe_monster_introduced,
+           subscribe_thing_introduced,
+           multiple_subscriptions,
+           subscribe_error ]},
     Errors =
         {errors, [],
          [ unknown_variable,
@@ -121,6 +126,15 @@ run(Config, Q, Params) ->
 run(Config, File, Q, Params) ->
     {ok, Doc} = read_doc(Config, File),
     th:x(Config, Doc, Q, Params).
+
+subscription_receive(0) -> [];
+subscription_receive(N) ->
+    receive
+        {subscription_msg, Subscription, Msg} ->
+            [{Subscription, Msg} | subscription_receive(N - 1)]
+    after 5000 ->
+            error(timeout)
+    end.
 
 default_query(Config) ->
     ID = ?config(known_goblin_id_1, Config),
@@ -1106,3 +1120,135 @@ default_parameter(Config) ->
                   #{ <<"color">> := <<"#41924B">>}}} =
         run(Config, <<"GetMonster">>, #{ <<"id">> => <<"bW9uc3Rlcjox">> }),
     ok.
+
+
+subscribe_monster_introduced(Config) ->
+    #{subscription := {Subscription, SubCtx}} = run(Config, <<"MonsterIntroduced">>, #{}),
+    Input = #{
+      <<"clientMutationId">> => <<"MUTID">>,
+      <<"name">> => <<"orc">>,
+      <<"color">> => <<"#593E1A">>,
+      <<"hitpoints">> => 30,
+      <<"mood">> => <<"AGGRESSIVE">>
+     },
+    #{ data := #{
+                     <<"introduceMonster">> := #{
+                       <<"clientMutationId">> := <<"MUTID">>,
+                       <<"monster">> := #{
+                         <<"id">> := Id,
+                         <<"name">> := <<"orc">>,
+                         <<"color">> := <<"#593E1A">>,
+                         <<"hitpoints">> := 30,
+                         <<"properties">> := [],
+                         <<"mood">> := <<"AGGRESSIVE">>}
+                      }}} = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => Input }),
+    [{Subscription, Msg}] = subscription_receive(1),
+    ?assertMatch(
+       #{data :=
+             #{<<"monsterIntroduced">> :=
+                   #{<<"id">> := Id,
+                     <<"name">> := <<"orc!">>,
+                     <<"hp">> := 30}}},
+       graphql:handle_subscription_event(#{}, Subscription, SubCtx, Msg)).
+
+subscribe_thing_introduced(Config) ->
+    #{subscription := {Subscription, SubCtx}} = run(Config, <<"ThingIntroduced">>, #{}),
+    MonsterInput = #{
+      <<"clientMutationId">> => <<"MUTID">>,
+      <<"name">> => <<"orc-thing">>,
+      <<"color">> => <<"#593E1A">>,
+      <<"hitpoints">> => 30,
+      <<"mood">> => <<"AGGRESSIVE">>
+     },
+    #{data :=
+          #{<<"introduceMonster">> :=
+               #{<<"monster">> :=
+                     #{<<"id">> := MonsterId}}}} =
+        run(Config, <<"IntroduceMonster">>, #{ <<"input">> => MonsterInput }),
+    ItemInput = #{
+      <<"clientMutationId">> => <<"MUTID">>,
+      <<"name">> => <<"item-thing">>,
+      <<"description">> => <<"item-description">>,
+      <<"weight">> => 100
+    },
+    #{data :=
+          #{<<"introduceItem">> :=
+               #{<<"item">> :=
+                     #{<<"id">> := ItemId}}}} =
+        run(Config, <<"IntroduceItem">>, #{ <<"input">> => ItemInput }),
+
+    [{Subscription, Msg1}, {Subscription, Msg2}] = subscription_receive(2),
+    ?assertMatch(
+       #{data :=
+             #{<<"thingIntroduced">> :=
+                   #{<<"__typename">> := <<"Monster">>,
+                     <<"id">> := MonsterId,
+                     <<"name">> := <<"orc-thing!">>,
+                     <<"hp">> := 30}}},
+       graphql:handle_subscription_event(#{}, Subscription, SubCtx, Msg1)),
+    ?assertMatch(
+       #{data :=
+             #{<<"thingIntroduced">> :=
+                   #{<<"__typename">> := <<"Item">>,
+                     <<"id">> := ItemId,
+                     <<"name">> := <<"item-thing">>,
+                     <<"description">> := <<"item-description">>}}},
+       graphql:handle_subscription_event(#{}, Subscription, SubCtx, Msg2)).
+
+multiple_subscriptions(Config) ->
+    #{subscription := {Sub1, SubCtx1}} = run(Config, <<"MonsterIntroduced">>, #{}),
+    #{subscription := {Sub2, SubCtx2}} = run(Config, <<"MonsterIntroducedInMood">>,
+                                             #{<<"mood">> => <<"AGGRESSIVE">>}),
+    SubMapping = #{Sub1 => SubCtx1,
+                   Sub2 => SubCtx2},
+    InputAggressive = #{
+      <<"clientMutationId">> => <<"MUTID">>,
+      <<"name">> => <<"aggressive-orc">>,
+      <<"color">> => <<"#593E1A">>,
+      <<"hitpoints">> => 30,
+      <<"mood">> => <<"AGGRESSIVE">>
+     },
+    InputDodgy = InputAggressive#{<<"name">> := <<"dodgy-orc">>,
+                                  <<"mood">> := <<"DODGY">>},
+    #{ data := #{
+          <<"introduceMonster">> := #{
+             <<"monster">> := #{
+                <<"id">> := AggressiveId,
+                <<"name">> := <<"aggressive-orc">>,
+                <<"mood">> := <<"AGGRESSIVE">>}
+     }}} = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => InputAggressive }),
+    #{ data := #{
+          <<"introduceMonster">> := #{
+             <<"monster">> := #{
+                <<"id">> := DodgyId,
+                <<"name">> := <<"dodgy-orc">>,
+                <<"mood">> := <<"DODGY">>}
+     }}} = run(Config, <<"IntroduceMonster">>, #{ <<"input">> => InputDodgy }),
+    SubMsgs = lists:keysort(1, subscription_receive(3)),
+    [{Sub1, Res11}, {Sub1, Res12}, {Sub2, Res2}] =
+        lists:map(
+           fun({Sub, Msg}) ->
+                   %% It's important that SubCtx and Sub match
+                   SubCtx = maps:get(Sub, SubMapping),
+                   {Sub, graphql:handle_subscription_event(#{}, Sub, SubCtx, Msg)}
+           end, SubMsgs),
+    ?assertMatch(#{data := #{<<"monsterIntroduced">> := #{<<"id">> := AggressiveId,
+                                                          <<"mood">> := <<"AGGRESSIVE">>}}},
+                 Res11),
+    ?assertMatch(#{data := #{<<"monsterIntroduced">> := #{<<"id">> := DodgyId,
+                                                          <<"mood">> := <<"DODGY">>}}},
+                 Res12),
+    ?assertMatch(#{data := #{<<"monsterIntroduced">> := #{<<"id">> := AggressiveId,
+                                                          <<"mood">> := <<"AGGRESSIVE">>}}},
+                 Res2),
+    ok.
+
+subscribe_error(Config) ->
+    Msg = <<"for test">>,
+    ?assertEqual(#{errors =>
+                       [
+                        #{message => <<"'for test'">>,
+                          path => [<<"break">>],
+                          extensions => #{code => resolver_error}}
+                       ]},
+                 run(Config, <<"BrokenSubscription">>, #{<<"reason">> => Msg})).

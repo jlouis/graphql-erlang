@@ -8,7 +8,8 @@
 -export([dirty_load/1, load/1, load_txn/1, wrap/1, unwrap/1, insert/1]).
 -export([inject/1, start/0, stop/0]).
 
--export([insert/2, reserve_number/1, create/1, create/2, batch_create/1, opaque_id/1, next_id/1]).
+-export([insert/2, reserve_number/1, create/1, create/2, batch_create/1, opaque_id/1, next_id/1,
+        subscribe/1, unsubscribe/1]).
 
 start() ->
     application:load(mnesia),
@@ -33,7 +34,8 @@ stop() ->
     application:stop(mnesia).
 
 set_id(#monster{} = M, ID) -> M#monster { id = ID };
-set_id(#room{} = R, ID) -> R#room { id = ID }.
+set_id(#room{} = R, ID) -> R#room { id = ID };
+set_id(#item{} = I, ID) -> I#item { id = ID }.
 
 insert(Input) ->
     Fun = fun() ->
@@ -88,6 +90,11 @@ create(room, Opts) ->
     #room { description = Desc
           }.
 
+subscribe(Table) ->
+    {ok, _} = mnesia:subscribe({table, Table, simple}).
+
+unsubscribe(Table) ->
+    {ok, _} = mnesia:unsubscribe({table, Table, simple}).
 
 create(Type) -> create(Type, []).
 
@@ -188,6 +195,7 @@ mapping_rules() ->
          'Dice' => dungeon_dice,
          'QueryRoot' => dungeon_query,
          'MutationRoot' => dungeon_mutation,
+         'SubscriptionRoot' => dungeon_subscription,
          default => dungeon_object }
      }.
 

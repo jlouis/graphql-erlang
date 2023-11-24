@@ -506,6 +506,16 @@ mutation IntroduceRoom($input: IntroduceRoomInput!) {
   }
 }
 
+mutation IntroduceItem($input: IntroduceItemInput!) {
+  introduceItem(input: $input) {
+    clientMutationId
+    item {
+      id
+      name
+    }
+  }
+}
+
 mutation SpawnMinion($input: SpawnMinionInput!) {
   spawnMinion(input: $input) {
     clientMutationId
@@ -518,6 +528,47 @@ mutation SpawnMinion($input: SpawnMinionInput!) {
       id
     }
   }
+}
+
+## Subscriptions
+
+subscription MonsterIntroduced {
+  monsterIntroduced {
+    id
+    name
+    mood
+    hp
+  }
+}
+
+subscription MonsterIntroducedInMood($mood: Mood) {
+  monsterIntroduced(mood: $mood) {
+    id
+    name
+    mood
+    hp
+  }
+}
+
+subscription ThingIntroduced {
+  thingIntroduced {
+    __typename
+    ... on Monster {
+      id
+      name
+      hp
+    }
+    ... on Item {
+      id
+      name
+      description
+      weight
+    }
+  }
+}
+
+subscription BrokenSubscription($reason: String) {
+  break(reason: $reason) { id }
 }
 
 ## FRAGS

@@ -45,7 +45,7 @@ execute(_Ctx, _, <<"introduceItem">>, #{ <<"input">> := Input }) ->
     #{ <<"clientMutationId">> := MID,
        <<"name">> := N,
        <<"description">> := D,
-       <<"weigth">> := W } = Input,
+       <<"weight">> := W } = Input,
     {atomic, Item} = dungeon:insert(
                        #item { name = N,
                                description = D,

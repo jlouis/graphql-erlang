@@ -351,7 +351,8 @@ inject() ->
       'Faction' => faction_resource,
       ...
       'Query' => query_resource,
-      'Mutation' => mutation_resource
+      'Mutation' => mutation_resource,
+      'Subscription' => subscription_resource
     }
   },
   ok = graphql:load_schema(Map, SchemaData),
@@ -359,6 +360,7 @@ inject() ->
       #{
         query => 'Query',
         mutation => 'Mutation',
+        subscription => 'Subscription',
         interfaces => []
       }},
   ok = graphql:insert_schema_definition(Root),
@@ -386,10 +388,14 @@ run(Doc, OpName, Vars, Req, State) ->
           ok = graphql:validate(AST2),
           Coerced = graphql:type_check_params(FunEnv, OpName, Vars),
           Ctx = #{ params => Coerced, operation_name => OpName },
-          Response = graphql:execute(Ctx, AST2),
-          Req2 = cowboy_req:set_resp_body(encode_json(Response), Req),
-          {ok, Reply} = cowboy_req:reply(200, Req2),
-          {halt, Reply, State}
+          case graphql:execute(Ctx, AST2) of
+              #{subscription := {Subscription, SubscriptionContext}} ->
+                  {cowboy_loop, Req, store_subscription(Subscription, SubscriptionContext, State)};
+              Response ->
+                  Req2 = cowboy_req:set_resp_body(encode_json(Response), Req),
+                  {ok, Reply} = cowboy_req:reply(200, Req2),
+                  {halt, Reply, State}
+          end
       catch
             throw:Err ->
                 err(400, Err, Req, State)
@@ -579,8 +585,15 @@ handling field requests in that object. The module looks like:
 
 execute(Ctx, SrcObj, <<"f">>, Args) ->
     {ok, 42};
+execute(Ctx, SrcObj, <<"heavy">>, Args) ->
+    Token = graphql:token(Ctxt),
+    Worker = spawn_link(fun() ->
+      Result = calculate_heavy_value(Args),
+      graphql:reply_cast(Token, {ok, Result})
+    end),
+    {defer, Token, #{timeout => 5000, worker => Worker}};
 execute(Ctx, SrcObj, Field, Args) ->
-    default
+    default...
 ```
 
 The only function which is needed is the `execute/4` function which is
@@ -599,8 +612,61 @@ called by the system whenever a field is requested in that object. The
   of a backing store and then moving the *cursor* onto that object and
   calling the correct object resource for that type. The `SrcObj` is
   set to point to the object that is currently being operated upon.
+  For `query` and `mutation` the **root** field `SrcObj` is set to `none`, for
+  `subscription` it is set to `{subscription_value(), Event}`.
 * `Field` - The field in the object which is requested.
 * `Args` - A map of field arguments. See the next section.
+
+Possible return values of `execute/4` callback are:
+
+* `{ok, Value}` - the value of the field (either scalar for scalar fields or arbitrarily
+  complex object for object fields); `Value` can be `null` for nullable fields
+* `{ok, [{ok, Value}, ..]}` for array fields
+* `{ok, Val, [Auxilary, ..]}` all the `Auxilary` lists returned during operation execution will be
+  concatenated and returned as a `.aux` field in the result map.
+* `{error, Reason}` for execution errors (`Reason` is either `atom()` or `binary()` or record
+  that will be used to construct the resulting `.errors` field)
+* `{defer, Token, undefined | #{timeout => timeout(), worker => pid()}}` tells graphql execution
+  engine that the value of the field is calculated asynchronously and will be delivered later to it
+  via `graphql:reply_cast/2`.
+  *  `timeout` - tells graphql engine to give-up waiting for the value after this many milliseconds
+  *  `worker` - tells graphql engine that the value is calculated by this Erlang process (worker),
+     so the engine will monitor this process and will report error if the process crashes.
+* `{defer, Token}` same as `{defer, Token, undefined}`
+
+Any value can be either returned from the function or thrown using `graphql:throw/1`.
+
+### Subscription resolution modules
+
+Subscription root object is mapped onto an Erlang module responsible for
+initiation of the subscription and for handling field requests in received events.
+The module is similar to [Output object Resources](#output-object-resources) but
+they have one extra callback.
+
+```erlang
+-module(object_resource).
+
+-export([subscribe/3, execute/4]).
+
+subscribe(Ctx, <<"commentAdded">>, #{<<"topic">> := TopicId}) ->
+    Subscription = #my_subscription{} = topic:subscribe_new_comments(TopicId),
+    {subscription, Subscription}.
+
+execute(Ctx, {#my_subscription{}, Comment}, <<"commentAdded">>, _Args) ->
+    {ok, Comment}.
+
+```
+
+The `subscribe/3` callback is called whenever `subscription` operation is
+executed. This callback should initialize the subscription and return `{subscription, Subscription}`
+tuple, where `Subscription` is whatever could be necessary to properly map
+the events received from pub-sub system to the correct subscription. The
+`graphql:execute/2` function will then return `#{subscription := {Subscription, OpaqueCtx}}`.
+
+Whenever the new event `Event` is received from pubs-sub system,
+`graphql:handle_subscription_event(ExtraCtx, Subscription, OpaqueCtx, Event)`
+must be called which will call `execute/4` callback which will act the same
+way as described in [Output object Resources](#output-object-resources).
 
 #### Field Argument rules
 

@@ -8,8 +8,10 @@
 -compile(inline_list_funcs).
 -compile({inline_size, 50}).
 
--export([x/1, x/2]).
+-export([x/1, x/2, x_subscription_event/4]).
 -export([builtin_input_coercer/1]).
+-export_type([subscription_ctx/0]).
+
 -type source() :: reference().
 -type demonitor() :: {reference(), pid()} .
 
@@ -74,13 +76,34 @@
           work = #{} :: #{ source() => defer_closure() },
           timeout :: non_neg_integer() }).
 
--spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
+-record(subscription,
+        { orig_context,
+          op,
+          fragments}).
+
+-opaque subscription_ctx() :: #subscription{}.
+
+-spec x(graphql:ast()) ->
+          graphql:execute_result().
 x(X) -> x(#{ params => #{} }, X).
 
--spec x(term(), graphql:ast()) -> #{ atom() => graphql:json() }.
+-spec x(term(), graphql:ast()) ->
+          graphql:execute_result().
 x(Ctx, X) ->
     Canon = canon_context(Ctx),
     execute_request(Canon, X).
+
+-spec x_subscription_event(map(), graphql:subscription_value(), subscription_ctx(), any()) ->
+          graphql:execute_result().
+x_subscription_event(ExtraCtx, Subscription,
+                     #subscription{orig_context = OrigContext,
+                                   op = Op,
+                                   fragments = Frags}, Event) ->
+    CanonCtx = canon_context(maps:merge(OrigContext, ExtraCtx)),
+    Ctx = CanonCtx#ectx{ frags = Frags,
+                         defer_request_id = make_ref() },
+    InitialValue = {Subscription, Event},
+    execute_query(Ctx#ectx{ op_type = subscription }, Op, InitialValue).
 
 execute_request(InitialCtx, #document { definitions = Operations }) ->
     {Frags, Ops} = lists:partition(fun (#frag {}) -> true;(_) -> false end, Operations),
@@ -88,13 +111,13 @@ execute_request(InitialCtx, #document { definitions = Operations }) ->
                            defer_request_id = make_ref() },
     case get_operation(Ctx, Ops) of
         {ok, #op { ty = {query, _} } = Op } ->
-            execute_query(Ctx#ectx{ op_type = query }, Op);
-        {ok, #op { ty = {subscription, _} } = Op } ->
-            execute_query(Ctx#ectx{ op_type = subscription }, Op);
+            execute_query(Ctx#ectx{ op_type = query }, Op, none);
         {ok, #op { ty = undefined } = Op } ->
-            execute_query(Ctx#ectx{ op_type = query }, Op);
+            execute_query(Ctx#ectx{ op_type = query }, Op, none);
         {ok, #op { ty = {mutation, _} } = Op } ->
             execute_mutation(Ctx#ectx{ op_type = mutation }, Op);
+        {ok, #op { ty = {subscription, _} } = Op } ->
+            create_source_event_stream(Ctx#ectx{ op_type = subscription }, Op);
         {error, Reason} ->
             {error, Errs} = err(Ctx, Reason),
             complete_top_level(undefined, Errs)
@@ -124,12 +147,13 @@ collect_auxiliary_data() ->
     end.
 
 execute_query(#ectx{ defer_request_id = ReqId } = Ctx,
-              #op { selection_set = SSet, schema = QType }) ->
+              #op { selection_set = SSet, schema = QType },
+              InitialValue) ->
     #object_type{} = QType,
     case execute_sset(Ctx#ectx{ path = [],
                                 defer_process = self(),
                                 defer_target = top_level },
-                      SSet, QType, none) of
+                      SSet, QType, InitialValue) of
         {ok, Res, Errs} ->
             complete_top_level(Res, Errs);
         #work { items = WL, monitor = Ms, demonitors = [] , timeout = TimeOut} ->
@@ -152,6 +176,34 @@ execute_mutation(Ctx, #op { selection_set = SSet,
         %% case clause bug here, it is a broken invariant.
         {ok, Res, Errs} ->
             complete_top_level(Res, Errs)
+    end.
+
+%% 6.2.3.1 https://spec.graphql.org/October2021/#sec-Source-Stream
+create_source_event_stream(#ectx{ frags = Frags, ctx = OrigCtx} = Ctx,
+                           #op { selection_set = SSet,
+                                 schema = QType } = Op) ->
+    #object_type{} = QType,
+    GroupedFieldSet = collect_fields(Ctx, QType, SSet),
+    case orddict:to_list(GroupedFieldSet) of
+        [{Key, [Field]}] ->
+            FieldName = name(Field),
+            #schema_field { directives = Directives } = lookup_field(Field, QType),
+            Args = resolve_args(Ctx, Field),
+            Fun = subscribe_resolver_function(QType),
+            CtxP = add_path(Ctx, Key),
+            case resolve_field_event_stream(CtxP, QType, FieldName, Directives, Fun, Args) of
+                {subscription, Sub} ->
+                    SubCtx = #subscription{orig_context = OrigCtx,
+                                           op = Op,
+                                           fragments = Frags},
+                    #{subscription => {Sub, SubCtx}};
+                {error, Reason} ->
+                    {error, Errs} = err(CtxP, Reason),
+                    complete_top_level(undefined, Errs)
+            end;
+        _Other ->
+            {error, Errs} = err(Ctx, subscription_must_have_one_root_field),
+            complete_top_level(undefined, Errs)
     end.
 
 execute_sset(#ectx{ defer_target = DeferTarget } = Ctx, SSet, Type, Value) ->
@@ -557,6 +609,44 @@ resolve_field_value(#ectx { op_type = OpType,
             {error, {resolver_crash, M}}
     end.
 
+resolve_field_event_stream(#ectx { op_type = OpType,
+                            ctx = CallerContext },
+                    #object_type { id = OID,
+                                   directives = ODirectives} = ObjectType,
+                    Name, FDirectives, Fun, Args) ->
+    AnnotatedCallerCtx =
+        CallerContext#{ op_type => OpType,
+                        field => Name,
+                        field_directives => format_directives(FDirectives),
+                        object_type => OID,
+                        object_directives => format_directives(ODirectives)
+    },
+    try Fun(AnnotatedCallerCtx, Name, Args) of
+        V ->
+            case handle_subscribe_resolver_result(V) of
+                wrong ->
+                    Obj = graphql_schema:id(ObjectType),
+                    report_wrong_return(Obj, Name, Fun, V),
+                    {error, {wrong_resolver_return, {Obj, Name}}};
+                Res -> Res
+            end
+    catch
+        throw:{'$graphql_throw', Msg} ->
+            case handle_subscribe_resolver_result(Msg) of
+                wrong ->
+                    Obj = graphql_schema:id(ObjectType),
+                    report_wrong_return(Obj, Name, Fun, Msg),
+                    {error, {wrong_resolver_return, {Obj, Name}}};
+                Res -> Res
+            end;
+        ?EXCEPTION(Cl, Err, Stacktrace) ->
+            M = #{ type => graphql_schema:id(ObjectType),
+                   field => Name,
+                   stack => ?GET_STACK(Stacktrace),
+                   class => Cl,
+                   error => Err},
+            {error, {resolver_crash, M}}
+    end.
 
 handle_resolver_result({error, Reason}) ->
     {error, {resolver_error, Reason}};
@@ -570,6 +660,12 @@ handle_resolver_result({defer, Token}) ->
 handle_resolver_result({defer, Token, DeferStateMap}) ->
     {defer, Token, DeferStateMap};
 handle_resolver_result(_Unknown) -> wrong.
+
+handle_subscribe_resolver_result({subscription, V}) ->
+    {subscription, V};
+handle_subscribe_resolver_result({error, Reason}) ->
+    {error, {resolver_error, Reason}};
+handle_subscribe_resolver_result(_Unknown) -> wrong.
 
 complete_value(Ctx, Ty, Fields, {ok, Value}) when is_binary(Ty) ->
     error_logger:warning_msg(
@@ -928,6 +1024,9 @@ resolver_function(#object_type {
     exit({no_resolver, Id});
 resolver_function(#object_type { resolve_module = M }, undefined) ->
     fun M:execute/4.
+
+subscribe_resolver_function(#object_type { resolve_module = M }) ->
+    fun M:subscribe/3.
 
 %% -- OUTPUT COERCION ------------------------------------
 
