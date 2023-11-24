@@ -55,7 +55,8 @@ end_per_testcase(_Case, _Config) ->
 groups() ->
     Dungeon =
         {dungeon, [],
-         [ unions,
+         [ dump_dot,
+           unions,
            defer,
            union_errors,
            error_handling,
@@ -121,6 +122,9 @@ run(Config, Q, Params) ->
 run(Config, File, Q, Params) ->
     {ok, Doc} = read_doc(Config, File),
     th:x(Config, Doc, Q, Params).
+
+dump_dot(_Config) ->
+    ok = graphql_dot:dump("./dungeon_schema.dot").
 
 default_query(Config) ->
     ID = ?config(known_goblin_id_1, Config),

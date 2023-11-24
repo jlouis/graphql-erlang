@@ -150,7 +150,8 @@ id(#union_type { id = ID }) -> ID;
 id(#scalar_type { id = ID }) -> ID;
 id(#input_object_type { id = ID }) -> ID;
 id(#object_type { id = ID }) -> ID;
-id(#root_schema { id = ID }) -> ID.
+id(#root_schema { id = ID }) -> ID;
+id(#directive_type{ id = ID }) -> ID.
 
 %% ----------------------------
 join(_Sep, []) -> [];
