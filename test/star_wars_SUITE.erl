@@ -6,7 +6,7 @@
          init_per_testcase/2, end_per_testcase/2]).
 
 -export([hero/1, friends/1, query_id_params/1, query_aliases/1,
-         fragments/1, typename/1]).
+         fragments/1, typename/1, dump_dot/1]).
 
 -export([complex/1, non_existent_field/1, fields_on_objects/1,
          no_fields_on_interfaces/1, no_fields_on_scalars/1,
@@ -46,7 +46,8 @@ groups() ->
               query_id_params,
               query_aliases,
               fragments,
-              typename
+              typename,
+              dump_dot
              ]},
 
     Validation = {validation, [shuffle, parallel],
@@ -234,6 +235,9 @@ typename(Config) ->
     }},
     Expected = th:x(Config, Q1),
     ok.
+
+dump_dot(_Config) ->
+    ok = graphql_dot:dump("./star_wars_schema.dot").
 
 %% -- STAR WARS™ VALIDATION ------------------------------
 
