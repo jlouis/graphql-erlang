@@ -44,7 +44,7 @@
          defer_target = top_level :: top_level | reference(),
 
          %% The callers context given to the execute call
-         ctx = #{} :: #{ atom() => term() }
+         ctx = #{} :: graphql:context()
         }).
 -type ectx() :: #ectx{}.
 
@@ -74,10 +74,10 @@
           work = #{} :: #{ source() => defer_closure() },
           timeout :: non_neg_integer() }).
 
--spec x(graphql:ast()) -> #{ atom() => graphql:json() }.
+-spec x(graphql:document()) -> #{ atom() => graphql:json() }.
 x(X) -> x(#{ params => #{} }, X).
 
--spec x(term(), graphql:ast()) -> #{ atom() => graphql:json() }.
+-spec x(term(), graphql:document()) -> #{ atom() => graphql:json() }.
 x(Ctx, X) ->
     Canon = canon_context(Ctx),
     execute_request(Canon, X).

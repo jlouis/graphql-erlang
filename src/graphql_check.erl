@@ -57,6 +57,8 @@
 -export([check/1, check_params/3]).
 -export([funenv/1]).
 
+-export_type([fun_env/0]).
+
 -record(ctx,
         {
          path = [] :: [any()],
@@ -76,6 +78,8 @@
 -type ty() :: schema_type() | schema_object().
 -type ty_name() :: binary().
 
+-opaque fun_env() :: #{binary() => #{binary() => #vardef{}}}.
+
 %% This is a bidirectional type checker. It proceeds by running three
 %% kinds of functions: synth(Gamma, E) -> {ok, T} | {error, Reason}
 %% which synthesizes a given type out of its constituent parts.
@@ -89,7 +93,7 @@
 
 %% Elaborate a type and also determine its polarity. This is used for
 %% input and output types
--spec infer_type(ctx(), ty_name() | ty()) -> {ok, {polarity(), ty()}}.
+-spec infer_type(ctx(), ty_name() | ty()) -> {ok, {polarity(), resolved_schema_type()}}.
 infer_type(Ctx, Tau) ->
     case infer_type(Tau) of
         {error, Reason} ->
@@ -98,7 +102,7 @@ infer_type(Ctx, Tau) ->
             {ok, {Polarity, TauPrime}}
     end.
 
--spec infer_type(ty_name() | ty()) -> {polarity(), ty()} | {error, Reason :: term()}.
+-spec infer_type(ty_name() | ty()) -> {polarity(), resolved_schema_type()} | {error, Reason :: term()}.
 infer_type({non_null, Ty}) ->
     case infer_type(Ty) of
         {error, Reason} -> {error, Reason};
@@ -163,6 +167,8 @@ infer_output_type(Ctx, Ty) ->
 %% Given a context and some graphql expression, we derive
 %% a valid type for that expression. This is mostly handled by
 %% a lookup into the environment.
+-spec infer(ctx(), #directive{} | op() | frag() | frag_spread() | {var, any()}) ->
+          {ok, resolved_schema_type() | frag() | #vardef{}}.
 infer(Ctx, #directive { id = ID }) ->
     Name = graphql_ast:name(ID),
     case graphql_schema:lookup(Name) of
@@ -543,6 +549,8 @@ check(Ctx, #op { vardefs = VDefs, directives = Dirs, selection_set = SSet } = Op
 
 %% To check a document, establish a default context and
 %% check the document.
+-spec check(graphql:document()) -> {ok, #{ast := graphql:document(),
+                                          fun_env := fun_env()}}.
 check(#document{} = Doc) ->
     try check_(Doc) of Res -> Res
     catch throw:{error, Path, Msg} ->
@@ -580,6 +588,7 @@ check_(#document{ definitions = Defs } = Doc) ->
 %% This is the entry-point when checking parameters for an already parsed,
 %% type checked and internalized query. It serves to verify that a requested
 %% operation and its parameters matches the types in the operation referenced
+-spec check_params(fun_env(), binary(), graphql:vars()) -> graphql:vars().
 check_params(FunEnv, OpName, Params) ->
     try
         case operation(FunEnv, OpName, Params) of
@@ -696,6 +705,8 @@ sub_input_(_Tau, _Sigma) ->
 %%
 %% Fragments doesn't care if they sit inside lists or if the scope
 %% type is non-null:
+-spec sub_output(ctx(), object_type() | union_type() | interface_type(),
+                 resolved_schema_type()) -> ok.
 sub_output(Ctx, Tau, {list, Sigma}) ->
     sub_output(Ctx, Tau, Sigma);
 sub_output(Ctx, Tau, {non_null, Sigma}) ->
@@ -867,11 +878,13 @@ fields(_Ctx, #interface_type { fields = Fields }) -> {ok, Fields};
 fields(_Ctx, #union_type {}) -> {ok, #{}}.
 
 %% Build a varenv
+-spec varenv([#vardef{}]) -> #{binary() => #vardef{}}.
 varenv(VarList) ->
     maps:from_list(
       [{graphql_ast:name(Var), Def} || #vardef { id = Var } = Def <- VarList]).
 
 %% Build a funenv
+-spec funenv([frag() | op()]) -> fun_env().
 funenv(Ops) ->
     F = fun
         (#frag{}, FE) -> FE;

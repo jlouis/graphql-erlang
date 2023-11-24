@@ -40,7 +40,7 @@
 
 -record(frag,
         { id :: '...' | graphql:name(), %% One variant is for inline fragments
-          ty :: undefined | graphql_base_type(),
+          ty :: any(), % undefined | graphql_base_type(), <- most of the time except graphql_check
           directives = [] :: [graphql:directive()],
           selection_set = [] :: [#field{}],
           schema = undefined :: 'undefined' | any()
@@ -73,7 +73,6 @@
           schema = undefined :: 'undefined' | any()
         }).
 -type op() :: #op{}.
--type context() :: #{ atom() => any() }.
 
 %%% --- Parsed Schemas
 %% Parsed schemas all starts with a p_ suffix

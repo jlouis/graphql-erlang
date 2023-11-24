@@ -1,7 +1,7 @@
 -module(graphql).
 
 -include_lib("graphql/include/graphql.hrl").
--include("graphql_internal.hrl").
+%%-include("graphql_internal.hrl").
 -include("graphql_schema.hrl").
 
 -compile({no_auto_import, [monitor/2]}).
@@ -42,25 +42,35 @@
 %% Internal
 -export([token_ref/1]).
 
--type json() :: number() | binary() | true | false | null | #{ binary() | atom() => json() } | [json()] .
--type param_context() :: json().
-
+-type json() :: number() | binary() | true | false | null | #{ binary() | atom() => json() } | [json()] .
 -type schema_definition() :: {atom(), #{ atom() => term() }}.
-
--export_type([json/0, param_context/0]).
 
 -type token() :: {'$graphql_token', pid(), reference(), reference()}.
 -type defer_map() :: #{ worker => pid(),
                         timeout => non_neg_integer(),
                         apply => [fun()]}.
--type result() :: {ok, term()} | {error, term()} | {defer, token()} | {defer, token(), defer_map()}.
 -type name() :: {name, pos_integer(), binary()} | binary().
 -type document() :: #document{}.
 -type directive() :: #directive{}.
--export_type([directive/0,
+-type context() :: #{ params => vars(),
+                      operation_name => binary() | undefined,
+                      error_module => module(),
+                      default_timeout => timeout(),
+                      atom() => any() }.
 
+-type vars() :: #{binary() => json()}.
+-type result() :: {ok, term()} | {error, term()} | {defer, token()} | {defer, token(), defer_map()}.
+-type resolver() :: fun ((context(), term(), binary(), vars()) -> result()).
+
+-export_type([directive/0,
+              document/0,
+              context/0,
+              vars/0,
+              name/0,
               token/0,
-              schema_field/0]).
+              schema_field/0,
+              resolver/0,
+              json/0]).
 
 -define(DEFAULT_TIMEOUT, 3000).
 
@@ -141,15 +151,16 @@ load_schema(Mapping, Input) when is_list(Input) ->
             {error, Err}
     end.
 
--spec validate(document()) -> ok | {error, term()}.
+-spec validate(document()) -> ok.
 validate(AST) ->
     graphql_validate:x(AST).
 
--spec type_check(document()) -> {ok, #{ atom() => term() }}.
+-spec type_check(document()) -> {ok, #{ast := document(),
+                                       fun_env := graphql_check:fun_env()}}.
 type_check(AST) ->
     graphql_check:check(AST).
 
--spec type_check_params(any(), any(), any()) -> param_context().
+-spec type_check_params(graphql_check:fun_env(), binary(), vars()) -> vars().
 type_check_params(FunEnv, OpName, Vars) ->
     graphql_check:check_params(FunEnv, OpName, Vars).
 
