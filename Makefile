@@ -17,9 +17,15 @@ test:
 	@$(REBAR) ct --verbosity 60 --spec test/test.spec
 
 test-cover:
-	@$(REBAR) do ct -c, cover -v
+	@$(REBAR) do ct -c --spec test/test.spec, cover -v
+
+xref:
+	@$(REBAR) xref
 
 update:
 	@$(REBAR) update
+
+doc:
+	@$(REBAR) edoc
 
 .PHONY: compile clean dialyzer test update
