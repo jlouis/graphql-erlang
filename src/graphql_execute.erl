@@ -309,7 +309,7 @@ collect_fields(Ctx, Type, [#field{ directives = Dirs } = S |SS], Visited, Groupe
     case view_include_skip_directives(Ctx, Dirs) of
         include ->
             collect_fields(Ctx, Type, SS, Visited,
-                           orddict:append(alias(S), S, Grouped));
+                           orddict:append(get_alias(S), S, Grouped));
         skip ->
             collect_fields(Ctx, Type, SS, Visited, Grouped)
     end;
@@ -1034,8 +1034,8 @@ name({name, _, N}) -> N;
 name('...') -> <<"...">>;
 name(#field { id = ID }) -> name(ID).
 
-alias(#field { alias = undefined, id = ID }) -> name(ID);
-alias(#field { alias = Alias }) -> name(Alias).
+get_alias(#field { alias = undefined, id = ID }) -> name(ID);
+get_alias(#field { alias = Alias }) -> name(Alias).
 
 field_type(#field { schema = SF }) -> SF.
 

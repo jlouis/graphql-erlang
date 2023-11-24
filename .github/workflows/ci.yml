@@ -1,0 +1,44 @@
+name: CI
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+jobs:
+  ci:
+    name: Run checks and tests over ${{matrix.otp}} and ${{matrix.os}}
+    runs-on: ${{matrix.os}}
+    container:
+      image: erlang:${{ matrix.otp }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        otp:
+          - "26.1"
+          - "25.3"
+          - "24.3"
+        os: ["ubuntu-22.04"]
+        include:
+          - otp: "23.3"
+            os: "ubuntu-20.04"
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Compile
+        run: make compile
+
+      - name: xref
+        run: make xref
+
+      - name: Common test
+        run: make test-cover
+
+      - name: Generate docs
+        run: make doc
+
+      - name: Dialyze
+        run: make dialyzer
